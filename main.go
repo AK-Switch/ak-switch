@@ -278,12 +278,18 @@ type ServerState struct {
 func newServerState(cfg Config, pool *KeyPool) *ServerState {
 	s := &ServerState{cfg: cfg, pool: pool, mux: http.NewServeMux()}
 	s.mux.HandleFunc("/health", s.healthHandler)
-	s.mux.HandleFunc("/", s.proxyHandler)
 	s.mux.HandleFunc("/logs", s.logsHandler)
 	s.mux.HandleFunc("/dashboard", s.dashboardHandler)
 	s.mux.HandleFunc("/clear", s.clearHandler)
 	s.mux.HandleFunc("/api/config", s.configHandler)
+	// Block service worker requests to prevent 404s and unnecessary upstream proxying
+	s.mux.HandleFunc("/sw.js", s.swHandler)
+	s.mux.HandleFunc("/", s.proxyHandler)
 	return s
+}
+
+func (s *ServerState) swHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNoContent)
 }
 
 type ConfigPayload struct {
