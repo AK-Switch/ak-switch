@@ -9,6 +9,7 @@
 [![Works with OpenClaw](https://img.shields.io/badge/works%20with-OpenClaw-orange?style=flat-square)]()
 [![Works with Cline](https://img.shields.io/badge/works%20with-Cline-blueviolet?style=flat-square)]()
 [![Works with Cursor](https://img.shields.io/badge/works%20with-Cursor-blue?style=flat-square)]()
+[![Works with Claude Code](https://img.shields.io/badge/works%20with-Claude%20Code-d97757?style=flat-square)](#claude-code-experimental)
 
 ---
 
@@ -77,7 +78,8 @@ If it speaks OpenAI-compatible API, it works with Alvus.
 | 🖥️ **Interactive Dashboard**      | `GET /dashboard` — Premium Glassmorphism Dark UI for real-time monitoring   |
 | ⚡ **Live Activity Logs**          | Searchable, 1000-entry memory cache to track all request activity          |
 | 🔧 **Dynamic Configuration**      | Update keys and base URLs directly from the dashboard; writes to `.env`     |
-| 🪶 **Zero dependencies**           | Pure Go stdlib. One file. One binary                                        |
+| 🤖 **Claude Code mode**            | Translates Anthropic Messages API ⇄ OpenAI so Claude Code runs on any backend |
+| 🪶 **Zero dependencies**           | Pure Go stdlib. One binary                                                  |
 | 🔧 **`.env` support**              | Built-in parser — no `godotenv`, no extras                                  |
 | 🖥️ **Runs anywhere**               | linux/amd64, arm64, arm, **386** — including Pi Zero and older x86 hardware |
 | 💾 **~2 MB idle RAM**              | Static binary, no runtime, won't compete with your models for memory        |
@@ -93,17 +95,17 @@ If it speaks OpenAI-compatible API, it works with Alvus.
 ```bash
 git clone https://github.com/YOUR_USERNAME/alvus.git
 cd alvus
-go build -o alvus main.go
+go build -o alvus *.go
 ```
 
 **Cross-compile for a remote server** (e.g. Raspberry Pi Zero, 32-bit x86):
 
 ```bash
 # Pi Zero / older ARM
-GOOS=linux GOARCH=arm CGO_ENABLED=0 go build -o alvus main.go
+GOOS=linux GOARCH=arm CGO_ENABLED=0 go build -o alvus *.go
 
 # 32-bit x86 (Atom, old netbooks, salvaged hardware)
-GOOS=linux GOARCH=386 CGO_ENABLED=0 go build -o alvus main.go
+GOOS=linux GOARCH=386 CGO_ENABLED=0 go build -o alvus *.go
 ```
 
 The binary is fully static — drop it on the machine and run it. No runtime, no dependencies, no install step.
@@ -255,6 +257,32 @@ curl http://localhost:3000/health
 
 ---
 
+## Claude Code (experimental)
+
+Alvus can also masquerade as the **Anthropic API**, letting [Claude Code](https://claude.com/claude-code) run against any OpenAI-compatible backend (NVIDIA NIM, OpenRouter, Groq, …). Alvus translates the Anthropic Messages API to OpenAI Chat Completions in both directions — request, response, and streaming.
+
+Point Claude Code at Alvus with three environment variables:
+
+```bash
+export ANTHROPIC_BASE_URL=http://localhost:3000
+export ANTHROPIC_AUTH_TOKEN=sk-dummy          # ignored — Alvus injects a pooled key
+export ANTHROPIC_MODEL=deepseek-ai/deepseek-r1 # the upstream model to use
+
+claude
+```
+
+Alternatively, set `OVERRIDE_MODEL` in Alvus's `.env` to force a model regardless of what the client requests:
+
+```env
+OVERRIDE_MODEL=deepseek-ai/deepseek-r1
+```
+
+**Translation covers:** system prompts, multi-turn messages, tool definitions and tool calls (`tool_use` ⇄ `tool_calls`), images, streaming SSE, and `stop_reason` mapping. The zero-dependency, pure-stdlib promise holds — it's all `encoding/json`.
+
+> ⚠️ **Expectation check.** Claude Code is tuned hard for Claude models. Driving it on other models through a translation shim works, but tool-use reliability and edit formatting can be rough depending on the backend. Treat this as "it runs," not "it replaces your Claude subscription."
+
+---
+
 ## Other Providers
 
 `TARGET_BASE_URL` is all you need to change:
@@ -338,7 +366,7 @@ Around 2 MB at idle. It's a single static Go binary with no runtime overhead —
 
 ## Contributing
 
-PRs welcome. This project lives in **a single file** with **zero external dependencies** — keep it that way. If a feature needs an import beyond stdlib, it doesn't belong in `main.go`. Open an issue first and we'll figure out the right shape for it.
+PRs welcome. This project is **pure Go stdlib with zero external dependencies** — keep it that way. The core proxy lives in `main.go`; the Claude Code translation layer is isolated in `anthropic.go`. If a feature needs an import beyond stdlib, it doesn't belong here. Open an issue first and we'll figure out the right shape for it.
 
 ---
 

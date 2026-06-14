@@ -203,11 +203,12 @@ func (p *KeyPool) IncrementRequestCount(idx int) {
 // ── Config ────────────────────────────────────
 
 type Config struct {
-	TargetBase   string
-	GenaiBase    string
-	Port         string
-	MaxRetries   int
-	CooldownSec  int
+	TargetBase    string
+	GenaiBase     string
+	Port          string
+	MaxRetries    int
+	CooldownSec   int
+	OverrideModel string
 }
 
 func parseKeysFromEnv() ([]string, error) {
@@ -235,9 +236,10 @@ func buildConfig() (Config, *KeyPool, error) {
 	cfg := Config{
 		TargetBase:  strings.TrimRight(getenv("TARGET_BASE_URL", "https://integrate.api.nvidia.com/v1"), "/"),
 		GenaiBase:   strings.TrimRight(getenv("GENAI_BASE_URL", "https://ai.api.nvidia.com"), "/"),
-		Port:        getenv("PORT", "3000"),
-		MaxRetries:  10,
-		CooldownSec: 60,
+		Port:          getenv("PORT", "3000"),
+		MaxRetries:    10,
+		CooldownSec:   60,
+		OverrideModel: getenv("OVERRIDE_MODEL", ""),
 	}
 	return cfg, NewKeyPool(keys), nil
 }
@@ -251,7 +253,7 @@ func loadConfig() (Config, *KeyPool) {
 }
 
 func reloadConfig() (Config, *KeyPool, error) {
-	for _, k := range []string{"API_KEYS", "TARGET_BASE_URL", "GENAI_BASE_URL", "PORT", "COOLDOWN_SEC"} {
+	for _, k := range []string{"API_KEYS", "TARGET_BASE_URL", "GENAI_BASE_URL", "PORT", "COOLDOWN_SEC", "OVERRIDE_MODEL"} {
 		os.Unsetenv(k)
 	}
 	loadDotEnv(".env")
@@ -277,6 +279,8 @@ type ServerState struct {
 func newServerState(cfg Config, pool *KeyPool) *ServerState {
 	s := &ServerState{cfg: cfg, pool: pool, mux: http.NewServeMux()}
 	s.mux.HandleFunc("/health", s.healthHandler)
+	s.mux.HandleFunc("/v1/messages", s.anthropicHandler)
+	s.mux.HandleFunc("/v1/messages/count_tokens", s.anthropicCountTokensHandler)
 	s.mux.HandleFunc("/", s.proxyHandler)
 	s.mux.HandleFunc("/logs", s.logsHandler)
 	s.mux.HandleFunc("/dashboard", s.dashboardHandler)
