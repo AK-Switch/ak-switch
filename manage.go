@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,6 +15,9 @@ import (
 )
 
 const workDirName = "manage-work"
+
+// logFile is the file writer for all manager logs (terminal + file).
+var logFile *os.File
 
 // ── Config ─────────────────────────────────────
 
@@ -78,11 +82,16 @@ func (m *ManagedInstance) Start(binary string) error {
 	}
 	cmd := exec.Command(binary, "-local")
 	cmd.Dir = absDir
+
+	// Capture both stdout and stderr in real-time
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("stdout pipe: %v", err)
+	}
 	stderrPipe, err := cmd.StderrPipe()
 	if err != nil {
 		return fmt.Errorf("stderr pipe: %v", err)
 	}
-	cmd.Stdout = nil
 
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("start %q: %v", m.Name, err)
@@ -90,19 +99,35 @@ func (m *ManagedInstance) Start(binary string) error {
 	m.Cmd = cmd
 	m.Running = true
 
+	// Real-time stdout reader
 	go func() {
-		stderr, _ := io.ReadAll(stderrPipe)
-		if len(stderr) > 0 {
-			log.Printf("⚠️ [%s] stderr: %s", m.Name, string(stderr))
+		scanner := bufio.NewScanner(stdoutPipe)
+		for scanner.Scan() {
+			log.Printf("[%s] %s", m.Name, scanner.Text())
 		}
 	}()
 
+	// Real-time stderr reader
 	go func() {
-		cmd.Wait()
+		scanner := bufio.NewScanner(stderrPipe)
+		for scanner.Scan() {
+			log.Printf("⚠️ [%s] %s", m.Name, scanner.Text())
+		}
+	}()
+
+	// Wait and log exit code
+	go func() {
+		err := cmd.Wait()
 		m.mu.Lock()
 		m.Running = false
 		m.mu.Unlock()
-		log.Printf("⚠️ [%s] exited (PID %d)", m.Name, cmd.Process.Pid)
+
+		code := cmd.ProcessState.ExitCode()
+		if err != nil {
+			log.Printf("❌ [%s] exited with error (PID %d, code %d): %v", m.Name, cmd.Process.Pid, code, err)
+		} else {
+			log.Printf("⚠️ [%s] exited normally (PID %d, code %d)", m.Name, cmd.Process.Pid, code)
+		}
 	}()
 
 	log.Printf("✅ [%s] started (PID %d, port %d, dir: %s)", m.Name, cmd.Process.Pid, m.Port, absDir)
@@ -272,9 +297,39 @@ func (m *Manager) WatchAndRestart(stop <-chan struct{}) {
 	}
 }
 
+// ── Log File ────────────────────────────────────
+
+func openLogFile() (*os.File, error) {
+	logDir := "logs"
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		return nil, fmt.Errorf("create log dir: %v", err)
+	}
+	path := filepath.Join(logDir, "alvus-manage.log")
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return nil, fmt.Errorf("open log file: %v", err)
+	}
+	return f, nil
+}
+
 // ── RunMode: Manager ──────────────────────────
 
 func runManager(managePath string, stop <-chan struct{}) {
+	// Set up file logging (in addition to terminal output)
+	f, err := openLogFile()
+	if err == nil {
+		logFile = f
+		log.SetOutput(io.MultiWriter(os.Stdout, logFile))
+		log.Printf("📝 日志文件: logs/alvus-manage.log")
+	} else {
+		log.Printf("⚠️ 无法创建日志文件: %v", err)
+	}
+	defer func() {
+		if logFile != nil {
+			logFile.Close()
+		}
+	}()
+
 	cfg, err := LoadManagerConfig(managePath)
 	if err != nil {
 		log.Printf("❌ %v", err)
