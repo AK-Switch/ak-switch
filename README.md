@@ -2,21 +2,22 @@
 
 > 上游原版: [OmitNomis/Alvus](https://github.com/OmitNomis/Alvus)
 >
-> 本 fork 新增: **管理模式**（`--manage`），一个命令启动/管理多个 API 供应商代理。
+> 本 fork 新增: **管理模式**（`--manage`），一个命令启动/管理多个 API 供应商代理；
+> **安全加固**（管理端点鉴权）、**Dashboard 分离**、**子进程日志持久化**。
 
 ---
 
 ## 快速上手
 
 ```bash
-# 编译（需要 Go 1.22+）
+# 编译（需要 Go 1.22+，因为使用了 //go:embed 等功能）
 go build -o alvus.exe .
 
 # 直接运行（已预编译，跳到下一步）
 ./alvus.exe -local
 
 # 管理模式启动多供应商
-./alvus.exe --manage manage.json
+./alvus.exe -manage manage.json
 ```
 
 ---
@@ -32,7 +33,10 @@ PORT=4000
 TARGET_BASE_URL=https://integrate.api.nvidia.com/v1
 API_KEYS=key1,key2,key3
 COOLDOWN_SEC=60
+ADMIN_TOKEN=your-secret-token    # 可选，设置后管理 API 需要 X-Admin-Token 头
 ```
+
+> **安全提示**: 设置 `ADMIN_TOKEN` 后，`POST /api/config` 端点需要提供 `X-Admin-Token` 请求头才能修改配置，防止未经授权的配置篡改。留空则向后兼容（无需鉴权）。
 
 ### 启动
 
@@ -108,12 +112,21 @@ COOLDOWN_SEC=60
 ### 启动
 
 ```bash
-./alvus.exe --manage manage.json
+./alvus.exe -manage manage.json
 ```
+
+（`--manage` 也可以，Go flag 包两种格式都支持。）
 
 ### 停止
 
 按 `Ctrl+C`，管理器会关掉所有子进程，自动清理临时文件。
+
+### 日志
+
+管理模式会自动在 `logs/alvus-manage.log` 记录完整日志（同时输出到终端）：
+- 每个子进程的 stdout/stderr 实时写入
+- 子进程退出码记录
+- 自动重启事件记录
 
 ### 自动重启
 
@@ -167,13 +180,21 @@ COOLDOWN_SEC=60
 alvus-fork/
 ├── main.go                 # 单实例逻辑（跟原版一样）
 ├── manage.go               # 管理模式（本 fork 新增）
+├── dashboard.html          # Dashboard 页面（通过 //go:embed 嵌入）
 ├── alvus.exe               # 编译好的二进制
 ├── go.mod
 ├── README.md               # 本说明
+├── .env.example            # 环境变量模板
 ├── manage.json             # 你的配置（已 gitignore，不会误提交）
 ├── manage.example.json     # 配置模板
 ├── regression_test.ps1     # 回归测试（22 用例）
-└── manage-work/            # 自动生成，程序启动后自动创建
+├── lint.ps1                # 本地 lint 脚本（go vet + staticcheck）
+├── logs/                   # 运行时日志（gitignore）
+│   └── alvus-manage.log    #   管理模式日志文件
+├── docs/                   # 研究 / 分析文档（gitignore）
+├── manage-work/            # 自动生成，程序启动后自动创建（gitignore）
+└── .github/workflows/
+    └── release.yml         # CI 自动构建发布
 ```
 
 ---
