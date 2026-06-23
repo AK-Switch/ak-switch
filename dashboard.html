@@ -400,6 +400,30 @@
                     </div>
                 </form>
             </div>
+
+            <div class="card">
+                <h2>Runtime Key Management</h2>
+                <div style="display: flex; gap: 10px; margin-bottom: 1rem;">
+                    <input type="text" id="newKeyInput" placeholder="Enter new API key..." style="flex-grow: 1;">
+                    <button id="runtimeAddKeyBtn" class="btn">Add Key</button>
+                </div>
+                <div class="table-container">
+                    <table id="runtimeKeyTable">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Key</th>
+                                <th>Status</th>
+                                <th>RPM</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Injected dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </main>
     </div>
 
@@ -532,11 +556,59 @@
             fetch('/clear', { method: 'POST' }).then(function() { updateLogs(); });
         });
 
+        // --- Runtime Key Management ---
+        function loadRuntimeKeys() {
+            fetch('/api/keys')
+                .then(function(res) { return res.json(); })
+                .then(function(data) {
+                    const tbody = document.querySelector('#runtimeKeyTable tbody');
+                    tbody.innerHTML = '';
+                    data.forEach(function(key) {
+                        const statusClass = key.status === 'ready' ? 'ready' : (key.status.startsWith('cooling') ? 'cooling' : 'disabled');
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = '<td style="color: var(--text-dim)">' + key.index + '</td><td class="key-val">' + key.key + '</td><td><span class="badge badge-' + statusClass + '">' + key.status + '</span></td><td style="color: var(--text-dim)">' + key.requests_1m + '</td><td><button class="remove-key-btn" data-index="' + (key.index - 1) + '">&times;</button></td>';
+                        tbody.appendChild(tr);
+
+                        tr.querySelector('.remove-key-btn').addEventListener('click', function() {
+                            var idx = parseInt(this.getAttribute('data-index'));
+                            fetch('/api/keys', {
+                                method: 'DELETE',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ index: idx })
+                            }).then(function(res) {
+                                if (res.ok) loadRuntimeKeys();
+                                else alert('Failed to remove key');
+                            });
+                        });
+                    });
+                });
+        }
+
+        document.getElementById('runtimeAddKeyBtn').addEventListener('click', function() {
+            const input = document.getElementById('newKeyInput');
+            const key = input.value.trim();
+            if (!key) return;
+            fetch('/api/keys', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: key })
+            }).then(function(res) {
+                if (res.ok) {
+                    input.value = '';
+                    loadRuntimeKeys();
+                } else {
+                    alert('Failed to add key');
+                }
+            });
+        });
+
         // Polling
         setInterval(updateStatus, 5000);
         setInterval(updateLogs, 5000);
+        setInterval(loadRuntimeKeys, 5000);
         updateStatus();
         updateLogs();
+        loadRuntimeKeys();
 
     </script>
 </body>

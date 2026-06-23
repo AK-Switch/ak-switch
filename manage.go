@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -32,6 +33,11 @@ type ProviderDef struct {
 	APIKeys   []string `json:"api_keys"`
 	Port      int      `json:"port"`
 	Disabled  bool     `json:"disabled,omitempty"`
+
+	// Per-provider overrides (optional)
+	CooldownSec *int   `json:"cooldown_sec,omitempty"`
+	MaxRetries  *int   `json:"max_retries,omitempty"`
+	AdminToken  string `json:"admin_token,omitempty"`
 }
 
 // ── Managed Instance ───────────────────────────
@@ -50,14 +56,24 @@ func (m *ManagedInstance) writeEnvFile(cfg ProviderDef) error {
 	if err := os.MkdirAll(m.Dir, 0755); err != nil {
 		return fmt.Errorf("create dir %q: %w", m.Dir, err)
 	}
+	cooldownSec := 60
+	if cfg.CooldownSec != nil {
+		cooldownSec = *cfg.CooldownSec
+	}
 	lines := []string{
 		fmt.Sprintf("PORT=%d", m.Port),
 		fmt.Sprintf("TARGET_BASE_URL=%s", strings.TrimRight(cfg.TargetURL, "/")),
 		fmt.Sprintf("API_KEYS=%s", strings.Join(cfg.APIKeys, ",")),
-		"COOLDOWN_SEC=60",
+		fmt.Sprintf("COOLDOWN_SEC=%d", cooldownSec),
 	}
 	if cfg.GenaiURL != "" {
 		lines = append(lines, fmt.Sprintf("GENAI_BASE_URL=%s", strings.TrimRight(cfg.GenaiURL, "/")))
+	}
+	if cfg.MaxRetries != nil {
+		lines = append(lines, fmt.Sprintf("MAX_RETRIES=%d", *cfg.MaxRetries))
+	}
+	if cfg.AdminToken != "" {
+		lines = append(lines, fmt.Sprintf("ADMIN_TOKEN=%s", cfg.AdminToken))
 	}
 	content := strings.Join(lines, "\n") + "\n"
 	envPath := filepath.Join(m.Dir, ".env")
@@ -158,9 +174,10 @@ func (m *ManagedInstance) Stop() {
 // ── Manager ────────────────────────────────────
 
 type Manager struct {
-	instances []*ManagedInstance
-	config    ManageConfig
-	workBase  string
+	instances       []*ManagedInstance
+	config          ManageConfig
+	workBase        string
+	healthFailures  map[string]int // name -> consecutive failure count
 }
 
 // detectOldFormat checks if the config JSON has old-format fields (e.g. "dir").
@@ -229,8 +246,9 @@ func LoadManagerConfig(path string) (ManageConfig, error) {
 
 func NewManager(cfg ManageConfig) *Manager {
 	m := &Manager{
-		config:   cfg,
-		workBase: filepath.Join(workDirName),
+		config:         cfg,
+		workBase:       filepath.Join(workDirName),
+		healthFailures: make(map[string]int),
 	}
 	for _, p := range cfg.Providers {
 		if p.Disabled {
@@ -280,6 +298,7 @@ func (m *Manager) StopAll() {
 func (m *Manager) WatchAndRestart(stop <-chan struct{}) {
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
+	client := &http.Client{Timeout: 2 * time.Second}
 	for {
 		select {
 		case <-stop:
@@ -292,6 +311,7 @@ func (m *Manager) WatchAndRestart(stop <-chan struct{}) {
 			for _, inst := range m.instances {
 				inst.mu.Lock()
 				if !inst.Running {
+					m.healthFailures[inst.Name] = 0
 					inst.mu.Unlock()
 					log.Printf("🔄 [%s] 重启中...", inst.Name)
 					if err := inst.Start(self); err != nil {
@@ -299,6 +319,23 @@ func (m *Manager) WatchAndRestart(stop <-chan struct{}) {
 					}
 				} else {
 					inst.mu.Unlock()
+					// Health check — only on 127.0.0.1, never localhost
+					resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/health", inst.Port))
+					if err == nil && resp.StatusCode == http.StatusOK {
+						resp.Body.Close()
+						m.healthFailures[inst.Name] = 0
+					} else {
+						if resp != nil {
+							resp.Body.Close()
+						}
+						m.healthFailures[inst.Name]++
+						log.Printf("⚠️ [%s] 健康检查失败 (%d/3)", inst.Name, m.healthFailures[inst.Name])
+						if m.healthFailures[inst.Name] >= 3 {
+							log.Printf("🔴 [%s] 健康检查连续失败 %d 次 — 重启", inst.Name, m.healthFailures[inst.Name])
+							inst.Stop()
+							m.healthFailures[inst.Name] = 0
+						}
+					}
 				}
 			}
 		}

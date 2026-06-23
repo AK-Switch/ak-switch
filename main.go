@@ -219,6 +219,36 @@ func (p *KeyPool) IncrementRequestCount(idx int) {
 	p.lastUsed[idx] = time.Now()
 }
 
+// AddKey appends a new key to the pool and returns its index
+func (p *KeyPool) AddKey(key string) int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.keys = append(p.keys, key)
+	p.cooldowns = append(p.cooldowns, time.Time{})
+	p.disabled = append(p.disabled, false)
+	p.requestHistory = append(p.requestHistory, []time.Time{})
+	p.lastUsed = append(p.lastUsed, time.Time{})
+	idx := len(p.keys) - 1
+	log.Printf("➕ Key [%d] added to pool", idx)
+	return idx
+}
+
+// RemoveKey removes a key from the pool by index
+func (p *KeyPool) RemoveKey(idx int) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if idx < 0 || idx >= len(p.keys) {
+		return fmt.Errorf("key index %d out of range (0-%d)", idx, len(p.keys)-1)
+	}
+	p.keys = append(p.keys[:idx], p.keys[idx+1:]...)
+	p.cooldowns = append(p.cooldowns[:idx], p.cooldowns[idx+1:]...)
+	p.disabled = append(p.disabled[:idx], p.disabled[idx+1:]...)
+	p.requestHistory = append(p.requestHistory[:idx], p.requestHistory[idx+1:]...)
+	p.lastUsed = append(p.lastUsed[:idx], p.lastUsed[idx+1:]...)
+	log.Printf("➖ Key [%d] removed from pool", idx)
+	return nil
+}
+
 // ── Config ────────────────────────────────────
 
 type Config struct {
@@ -256,7 +286,7 @@ func buildConfig() (Config, *KeyPool, error) {
 		TargetBase:  strings.TrimRight(getenv("TARGET_BASE_URL", "https://integrate.api.nvidia.com/v1"), "/"),
 		GenaiBase:   strings.TrimRight(getenv("GENAI_BASE_URL", "https://ai.api.nvidia.com"), "/"),
 		Port:        getenv("PORT", "3000"),
-		MaxRetries:  10,
+		MaxRetries:  getenvInt("MAX_RETRIES", 10),
 		CooldownSec: 60,
 		AdminToken:  getenv("ADMIN_TOKEN", ""),
 	}
@@ -282,6 +312,15 @@ func reloadConfig() (Config, *KeyPool, error) {
 func getenv(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
+	}
+	return fallback
+}
+
+func getenvInt(key string, fallback int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
 	}
 	return fallback
 }
@@ -316,6 +355,7 @@ func newServerState(cfg Config, pool *KeyPool) *ServerState {
 	s.mux.HandleFunc("/dashboard", s.dashboardHandler)
 	s.mux.HandleFunc("/clear", s.clearHandler)
 	s.mux.HandleFunc("/api/config", s.configHandler)
+	s.mux.HandleFunc("/api/keys", s.keysHandler)
 	// Block service worker requests to prevent 404s and unnecessary upstream proxying
 	s.mux.HandleFunc("/sw.js", s.swHandler)
 	s.mux.HandleFunc("/", s.proxyHandler)
@@ -409,6 +449,7 @@ func (s *ServerState) configHandler(w http.ResponseWriter, r *http.Request) {
 			fmt.Sprintf("API_KEYS=%s", strings.Join(payload.Keys, ",")),
 			fmt.Sprintf("PORT=%s", cfg.Port),
 			fmt.Sprintf("COOLDOWN_SEC=%d", cfg.CooldownSec),
+			fmt.Sprintf("MAX_RETRIES=%d", cfg.MaxRetries),
 		}
 
 		if err := os.WriteFile(".env", []byte(strings.Join(envLines, "\n")), 0600); err != nil {
@@ -438,6 +479,75 @@ func (s *ServerState) configHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusMethodNotAllowed)
+}
+
+func (s *ServerState) keysHandler(w http.ResponseWriter, r *http.Request) {
+	s.mu.RLock()
+	pool := s.pool
+	cfg := s.cfg
+	s.mu.RUnlock()
+
+	// Admin token check for POST and DELETE
+	if (r.Method == http.MethodPost || r.Method == http.MethodDelete) && cfg.AdminToken != "" && r.Header.Get("X-Admin-Token") != cfg.AdminToken {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		pool.mu.Lock()
+		now := time.Now()
+		result := make([]map[string]interface{}, len(pool.keys))
+		for i := range pool.keys {
+			pool.cleanupOldRequests(i)
+			result[i] = map[string]interface{}{
+				"index":       i + 1,
+				"key":         maskKey(pool.keys[i]),
+				"status":      pool.keyStatusLabel(i, now),
+				"requests_1m": pool.requestsInLastMinute(i),
+			}
+		}
+		pool.mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(result)
+
+	case http.MethodPost:
+		var body struct {
+			Key string `json:"key"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		if body.Key == "" {
+			http.Error(w, "key is required", http.StatusBadRequest)
+			return
+		}
+		idx := pool.AddKey(body.Key)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"index": idx,
+			"key":   maskKey(body.Key),
+		})
+
+	case http.MethodDelete:
+		var body struct {
+			Index int `json:"index"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		if err := pool.RemoveKey(body.Index); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"status": "removed"})
+
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
 }
 
 func filterEmpty(ss []string) []string {
