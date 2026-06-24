@@ -1,14 +1,12 @@
-package main
+package keypool
 
 import (
 	"testing"
 	"time"
-
-	"alvus/internal/keypool"
 )
 
 func TestNextReturnsKey(t *testing.T) {
-	p := keypool.NewKeyPool([]string{"key-a", "key-b", "key-c"})
+	p := NewKeyPool([]string{"key-a", "key-b", "key-c"})
 	for i := 0; i < 3; i++ {
 		idx, key, ok := p.Next()
 		if !ok {
@@ -24,7 +22,7 @@ func TestNextReturnsKey(t *testing.T) {
 }
 
 func TestNextAllCooldown(t *testing.T) {
-	p := keypool.NewKeyPool([]string{"key-a", "key-b", "key-c"})
+	p := NewKeyPool([]string{"key-a", "key-b", "key-c"})
 	// Put all keys on cooldown for 10 minutes
 	for i := 0; i < 3; i++ {
 		p.Cooldown(i, 10*time.Minute)
@@ -43,7 +41,7 @@ func TestNextAllCooldown(t *testing.T) {
 }
 
 func TestDisableKey(t *testing.T) {
-	p := keypool.NewKeyPool([]string{"key-a", "key-b", "key-c"})
+	p := NewKeyPool([]string{"key-a", "key-b", "key-c"})
 	p.Disable(1)
 
 	for i := 0; i < 10; i++ {
@@ -58,7 +56,7 @@ func TestDisableKey(t *testing.T) {
 }
 
 func TestAddKey(t *testing.T) {
-	p := keypool.NewKeyPool([]string{"key-a", "key-b"})
+	p := NewKeyPool([]string{"key-a", "key-b"})
 	if n := p.ActiveCount(); n != 2 {
 		t.Fatalf("ActiveCount() = %d, want 2 before AddKey", n)
 	}
@@ -73,7 +71,7 @@ func TestAddKey(t *testing.T) {
 }
 
 func TestRemoveKey(t *testing.T) {
-	p := keypool.NewKeyPool([]string{"key-a", "key-b", "key-c"})
+	p := NewKeyPool([]string{"key-a", "key-b", "key-c"})
 	if n := p.ActiveCount(); n != 3 {
 		t.Fatalf("ActiveCount() = %d, want 3 before RemoveKey", n)
 	}
@@ -88,7 +86,7 @@ func TestRemoveKey(t *testing.T) {
 }
 
 func TestRemoveKeyOutOfRange(t *testing.T) {
-	p := keypool.NewKeyPool([]string{"key-a", "key-b", "key-c"})
+	p := NewKeyPool([]string{"key-a", "key-b", "key-c"})
 	err := p.RemoveKey(999)
 	if err == nil {
 		t.Error("RemoveKey(999) expected error, got nil")
@@ -96,7 +94,7 @@ func TestRemoveKeyOutOfRange(t *testing.T) {
 }
 
 func TestNextEmptyPool(t *testing.T) {
-	p := keypool.NewKeyPool([]string{})
+	p := NewKeyPool([]string{})
 	idx, key, ok := p.Next()
 	if ok {
 		t.Errorf("Next() returned ok=true for empty pool")
@@ -110,7 +108,7 @@ func TestNextEmptyPool(t *testing.T) {
 }
 
 func TestActiveCount(t *testing.T) {
-	p := keypool.NewKeyPool([]string{"k1", "k2", "k3", "k4"})
+	p := NewKeyPool([]string{"k1", "k2", "k3", "k4"})
 	if n := p.ActiveCount(); n != 4 {
 		t.Fatalf("ActiveCount() = %d, want 4", n)
 	}

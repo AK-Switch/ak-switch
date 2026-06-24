@@ -1,6 +1,7 @@
 package main
 
 import (
+	"alvus/internal/keypool"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -28,7 +29,7 @@ func setupAlvus(t *testing.T, upstream *httptest.Server, poolKeys []string, maxR
 		CooldownSec: cooldownSec,
 		AdminToken:  "",
 	}
-	pool := NewKeyPool(poolKeys)
+	pool := keypool.NewKeyPool(poolKeys)
 	state := newServerState(cfg, pool)
 	return httptest.NewServer(state.mux)
 }
@@ -410,7 +411,7 @@ func TestProxyWithKeyManagement(t *testing.T) {
 		CooldownSec: 60,
 		AdminToken:  "",
 	}
-	pool := NewKeyPool([]string{"initial-key"})
+	pool := keypool.NewKeyPool([]string{"initial-key"})
 	state := newServerState(cfg, pool)
 	alvus := httptest.NewServer(state.mux)
 	defer alvus.Close()

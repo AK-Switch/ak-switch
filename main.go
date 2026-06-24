@@ -1,6 +1,9 @@
-﻿package main
+package main
 
 import (
+	"alvus/internal/keypool"
+	"alvus/internal/logstore"
+	"alvus/internal/utils"
 	"bytes"
 	"context"
 	"crypto/subtle"
@@ -17,233 +20,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"syscall"
 	"time"
 )
-
-func maskKey(key string) string {
-	if len(key) <= 12 {
-		return "****"
-	}
-	return key[:8] + "..." + key[len(key)-4:]
-}
-
-func copyHeaders(dst, src http.Header) {
-	for k, vals := range src {
-		lower := strings.ToLower(k)
-		if lower == "x-admin-token" || lower == "cookie" || lower == "proxy-authorization" {
-			continue
-		}
-		for _, v := range vals {
-			dst.Add(k, v)
-		}
-	}
-}
-
-type LogEntry struct {
-	Timestamp       string `json:"timestamp"`
-	Key             string `json:"key"`
-	KeyIndex        int    `json:"key_index"`
-	Method          string `json:"method"`
-	URL             string `json:"url"`
-	Status          int    `json:"status"`
-	RequestBodySize int    `json:"request_body_size"`
-}
-
-
-	// ── Key Pool ──────────────────────────────────
-
-type KeyPool struct {
-	counter        uint64
-	keys           []string
-	cooldowns      []time.Time
-	disabled       []bool
-	requestHistory [][]time.Time // timestamps of requests in the last 60s per key
-	lastUsed       []time.Time
-	mu             sync.Mutex
-}
-
-func NewKeyPool(keys []string) *KeyPool {
-	return &KeyPool{
-		keys:           keys,
-		cooldowns:      make([]time.Time, len(keys)),
-		disabled:       make([]bool, len(keys)),
-		requestHistory: make([][]time.Time, len(keys)),
-		lastUsed:       make([]time.Time, len(keys)),
-	}
-}
-
-func (p *KeyPool) TimeUntilAvailable() time.Duration {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	now := time.Now()
-	var soonest time.Duration = -1
-	for i, cd := range p.cooldowns {
-		if p.disabled[i] {
-			continue
-		}
-		if now.After(cd) {
-			return 0
-		}
-		if wait := cd.Sub(now); soonest < 0 || wait < soonest {
-			soonest = wait
-		}
-	}
-	return soonest
-}
-
-func (p *KeyPool) Next() (int, string, bool) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	n := len(p.keys)
-	if n == 0 {
-		return -1, "", false
-	}
-	start := int(atomic.AddUint64(&p.counter, 1)-1) % n
-	for i := 0; i < n; i++ {
-		idx := (start + i) % n
-		if !p.disabled[idx] && time.Now().After(p.cooldowns[idx]) {
-			return idx, p.keys[idx], true
-		}
-	}
-	return -1, "", false
-}
-
-// requestsInLastMinute returns the number of requests made by a key in the last 60 seconds
-func (p *KeyPool) requestsInLastMinute(idx int) int {
-	cutoff := time.Now().Add(-60 * time.Second)
-	count := 0
-	for _, t := range p.requestHistory[idx] {
-		if t.After(cutoff) {
-			count++
-		}
-	}
-	return count
-}
-
-// cleanupOldRequests removes request timestamps older than 60 seconds
-func (p *KeyPool) cleanupOldRequests(idx int) {
-	cutoff := time.Now().Add(-60 * time.Second)
-	var filtered []time.Time
-	for _, t := range p.requestHistory[idx] {
-		if t.After(cutoff) {
-			filtered = append(filtered, t)
-		}
-	}
-	p.requestHistory[idx] = filtered
-}
-
-func (p *KeyPool) Cooldown(idx int, d time.Duration) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if until := time.Now().Add(d); p.cooldowns[idx].Before(until) {
-		p.cooldowns[idx] = until
-	}
-	log.Printf("🧊 Key [%d] on cooldown for %s", idx, d)
-}
-
-func (p *KeyPool) Disable(idx int) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.disabled[idx] = true
-}
-
-func (p *KeyPool) ActiveCount() int {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	n := 0
-	for i := range p.keys {
-		if !p.disabled[i] {
-			n++
-		}
-	}
-	return n
-}
-
-func (p *KeyPool) keyStatusLabel(i int, now time.Time) string {
-	cd := p.cooldowns[i]
-	switch {
-	case p.disabled[i]:
-		return "disabled"
-	case now.After(cd):
-		return "ready"
-	default:
-		return fmt.Sprintf("cooling(%.0fs)", cd.Sub(now).Seconds())
-	}
-}
-
-func (p *KeyPool) Status() string {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	now := time.Now()
-	parts := make([]string, len(p.keys))
-	for i := range p.keys {
-		parts[i] = fmt.Sprintf("[%d]:%s", i, p.keyStatusLabel(i, now))
-	}
-	return strings.Join(parts, " ")
-}
-
-// GetKeyDetails returns detailed status for each key in the pool
-func (p *KeyPool) GetKeyDetails() []map[string]interface{} {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	now := time.Now()
-	details := make([]map[string]interface{}, len(p.keys))
-	for i := range p.keys {
-		p.cleanupOldRequests(i)
-		keyDetail := map[string]interface{}{
-			"index":               i,
-			"key":                 maskKey(p.keys[i]),
-			"disabled":            p.disabled[i],
-			"requests_per_minute": p.requestsInLastMinute(i),
-			"last_used":           p.lastUsed[i].Format(time.RFC3339),
-			"cooldown_until":      p.cooldowns[i].Format(time.RFC3339),
-		}
-		keyDetail["status"] = p.keyStatusLabel(i, now)
-		details[i] = keyDetail
-	}
-	return details
-}
-
-// IncrementRequestCount records a request timestamp for a key and updates its lastUsed timestamp
-func (p *KeyPool) IncrementRequestCount(idx int) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.cleanupOldRequests(idx)
-	p.requestHistory[idx] = append(p.requestHistory[idx], time.Now())
-	p.lastUsed[idx] = time.Now()
-}
-
-// AddKey appends a new key to the pool and returns its index
-func (p *KeyPool) AddKey(key string) int {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.keys = append(p.keys, key)
-	p.cooldowns = append(p.cooldowns, time.Time{})
-	p.disabled = append(p.disabled, false)
-	p.requestHistory = append(p.requestHistory, []time.Time{})
-	p.lastUsed = append(p.lastUsed, time.Time{})
-	idx := len(p.keys) - 1
-	log.Printf("➕ Key [%d] added to pool", idx)
-	return idx
-}
-
-// RemoveKey removes a key from the pool by index
-func (p *KeyPool) RemoveKey(idx int) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if idx < 0 || idx >= len(p.keys) {
-		return fmt.Errorf("key index %d out of range (0-%d)", idx, len(p.keys)-1)
-	}
-	p.keys = append(p.keys[:idx], p.keys[idx+1:]...)
-	p.cooldowns = append(p.cooldowns[:idx], p.cooldowns[idx+1:]...)
-	p.disabled = append(p.disabled[:idx], p.disabled[idx+1:]...)
-	p.requestHistory = append(p.requestHistory[:idx], p.requestHistory[idx+1:]...)
-	p.lastUsed = append(p.lastUsed[:idx], p.lastUsed[idx+1:]...)
-	log.Printf("➖ Key [%d] removed from pool", idx)
-	return nil
-}
 
 // ── Config ────────────────────────────────────
 
@@ -273,7 +52,7 @@ func parseKeysFromEnv() ([]string, error) {
 	return keys, nil
 }
 
-func buildConfig() (Config, *KeyPool, error) {
+func buildConfig() (Config, *keypool.KeyPool, error) {
 	keys, err := parseKeysFromEnv()
 	if err != nil {
 		return Config{}, nil, err
@@ -286,10 +65,10 @@ func buildConfig() (Config, *KeyPool, error) {
 		CooldownSec: 60,
 		AdminToken:  getenv("ADMIN_TOKEN", ""),
 	}
-	return cfg, NewKeyPool(keys), nil
+	return cfg, keypool.NewKeyPool(keys), nil
 }
 
-func loadConfig() (Config, *KeyPool) {
+func loadConfig() (Config, *keypool.KeyPool) {
 	cfg, pool, err := buildConfig()
 	if err != nil {
 		log.Fatalf("❌ %v", err)
@@ -297,7 +76,7 @@ func loadConfig() (Config, *KeyPool) {
 	return cfg, pool
 }
 
-func reloadConfig() (Config, *KeyPool, error) {
+func reloadConfig() (Config, *keypool.KeyPool, error) {
 	for _, k := range []string{"API_KEYS", "TARGET_BASE_URL", "GENAI_BASE_URL", "PORT", "COOLDOWN_SEC", "ADMIN_TOKEN"} {
 		os.Unsetenv(k)
 	}
@@ -326,13 +105,13 @@ func getenvInt(key string, fallback int) int {
 type ServerState struct {
 	mu     sync.RWMutex
 	cfg    Config
-	pool   *KeyPool
+	pool   *keypool.KeyPool
 	mux    *http.ServeMux
 	client *http.Client
-	logs   *LogStore
+	logs   *logstore.LogStore
 }
 
-func newServerState(cfg Config, pool *KeyPool) *ServerState {
+func newServerState(cfg Config, pool *keypool.KeyPool) *ServerState {
 	s := &ServerState{
 		cfg: cfg, pool: pool, mux: http.NewServeMux(),
 		client: &http.Client{
@@ -346,7 +125,7 @@ func newServerState(cfg Config, pool *KeyPool) *ServerState {
 				return http.ErrUseLastResponse
 			},
 		},
-		logs: NewLogStore(1000),
+		logs: logstore.New(1000),
 	}
 	s.mux.HandleFunc("/health", s.healthHandler)
 	s.mux.HandleFunc("/logs", s.logsHandler)
@@ -377,14 +156,11 @@ func (s *ServerState) configHandler(w http.ResponseWriter, r *http.Request) {
 	s.mu.RUnlock()
 
 	if r.Method == http.MethodGet {
-		pool.mu.Lock()
-		keys := make([]string, len(pool.keys))
-		copy(keys, pool.keys)
-		pool.mu.Unlock()
+		keys := pool.Keys()
 
 		maskedKeys := make([]string, len(keys))
 		for i, k := range keys {
-			maskedKeys[i] = maskKey(k)
+			maskedKeys[i] = utils.MaskKey(k)
 		}
 		s.respondJSON(w, http.StatusOK, ConfigPayload{
 			TargetBase: cfg.TargetBase,
@@ -412,10 +188,7 @@ func (s *ServerState) configHandler(w http.ResponseWriter, r *http.Request) {
 		pool := s.pool
 		s.mu.RUnlock()
 
-		pool.mu.Lock()
-		currentKeys := make([]string, len(pool.keys))
-		copy(currentKeys, pool.keys)
-		pool.mu.Unlock()
+		currentKeys := pool.Keys()
 
 		reclaimed := make(map[int]bool)
 		for i := range payload.Keys {
@@ -426,7 +199,7 @@ func (s *ServerState) configHandler(w http.ResponseWriter, r *http.Request) {
 			// If the key is masked (contains "..." or is "****"), try to restore it from the current pool
 			if strings.Contains(k, "...") || k == "****" {
 				for j, ck := range currentKeys {
-					if !reclaimed[j] && maskKey(ck) == k {
+					if !reclaimed[j] && utils.MaskKey(ck) == k {
 						k = ck
 						reclaimed[j] = true
 						break
@@ -504,19 +277,18 @@ func (s *ServerState) keysHandler(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
-		pool.mu.Lock()
+		keys := pool.Keys()
 		now := time.Now()
-		result := make([]map[string]interface{}, len(pool.keys))
-		for i := range pool.keys {
-			pool.cleanupOldRequests(i)
+		result := make([]map[string]interface{}, len(keys))
+		for i := range keys {
+			pool.CleanupOldRequests(i)
 			result[i] = map[string]interface{}{
 				"index":       i + 1,
-				"key":         maskKey(pool.keys[i]),
-				"status":      pool.keyStatusLabel(i, now),
-				"requests_1m": pool.requestsInLastMinute(i),
+				"key":         utils.MaskKey(keys[i]),
+				"status":      pool.KeyStatusLabel(i, now),
+				"requests_1m": pool.RequestsInLastMinute(i),
 			}
 		}
-		pool.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(result)
 
@@ -536,7 +308,7 @@ func (s *ServerState) keysHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"index": idx,
-			"key":   maskKey(body.Key),
+			"key":   utils.MaskKey(body.Key),
 		})
 
 	case http.MethodDelete:
@@ -647,7 +419,7 @@ func (s *ServerState) proxyHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "proxy: failed to build upstream request", http.StatusInternalServerError)
 			return
 		}
-		copyHeaders(req.Header, r.Header)
+		utils.CopyHeaders(req.Header, r.Header)
 		req.Header.Set("Authorization", "Bearer "+key)
 
 		resp, err := client.Do(req)
@@ -685,12 +457,12 @@ func (s *ServerState) proxyHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if resp.StatusCode >= 400 && resp.StatusCode < 500 {
-			copyHeaders(w.Header(), resp.Header)
+			utils.CopyHeaders(w.Header(), resp.Header)
 			w.WriteHeader(resp.StatusCode)
 			io.Copy(w, resp.Body)
 			resp.Body.Close()
 
-			s.logs.Append(LogEntry{Timestamp: time.Now().Format(time.RFC3339), Key: key, KeyIndex: idx + 1, Method: r.Method, URL: target, Status: resp.StatusCode, RequestBodySize: len(bodyBytes)})
+			s.logs.Append(utils.LogEntry{Timestamp: time.Now().Format(time.RFC3339), Key: key, KeyIndex: idx + 1, Method: r.Method, URL: target, Status: resp.StatusCode, RequestBodySize: len(bodyBytes)})
 			log.Printf("⚠️ %s %s → %d (Terminal Client Error, no retry)", r.Method, target, resp.StatusCode)
 			return
 		}
@@ -703,7 +475,7 @@ func (s *ServerState) proxyHandler(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		copyHeaders(w.Header(), resp.Header)
+		utils.CopyHeaders(w.Header(), resp.Header)
 		w.WriteHeader(resp.StatusCode)
 
 		if f, ok := w.(http.Flusher); ok {
@@ -726,7 +498,7 @@ func (s *ServerState) proxyHandler(w http.ResponseWriter, r *http.Request) {
 		resp.Body.Close()
 
 		pool.IncrementRequestCount(idx)
-		s.logs.Append(LogEntry{Timestamp: time.Now().Format(time.RFC3339), Key: key, KeyIndex: idx + 1, Method: r.Method, URL: target, Status: resp.StatusCode, RequestBodySize: len(bodyBytes)})
+		s.logs.Append(utils.LogEntry{Timestamp: time.Now().Format(time.RFC3339), Key: key, KeyIndex: idx + 1, Method: r.Method, URL: target, Status: resp.StatusCode, RequestBodySize: len(bodyBytes)})
 		log.Printf("✅ %s %s → %d (key[%d], attempt %d)", r.Method, target, resp.StatusCode, idx, attempt+1)
 		return
 	}
@@ -803,7 +575,7 @@ func watchEnvFile(state *ServerState, stop <-chan struct{}) {
 			state.cfg = newCfg
 			state.pool = newPool
 			state.mu.Unlock()
-			log.Printf("✅ Reloaded — %d keys, target: %s, genai: %s", len(newPool.keys), newCfg.TargetBase, newCfg.GenaiBase)
+			log.Printf("✅ Reloaded — %d keys, target: %s, genai: %s", len(newPool.Keys()), newCfg.TargetBase, newCfg.GenaiBase)
 		}
 	}
 }
@@ -866,7 +638,6 @@ func main() {
 		}
 	}()
 
-
 	displayHost := host
 	if displayHost == "" {
 		displayHost = "0.0.0.0"
@@ -875,7 +646,7 @@ func main() {
 	if *processTag != "" {
 		tagSuffix = fmt.Sprintf(" [tag=%s]", *processTag)
 	}
-	log.Printf("⚡ Alvus%s %s:%s → %s | genai → %s (%d keys)", tagSuffix, displayHost, cfg.Port, cfg.TargetBase, cfg.GenaiBase, len(pool.keys))
+	log.Printf("⚡ Alvus%s %s:%s → %s | genai → %s (%d keys)", tagSuffix, displayHost, cfg.Port, cfg.TargetBase, cfg.GenaiBase, len(pool.Keys()))
 	if err := server.Serve(listener); err != http.ErrServerClosed {
 		log.Fatalf("❌ Server error: %v", err)
 	}
@@ -903,6 +674,3 @@ func loadDotEnv(filename string) {
 		}
 	}
 }
-
-
-

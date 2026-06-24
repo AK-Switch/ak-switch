@@ -1,6 +1,8 @@
 package main
 
 import (
+	"alvus/internal/keypool"
+	"alvus/internal/utils"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -19,7 +21,7 @@ func newTestServer(keys []string) *httptest.Server {
 		CooldownSec: 60,
 		AdminToken:  "",
 	}
-	pool := NewKeyPool(keys)
+	pool := keypool.NewKeyPool(keys)
 	state := newServerState(cfg, pool)
 	return httptest.NewServer(state.mux)
 }
@@ -94,7 +96,7 @@ func TestConfigGet(t *testing.T) {
 		t.Fatalf("expected 3 keys, got %d", len(keys))
 	}
 
-	expectedMasked := maskKey("key-a")
+	expectedMasked := utils.MaskKey("key-a")
 
 	for i, k := range keys {
 		masked, ok := k.(string)
@@ -106,7 +108,7 @@ func TestConfigGet(t *testing.T) {
 		if masked == "key-a" || masked == "key-b" || masked == "key-c" {
 			t.Errorf("keys[%d]=%q appears unmasked", i, masked)
 		}
-		// The masking format should match maskKey()
+		// The masking format should match utils.MaskKey()
 		if i == 0 && masked != expectedMasked {
 			t.Errorf("keys[0]=%q, want masking like %q", masked, expectedMasked)
 		}
@@ -141,7 +143,7 @@ func TestConfigPost(t *testing.T) {
 		CooldownSec: 60,
 		AdminToken:  "",
 	}
-	pool := NewKeyPool([]string{"key-a", "key-b"})
+	pool := keypool.NewKeyPool([]string{"key-a", "key-b"})
 	state := newServerState(cfg, pool)
 	alvus := httptest.NewServer(state.mux)
 	defer alvus.Close()
@@ -239,8 +241,8 @@ func TestKeysPost(t *testing.T) {
 	if key, ok := addResp["key"].(string); !ok || key == "" {
 		t.Errorf("expected non-empty masked key, got %v", addResp["key"])
 	}
-	if addResp["key"] != maskKey("new-test-key") {
-		t.Errorf("expected key=%q, got %q", maskKey("new-test-key"), addResp["key"])
+	if addResp["key"] != utils.MaskKey("new-test-key") {
+		t.Errorf("expected key=%q, got %q", utils.MaskKey("new-test-key"), addResp["key"])
 	}
 
 	// GET 验证 key 数量为 4
@@ -356,7 +358,7 @@ func TestHealthHandlerAuth(t *testing.T) {
 		CooldownSec: 60,
 		AdminToken:  "my-token",
 	}
-	pool := NewKeyPool([]string{"key-a", "key-b", "key-c"})
+	pool := keypool.NewKeyPool([]string{"key-a", "key-b", "key-c"})
 	state := newServerState(cfg, pool)
 	alvus := httptest.NewServer(state.mux)
 	defer alvus.Close()
@@ -415,7 +417,7 @@ func TestClearHandlerAuth(t *testing.T) {
 		CooldownSec: 60,
 		AdminToken:  "my-token",
 	}
-	pool := NewKeyPool([]string{"key-a", "key-b", "key-c"})
+	pool := keypool.NewKeyPool([]string{"key-a", "key-b", "key-c"})
 	state := newServerState(cfg, pool)
 	alvus := httptest.NewServer(state.mux)
 	defer alvus.Close()

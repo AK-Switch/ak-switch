@@ -1,14 +1,12 @@
-package main
+package logstore
 
 import (
-	"testing"
-
-	"alvus/internal/logstore"
 	"alvus/internal/utils"
+	"testing"
 )
 
 func TestAppendAndSnapshot(t *testing.T) {
-	s := logstore.New(100)
+	s := New(100)
 	entries := []utils.LogEntry{
 		{Timestamp: "2025-01-01T00:00:00Z", Key: "sk-real-key-12345", KeyIndex: 1, Method: "POST", URL: "https://example.com/v1/chat", Status: 200, RequestBodySize: 100},
 		{Timestamp: "2025-01-01T00:00:01Z", Key: "another-key-67890", KeyIndex: 2, Method: "GET", URL: "https://example.com/v1/models", Status: 200, RequestBodySize: 0},
@@ -61,7 +59,7 @@ func TestAppendAndSnapshot(t *testing.T) {
 }
 
 func TestFIFOLimit(t *testing.T) {
-	s := logstore.New(3)
+	s := New(3)
 	for i := 0; i < 5; i++ {
 		s.Append(utils.LogEntry{
 			Timestamp:       "entry",
@@ -93,7 +91,7 @@ func TestFIFOLimit(t *testing.T) {
 }
 
 func TestClear(t *testing.T) {
-	s := logstore.New(10)
+	s := New(10)
 	for i := 0; i < 3; i++ {
 		s.Append(utils.LogEntry{
 			Timestamp:       "entry",
@@ -126,7 +124,7 @@ func TestClear(t *testing.T) {
 }
 
 func TestKeyMaskedOnAppend(t *testing.T) {
-	s := logstore.New(10)
+	s := New(10)
 	rawKey := "sk-real-key-12345"
 	expectedMasked := utils.MaskKey(rawKey)
 

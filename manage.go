@@ -202,11 +202,11 @@ func (m *ManagedInstance) Stop() {
 // ── Manager ────────────────────────────────────
 
 type Manager struct {
-	instances       []*ManagedInstance
-	config          ManageConfig
-	workBase        string
-	tag             string
-	healthFailures  map[string]int // name -> consecutive failure count
+	instances      []*ManagedInstance
+	config         ManageConfig
+	workBase       string
+	tag            string
+	healthFailures map[string]int // name -> consecutive failure count
 }
 
 // detectOldFormat checks if the config JSON has old-format fields (e.g. "dir").
