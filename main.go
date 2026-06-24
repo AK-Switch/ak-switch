@@ -37,15 +37,6 @@ func copyHeaders(dst, src http.Header) {
 	}
 }
 
-func appendUsageLog(entry LogEntry) {
-	usageMu.Lock()
-	usageLogs = append(usageLogs, entry)
-	if len(usageLogs) > 1000 {
-		usageLogs = usageLogs[1:]
-	}
-	usageMu.Unlock()
-}
-
 type LogEntry struct {
 	Timestamp       string `json:"timestamp"`
 	Key             string `json:"key"`
@@ -56,12 +47,8 @@ type LogEntry struct {
 	RequestBodySize int    `json:"request_body_size"`
 }
 
-var (
-	usageLogs = []LogEntry{}
-	usageMu   sync.Mutex
-)
 
-// ── Key Pool ──────────────────────────────────
+	// ── Key Pool ──────────────────────────────────
 
 type KeyPool struct {
 	counter        uint64
@@ -335,6 +322,7 @@ type ServerState struct {
 	pool   *KeyPool
 	mux    *http.ServeMux
 	client *http.Client
+	logs   *LogStore
 }
 
 func newServerState(cfg Config, pool *KeyPool) *ServerState {
@@ -351,6 +339,7 @@ func newServerState(cfg Config, pool *KeyPool) *ServerState {
 				return http.ErrUseLastResponse
 			},
 		},
+		logs: NewLogStore(1000),
 	}
 	s.mux.HandleFunc("/health", s.healthHandler)
 	s.mux.HandleFunc("/logs", s.logsHandler)
@@ -683,7 +672,7 @@ func (s *ServerState) proxyHandler(w http.ResponseWriter, r *http.Request) {
 			io.Copy(w, resp.Body)
 			resp.Body.Close()
 
-			appendUsageLog(LogEntry{Timestamp: time.Now().Format(time.RFC3339), Key: key, KeyIndex: idx + 1, Method: r.Method, URL: target, Status: resp.StatusCode, RequestBodySize: len(bodyBytes)})
+			s.logs.Append(LogEntry{Timestamp: time.Now().Format(time.RFC3339), Key: key, KeyIndex: idx + 1, Method: r.Method, URL: target, Status: resp.StatusCode, RequestBodySize: len(bodyBytes)})
 			log.Printf("⚠️ %s %s → %d (Terminal Client Error, no retry)", r.Method, target, resp.StatusCode)
 			return
 		}
@@ -719,7 +708,7 @@ func (s *ServerState) proxyHandler(w http.ResponseWriter, r *http.Request) {
 		resp.Body.Close()
 
 		pool.IncrementRequestCount(idx)
-		appendUsageLog(LogEntry{Timestamp: time.Now().Format(time.RFC3339), Key: key, KeyIndex: idx + 1, Method: r.Method, URL: target, Status: resp.StatusCode, RequestBodySize: len(bodyBytes)})
+		s.logs.Append(LogEntry{Timestamp: time.Now().Format(time.RFC3339), Key: key, KeyIndex: idx + 1, Method: r.Method, URL: target, Status: resp.StatusCode, RequestBodySize: len(bodyBytes)})
 		log.Printf("✅ %s %s → %d (key[%d], attempt %d)", r.Method, target, resp.StatusCode, idx, attempt+1)
 		return
 	}
@@ -728,21 +717,8 @@ func (s *ServerState) proxyHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *ServerState) logsHandler(w http.ResponseWriter, r *http.Request) {
-	usageMu.Lock()
-	masked := make([]LogEntry, len(usageLogs))
-	for i, entry := range usageLogs {
-		masked[i] = LogEntry{
-			Timestamp:       entry.Timestamp,
-			Key:             maskKey(entry.Key),
-			KeyIndex:        entry.KeyIndex,
-			Method:          entry.Method,
-			URL:             entry.URL,
-			Status:          entry.Status,
-			RequestBodySize: entry.RequestBodySize,
-		}
-	}
-	usageMu.Unlock()
-	s.respondJSON(w, http.StatusOK, masked)
+	entries := s.logs.Snapshot()
+	s.respondJSON(w, http.StatusOK, entries)
 }
 
 func (s *ServerState) dashboardHandler(w http.ResponseWriter, r *http.Request) {
@@ -758,9 +734,7 @@ func (s *ServerState) clearHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	usageMu.Lock()
-	usageLogs = []LogEntry{}
-	usageMu.Unlock()
+	s.logs.Clear()
 	s.respondJSON(w, http.StatusOK, map[string]string{"status": "cleared"})
 }
 
