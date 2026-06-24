@@ -1,6 +1,7 @@
 package main
 
 import (
+	"alvus/internal/config"
 	"alvus/internal/keypool"
 	"alvus/internal/logstore"
 	"alvus/internal/utils"
@@ -25,95 +26,50 @@ import (
 	"time"
 )
 
-// ── Config ────────────────────────────────────
-
-type Config struct {
-	TargetBase  string
-	GenaiBase   string
-	Port        string
-	MaxRetries  int
-	CooldownSec int
-	AdminToken  string
-}
-
-func parseKeysFromEnv() ([]string, error) {
-	raw := os.Getenv("API_KEYS")
-	if raw == "" {
-		return nil, fmt.Errorf("API_KEYS is required")
-	}
-	var keys []string
-	for _, k := range strings.Split(raw, ",") {
-		if k = strings.TrimSpace(k); k != "" {
-			keys = append(keys, k)
-		}
-	}
-	if len(keys) == 0 {
-		return nil, fmt.Errorf("no valid API keys found in API_KEYS")
-	}
-	return keys, nil
-}
-
-func buildConfig() (Config, *keypool.KeyPool, error) {
-	keys, err := parseKeysFromEnv()
-	if err != nil {
-		return Config{}, nil, err
-	}
-	cfg := Config{
-		TargetBase:  strings.TrimRight(getenv("TARGET_BASE_URL", "https://integrate.api.nvidia.com/v1"), "/"),
-		GenaiBase:   strings.TrimRight(getenv("GENAI_BASE_URL", "https://ai.api.nvidia.com"), "/"),
-		Port:        getenv("PORT", "3000"),
-		MaxRetries:  getenvInt("MAX_RETRIES", 10),
-		CooldownSec: 60,
-		AdminToken:  getenv("ADMIN_TOKEN", ""),
-	}
-	return cfg, keypool.NewKeyPool(keys), nil
-}
-
-func loadConfig() (Config, *keypool.KeyPool) {
-	cfg, pool, err := buildConfig()
+func loadConfig() (*config.Config, *keypool.KeyPool) {
+	cfg, err := config.Load(".env")
 	if err != nil {
 		slog.Error("config load failed", "error", err)
-		log.Fatalf("❌ %v", err)
+		log.Fatalf("config load failed: %v", err)
 	}
-	return cfg, pool
+	if err := cfg.Validate(); err != nil {
+		slog.Error("config validation failed", "error", err)
+		log.Fatalf("config validation failed: %v", err)
+	}
+	slog.Info("config loaded", "keys", len(cfg.Keys), "target", cfg.TargetBase, "genai", cfg.GenaiBase)
+	return cfg, keypool.NewKeyPool(cfg.Keys)
 }
 
-func reloadConfig() (Config, *keypool.KeyPool, error) {
-	for _, k := range []string{"API_KEYS", "TARGET_BASE_URL", "GENAI_BASE_URL", "PORT", "COOLDOWN_SEC", "ADMIN_TOKEN"} {
+func reloadConfig() (*config.Config, *keypool.KeyPool, error) {
+	for _, k := range []string{
+		"API_KEYS", "KEY", "KEY1", "KEY2", "KEY3", "KEY4", "KEY5", "KEYA", "KEYB",
+		"TARGET_BASE_URL", "GENAI_BASE_URL", "PORT", "COOLDOWN_SEC", "ADMIN_TOKEN",
+		"MAX_RETRIES", "DISABLE_THINKING", "GENAI_MODEL", "LOG_LEVEL",
+	} {
 		os.Unsetenv(k)
 	}
-	loadDotEnv(".env")
-	return buildConfig()
-}
-
-func getenv(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
+	cfg, err := config.Load(".env")
+	if err != nil {
+		return nil, nil, err
 	}
-	return fallback
-}
-
-func getenvInt(key string, fallback int) int {
-	if v := os.Getenv(key); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			return n
-		}
+	if err := cfg.Validate(); err != nil {
+		return nil, nil, fmt.Errorf("reloaded config invalid: %w", err)
 	}
-	return fallback
+	return cfg, keypool.NewKeyPool(cfg.Keys), nil
 }
 
 // ── Server ────────────────────────────────────
 
 type ServerState struct {
 	mu     sync.RWMutex
-	cfg    Config
+	cfg    *config.Config
 	pool   *keypool.KeyPool
 	mux    *http.ServeMux
 	client *http.Client
 	logs   *logstore.LogStore
 }
 
-func newServerState(cfg Config, pool *keypool.KeyPool) *ServerState {
+func newServerState(cfg *config.Config, pool *keypool.KeyPool) *ServerState {
 	s := &ServerState{
 		cfg: cfg, pool: pool, mux: http.NewServeMux(),
 		client: &http.Client{
@@ -229,7 +185,7 @@ func (s *ServerState) configHandler(w http.ResponseWriter, r *http.Request) {
 			fmt.Sprintf("TARGET_BASE_URL=%s", payload.TargetBase),
 			fmt.Sprintf("GENAI_BASE_URL=%s", payload.GenaiBase),
 			fmt.Sprintf("API_KEYS=%s", strings.Join(payload.Keys, ",")),
-			fmt.Sprintf("PORT=%s", cfg.Port),
+			fmt.Sprintf("PORT=%d", cfg.Port),
 			fmt.Sprintf("COOLDOWN_SEC=%d", cfg.CooldownSec),
 			fmt.Sprintf("MAX_RETRIES=%d", cfg.MaxRetries),
 		}
@@ -242,6 +198,10 @@ func (s *ServerState) configHandler(w http.ResponseWriter, r *http.Request) {
 
 		slog.Info("config updated via api")
 
+		s.mu.RLock()
+		oldCfg := s.cfg
+		s.mu.RUnlock()
+
 		newCfg, newPool, err := reloadConfig()
 		if err != nil {
 			slog.Warn("reload failed", "error", err)
@@ -249,6 +209,11 @@ func (s *ServerState) configHandler(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusAccepted)
 			json.NewEncoder(w).Encode(map[string]string{"status": "accepted", "warning": "config saved but reload failed: " + err.Error()})
 			return
+		}
+
+		changes := oldCfg.Diff(newCfg)
+		for _, c := range changes {
+			slog.Info("config changed via api", "field", c.Field, "old", c.OldValue, "new", c.NewValue)
 		}
 
 		s.mu.Lock()
@@ -567,15 +532,30 @@ func watchEnvFile(state *ServerState, stop <-chan struct{}) {
 			time.Sleep(100 * time.Millisecond) // debounce
 
 			slog.Info("env changed, reloading")
+
+			state.mu.RLock()
+			oldCfg := state.cfg
+			state.mu.RUnlock()
+
 			newCfg, newPool, err := reloadConfig()
 			if err != nil {
-				slog.Error("env reload failed", "error", err)
+				slog.Error("env reload failed; keeping previous config", "error", err)
 				continue
 			}
+
+			// Log configuration changes (sensitive fields masked)
+			changes := oldCfg.Diff(newCfg)
+			if len(changes) > 0 {
+				for _, c := range changes {
+					slog.Info("config changed", "field", c.Field, "old", c.OldValue, "new", c.NewValue)
+				}
+			}
+
 			state.mu.Lock()
 			state.cfg = newCfg
 			state.pool = newPool
 			state.mu.Unlock()
+
 			slog.Info("config reloaded", "keys", len(newPool.Keys()), "target", newCfg.TargetBase, "genai", newCfg.GenaiBase)
 		}
 	}
@@ -614,19 +594,18 @@ func main() {
 		host = "0.0.0.0"
 	}
 
-	loadDotEnv(".env")
 	cfg, pool := loadConfig()
 	state := newServerState(cfg, pool)
 
 	go watchEnvFile(state, stop)
 
-	addr := host + ":" + cfg.Port
+	addr := fmt.Sprintf("%s:%d", host, cfg.Port)
 
 	// Check port availability and bind
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		slog.Error("port in use", "port", cfg.Port, "error", err)
-		log.Fatalf("❌ 端口 %s 已被占用: %v", cfg.Port, err)
+		log.Fatalf("port %d is already in use: %v", cfg.Port, err)
 	}
 
 	server := &http.Server{Handler: state.mux}
@@ -652,28 +631,5 @@ func main() {
 	if err := server.Serve(listener); err != http.ErrServerClosed {
 		slog.Error("server error", "error", err)
 		log.Fatalf("❌ Server error: %v", err)
-	}
-}
-
-// ── .env Loader ───────────────────────────────
-
-func loadDotEnv(filename string) {
-	data, err := os.ReadFile(filename)
-	if err != nil {
-		return
-	}
-	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		k, v := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
-		if os.Getenv(k) == "" {
-			os.Setenv(k, v)
-		}
 	}
 }

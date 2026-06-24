@@ -1,6 +1,7 @@
 package main
 
 import (
+	"alvus/internal/config"
 	"alvus/internal/keypool"
 	"bytes"
 	"encoding/json"
@@ -20,16 +21,15 @@ import (
 
 // setupAlvus creates a mock upstream and an Alvus test server, returning both.
 // The caller must close both servers.
-func setupAlvus(t *testing.T, upstream *httptest.Server, poolKeys []string, maxRetries, cooldownSec int) *httptest.Server {
-	t.Helper()
-	cfg := Config{
-		TargetBase:  upstream.URL,
-		GenaiBase:   upstream.URL,
-		Port:        "0",
-		MaxRetries:  maxRetries,
-		CooldownSec: cooldownSec,
-		AdminToken:  "",
-	}
+func setupAlvus(tb testing.TB, upstream *httptest.Server, poolKeys []string, maxRetries, cooldownSec int) *httptest.Server {
+		tb.Helper()
+		cfg := &config.Config{
+			TargetBase:  upstream.URL,
+			GenaiBase:   upstream.URL,
+			Port:        0,
+			MaxRetries:  maxRetries,
+			CooldownSec: cooldownSec,
+		}
 	pool := keypool.NewKeyPool(poolKeys)
 	state := newServerState(cfg, pool)
 	return httptest.NewServer(state.mux)
@@ -404,13 +404,14 @@ func TestProxyWithKeyManagement(t *testing.T) {
 	defer upstream.Close()
 
 	// Create Alvus with 1 initial key (must have at least 1 to avoid panic in Next())
-	cfg := Config{
+	cfg := &config.Config{
 		TargetBase:  upstream.URL,
 		GenaiBase:   upstream.URL,
-		Port:        "0",
+		Port:        8080,
 		MaxRetries:  10,
 		CooldownSec: 60,
 		AdminToken:  "",
+		Keys:        []string{"initial-key"},
 	}
 	pool := keypool.NewKeyPool([]string{"initial-key"})
 	state := newServerState(cfg, pool)

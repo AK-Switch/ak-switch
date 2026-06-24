@@ -26,3 +26,12 @@ jobs:
       - name: Regression test
         shell: pwsh
         run: ./regression_test.ps1
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build .

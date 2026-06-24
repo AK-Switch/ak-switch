@@ -1,6 +1,7 @@
 package main
 
 import (
+	"alvus/internal/config"
 	"alvus/internal/keypool"
 	"alvus/internal/utils"
 	"encoding/json"
@@ -13,13 +14,14 @@ import (
 )
 
 func newTestServer(keys []string) *httptest.Server {
-	cfg := Config{
+	cfg := &config.Config{
 		TargetBase:  "http://localhost:19999",
 		GenaiBase:   "http://localhost:19999",
-		Port:        "0",
+		Port:        19999,
 		MaxRetries:  3,
 		CooldownSec: 60,
 		AdminToken:  "",
+	Keys:        []string{"key-a", "key-b"},
 	}
 	pool := keypool.NewKeyPool(keys)
 	state := newServerState(cfg, pool)
@@ -130,18 +132,19 @@ func TestConfigPost(t *testing.T) {
 	defer os.Chdir(origDir)
 
 	// 写入初始 .env 供 reloadConfig 使用
-	envContent := "PORT=0\nTARGET_BASE_URL=http://localhost:19999\nGENAI_BASE_URL=http://localhost:19999\nAPI_KEYS=key-a,key-b\nCOOLDOWN_SEC=60\nMAX_RETRIES=3\n"
+	envContent := "PORT=19999\nTARGET_BASE_URL=http://localhost:19999\nGENAI_BASE_URL=http://localhost:19999\nAPI_KEYS=key-a,key-b\nCOOLDOWN_SEC=60\nMAX_RETRIES=3\n"
 	if err := os.WriteFile(filepath.Join(tmpDir, ".env"), []byte(envContent), 0600); err != nil {
 		t.Fatal(err)
 	}
 
-	cfg := Config{
+	cfg := &config.Config{
 		TargetBase:  "http://localhost:19999",
 		GenaiBase:   "http://localhost:19999",
-		Port:        "0",
+		Port:        19999,
 		MaxRetries:  3,
 		CooldownSec: 60,
 		AdminToken:  "",
+		Keys:        []string{"key-a", "key-b"},
 	}
 	pool := keypool.NewKeyPool([]string{"key-a", "key-b"})
 	state := newServerState(cfg, pool)
@@ -350,10 +353,10 @@ func TestClearHandler(t *testing.T) {
 // ── Health with AdminToken auth ──────────────────────
 
 func TestHealthHandlerAuth(t *testing.T) {
-	cfg := Config{
+	cfg := &config.Config{
 		TargetBase:  "http://localhost:19999",
 		GenaiBase:   "http://localhost:19999",
-		Port:        "0",
+		Port:        19999,
 		MaxRetries:  3,
 		CooldownSec: 60,
 		AdminToken:  "my-token",
@@ -409,10 +412,10 @@ func TestHealthHandlerAuth(t *testing.T) {
 // ── Clear with AdminToken auth ───────────────────────
 
 func TestClearHandlerAuth(t *testing.T) {
-	cfg := Config{
+	cfg := &config.Config{
 		TargetBase:  "http://localhost:19999",
 		GenaiBase:   "http://localhost:19999",
-		Port:        "0",
+		Port:        19999,
 		MaxRetries:  3,
 		CooldownSec: 60,
 		AdminToken:  "my-token",

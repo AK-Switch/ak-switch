@@ -1,6 +1,7 @@
 package keypool
 
 import (
+	"fmt"
 	"testing"
 	"time"
 )
@@ -121,5 +122,18 @@ func TestActiveCount(t *testing.T) {
 	p.Disable(1)
 	if n := p.ActiveCount(); n != 2 {
 		t.Errorf("ActiveCount() = %d after Disable(1), want 2", n)
+	}
+}
+
+func BenchmarkKeyPoolNext(b *testing.B) {
+	keySet := []string{"ka", "kb", "kc", "kd", "ke", "kf", "kg", "kh", "ki", "kj"}
+	for _, n := range []int{1, 5, 10} {
+		p := NewKeyPool(keySet[:n])
+		b.Run(fmt.Sprintf("keys-%d", n), func(b *testing.B) {
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				p.Next()
+			}
+		})
 	}
 }

@@ -181,6 +181,9 @@ alvus-fork/
 ├── main.go                 # 单实例逻辑（跟原版一样）
 ├── manage.go               # 管理模式（本 fork 新增）
 ├── dashboard.html          # Dashboard 页面（通过 //go:embed 嵌入）
+├── Dockerfile              # Docker 多阶段构建
+├── .dockerignore           # Docker 构建上下文排除
+├── docker-compose.yml      # Docker Compose 一键部署
 ├── alvus.exe               # 编译好的二进制
 ├── go.mod
 ├── README.md               # 本说明
@@ -199,6 +202,64 @@ alvus-fork/
 
 ---
 
+## Docker 部署
+
+### 前置条件
+
+- 安装 [Docker](https://docs.docker.com/get-docker/) 和 [Docker Compose](https://docs.docker.com/compose/install/) (v2.0+)
+- 从 `.env.example` 创建 `.env` 文件并填入 API keys 等配置
+
+### 快速启动
+
+```bash
+# 1. 创建 .env 配置文件（根据实际情况修改 API keys）
+cp .env.example .env
+
+# 2. 构建并启动容器
+docker compose up -d
+
+# 3. 检查健康状态
+curl http://localhost:3000/health
+
+# 4. 查看日志
+docker compose logs -f
+```
+
+### 配置说明
+
+- **环境变量**: 通过 `docker-compose.yml` 同级目录下的 `.env` 文件配置（与裸运行相同）
+- **端口映射**: 默认映射 `3000:3000`，可通过 `PORT` 环境变量覆盖
+- **日志**: 默认输出到 stdout，通过 `docker compose logs` 查看
+
+```bash
+# 自定义端口启动（例如映射到 8080）
+PORT=8080 docker compose up -d
+# 访问 http://localhost:8080/health
+
+# 查看实时日志
+docker compose logs -f
+
+# 停止容器
+docker compose down
+```
+
+### 仅构建
+
+```bash
+docker build -t alvus .
+docker run --rm alvus --help
+```
+
+### Docker HEALTHCHECK
+
+容器内置健康检查（每 30 秒探测 `/health` 端点），不健康时根据 `restart: unless-stopped` 策略自动重启。可通过以下命令查看健康状态：
+
+```bash
+docker inspect --format='{{json .State.Health}}' alvus-alvus-1
+```
+
+---
+
 ## 回归测试
 
 不需要 API key，在本地就能跑：
@@ -212,3 +273,30 @@ alvus-fork/
 ---
 
 > 有问题开 Issue。
+
+---
+
+## 负载压测 & 基准测试
+
+本项目包含两种性能测试方式：
+
+### Go Benchmark（单元级基准测试）
+
+测试核心路径的性能：
+
+```powershell
+# KeyPool.Next() 基准测试（1/5/10 个 Key）
+go test -bench=BenchmarkKeyPoolNext -benchmem ./internal/keypool/
+
+# Proxy Handler 基准测试（正常 / 全冷却 / 抖动）
+go test -bench=BenchmarkProxy -benchmem .
+```
+
+### Vegeta 负载压测（HTTP 级）
+
+使用 [Vegeta](https://github.com/tsenart/vegeta) 进行 HTTP 负载压测，覆盖三个场景：
+- **正常并发** — 500 QPS, 60s
+- **全 Key 冷却** — 所有 Key 被限流时
+- **上游 429 抖动** — 上游不稳定时
+
+详见 [`test/load/README.md`](test/load/README.md)。
