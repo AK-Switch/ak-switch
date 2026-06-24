@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -694,5 +695,54 @@ func TestProxyFilterSensitiveHeaders(t *testing.T) {
 	}
 	if headers.Get("Accept") != "application/json" {
 		t.Errorf("Accept header was filtered out (should have passed through)")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 17. Verify slog output format — proxy request produces structured JSON-like log
+// ---------------------------------------------------------------------------
+
+func TestProxySlogOutput(t *testing.T) {
+	var buf bytes.Buffer
+	handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
+	slog.SetDefault(slog.New(handler))
+	defer slog.SetDefault(slog.New(slog.Default().Handler())) // restore
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	alvus := setupAlvus(t, upstream, []string{"test-key-a", "test-key-b"}, 10, 60)
+	defer alvus.Close()
+
+	resp, err := http.Get(alvus.URL + "/v1/models")
+	if err != nil {
+		t.Fatalf("GET /v1/models: %v", err)
+	}
+	resp.Body.Close()
+
+	output := buf.String()
+
+	// Log format must be slog structured (key=value, not printf-style)
+	if output == "" {
+		t.Fatal("slog output is empty — no log was written")
+	}
+
+	// Must contain INFO level
+	if !strings.Contains(output, "INFO") {
+		t.Errorf("expected slog INFO level in output, got: %s", output)
+	}
+
+	// Must contain structured key=value fields
+	for _, key := range []string{"method=GET", "url", "status=200", "key_index=0"} {
+		if !strings.Contains(output, key) {
+			t.Errorf("expected slog field %q in output:\n%s", key, output)
+		}
+	}
+
+	// Must NOT contain printf-style log format
+	if strings.Contains(output, "→ %s %s") || strings.Contains(output, "log.Printf") {
+		t.Errorf("output appears to contain old-style log.Printf format:\n%s", output)
 	}
 }
