@@ -9,6 +9,7 @@ type LogEntry struct {
 	Timestamp       string `json:"timestamp"`
 	Key             string `json:"key"`
 	KeyIndex        int    `json:"key_index"`
+	KeyName         string `json:"key_name"`
 	Method          string `json:"method"`
 	URL             string `json:"url"`
 	Status          int    `json:"status"`

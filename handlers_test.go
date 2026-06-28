@@ -23,7 +23,7 @@ func newTestServer(keys []string) *httptest.Server {
 		AdminToken:  "",
 	Keys:        []string{"key-a", "key-b"},
 	}
-	pool := keypool.NewKeyPool(keys)
+	pool := keypool.NewKeyPool(keys, nil)
 	state := newServerState(cfg, pool)
 	return httptest.NewServer(state.mux)
 }
@@ -146,7 +146,7 @@ func TestConfigPost(t *testing.T) {
 		AdminToken:  "",
 		Keys:        []string{"key-a", "key-b"},
 	}
-	pool := keypool.NewKeyPool([]string{"key-a", "key-b"})
+	pool := keypool.NewKeyPool([]string{"key-a", "key-b"}, nil)
 	state := newServerState(cfg, pool)
 	alvus := httptest.NewServer(state.mux)
 	defer alvus.Close()
@@ -361,7 +361,7 @@ func TestHealthHandlerAuth(t *testing.T) {
 		CooldownSec: 60,
 		AdminToken:  "my-token",
 	}
-	pool := keypool.NewKeyPool([]string{"key-a", "key-b", "key-c"})
+	pool := keypool.NewKeyPool([]string{"key-a", "key-b", "key-c"}, nil)
 	state := newServerState(cfg, pool)
 	alvus := httptest.NewServer(state.mux)
 	defer alvus.Close()
@@ -420,7 +420,7 @@ func TestClearHandlerAuth(t *testing.T) {
 		CooldownSec: 60,
 		AdminToken:  "my-token",
 	}
-	pool := keypool.NewKeyPool([]string{"key-a", "key-b", "key-c"})
+	pool := keypool.NewKeyPool([]string{"key-a", "key-b", "key-c"}, nil)
 	state := newServerState(cfg, pool)
 	alvus := httptest.NewServer(state.mux)
 	defer alvus.Close()

@@ -1,0 +1,9 @@
+Requests      [total, rate, throughput]         3000, 100.04, 1.16
+Duration      [total, attack, wait]             44.989s, 29.988s, 15.001s
+Latencies     [min, mean, 50, 90, 95, 99, max]  866.4µs, 14.758s, 15.001s, 15.014s, 15.12s, 15.361s, 15.483s
+Bytes In      [total, mean]                     11596, 3.87
+Bytes Out     [total, mean]                     3744, 1.25
+Success       [ratio]                           1.73%
+Status Codes  [code:count]                      0:2948  200:52  
+Error Set:
+Post "http://127.0.0.1:3099/v1/chat/completions": context deadline exceeded (Client.Timeout exceeded while awaiting headers)

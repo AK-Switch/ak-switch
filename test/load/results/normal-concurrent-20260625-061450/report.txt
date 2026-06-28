@@ -1,0 +1,11 @@
+Requests      [total, rate, throughput]         28362, 323.12, 103.17
+Duration      [total, attack, wait]             1m28s, 1m28s, 525.511ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  108.6µs, 14.845s, 14.205s, 30.547s, 31.705s, 34.298s, 1m7s
+Bytes In      [total, mean]                     2031530, 71.63
+Bytes Out     [total, mean]                     655920, 23.13
+Success       [ratio]                           32.12%
+Status Codes  [code:count]                      0:19252  200:9110  
+Error Set:
+Post "http://127.0.0.1:3099/v1/chat/completions": dial tcp 0.0.0.0:0->127.0.0.1:3099: connectex: No connection could be made because the target machine actively refused it.
+Post "http://127.0.0.1:3099/v1/chat/completions": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+Post "http://127.0.0.1:3099/v1/chat/completions": dial tcp 0.0.0.0:0->127.0.0.1:3099: connectex: No connection could be made because the target machine actively refused it. (Client.Timeout exceeded while awaiting headers)

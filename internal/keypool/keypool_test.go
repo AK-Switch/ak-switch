@@ -7,7 +7,7 @@ import (
 )
 
 func TestNextReturnsKey(t *testing.T) {
-	p := NewKeyPool([]string{"key-a", "key-b", "key-c"})
+	p := NewKeyPool([]string{"key-a", "key-b", "key-c"}, nil)
 	for i := 0; i < 3; i++ {
 		idx, key, ok := p.Next()
 		if !ok {
@@ -23,7 +23,7 @@ func TestNextReturnsKey(t *testing.T) {
 }
 
 func TestNextAllCooldown(t *testing.T) {
-	p := NewKeyPool([]string{"key-a", "key-b", "key-c"})
+	p := NewKeyPool([]string{"key-a", "key-b", "key-c"}, nil)
 	// Put all keys on cooldown for 10 minutes
 	for i := 0; i < 3; i++ {
 		p.Cooldown(i, 10*time.Minute)
@@ -42,7 +42,7 @@ func TestNextAllCooldown(t *testing.T) {
 }
 
 func TestDisableKey(t *testing.T) {
-	p := NewKeyPool([]string{"key-a", "key-b", "key-c"})
+	p := NewKeyPool([]string{"key-a", "key-b", "key-c"}, nil)
 	p.Disable(1)
 
 	for i := 0; i < 10; i++ {
@@ -57,12 +57,12 @@ func TestDisableKey(t *testing.T) {
 }
 
 func TestAddKey(t *testing.T) {
-	p := NewKeyPool([]string{"key-a", "key-b"})
+	p := NewKeyPool([]string{"key-a", "key-b"}, nil)
 	if n := p.ActiveCount(); n != 2 {
 		t.Fatalf("ActiveCount() = %d, want 2 before AddKey", n)
 	}
 
-	idx := p.AddKey("new-key")
+	idx := p.AddKey("new-key", "")
 	if idx != 2 {
 		t.Errorf("AddKey() returned index %d, want 2", idx)
 	}
@@ -72,7 +72,7 @@ func TestAddKey(t *testing.T) {
 }
 
 func TestRemoveKey(t *testing.T) {
-	p := NewKeyPool([]string{"key-a", "key-b", "key-c"})
+	p := NewKeyPool([]string{"key-a", "key-b", "key-c"}, nil)
 	if n := p.ActiveCount(); n != 3 {
 		t.Fatalf("ActiveCount() = %d, want 3 before RemoveKey", n)
 	}
@@ -87,7 +87,7 @@ func TestRemoveKey(t *testing.T) {
 }
 
 func TestRemoveKeyOutOfRange(t *testing.T) {
-	p := NewKeyPool([]string{"key-a", "key-b", "key-c"})
+	p := NewKeyPool([]string{"key-a", "key-b", "key-c"}, nil)
 	err := p.RemoveKey(999)
 	if err == nil {
 		t.Error("RemoveKey(999) expected error, got nil")
@@ -95,7 +95,7 @@ func TestRemoveKeyOutOfRange(t *testing.T) {
 }
 
 func TestNextEmptyPool(t *testing.T) {
-	p := NewKeyPool([]string{})
+	p := NewKeyPool([]string{}, nil)
 	idx, key, ok := p.Next()
 	if ok {
 		t.Errorf("Next() returned ok=true for empty pool")
@@ -109,7 +109,7 @@ func TestNextEmptyPool(t *testing.T) {
 }
 
 func TestActiveCount(t *testing.T) {
-	p := NewKeyPool([]string{"k1", "k2", "k3", "k4"})
+	p := NewKeyPool([]string{"k1", "k2", "k3", "k4"}, nil)
 	if n := p.ActiveCount(); n != 4 {
 		t.Fatalf("ActiveCount() = %d, want 4", n)
 	}
@@ -125,10 +125,61 @@ func TestActiveCount(t *testing.T) {
 	}
 }
 
+func TestNameReturnsCorrectName(t *testing.T) {
+	keys := []string{"key-a", "key-b", "key-c"}
+	names := []string{"主账号", "备用key", ""}
+	p := NewKeyPool(keys, names)
+
+	if n := p.Name(0); n != "主账号" {
+		t.Errorf("Name(0) = %q, want %q", n, "主账号")
+	}
+	if n := p.Name(1); n != "备用key" {
+		t.Errorf("Name(1) = %q, want %q", n, "备用key")
+	}
+	if n := p.Name(2); n != "" {
+		t.Errorf("Name(2) = %q, want empty", n)
+	}
+}
+
+func TestNameOutOfRange(t *testing.T) {
+	p := NewKeyPool([]string{"key-a"}, []string{"test"})
+	if n := p.Name(-1); n != "" {
+		t.Errorf("Name(-1) = %q, want empty", n)
+	}
+	if n := p.Name(5); n != "" {
+		t.Errorf("Name(5) = %q, want empty", n)
+	}
+}
+
+func TestGetKeyDetailsIncludesName(t *testing.T) {
+	p := NewKeyPool([]string{"key-a", "key-b"}, []string{"主key", ""})
+	details := p.GetKeyDetails()
+	if len(details) != 2 {
+		t.Fatalf("GetKeyDetails len = %d, want 2", len(details))
+	}
+	if details[0]["name"] != "主key" {
+		t.Errorf("details[0].name = %q, want %q", details[0]["name"], "主key")
+	}
+	if details[1]["name"] != "" {
+		t.Errorf("details[1].name = %q, want empty", details[1]["name"])
+	}
+}
+
+func TestAddKeyWithName(t *testing.T) {
+	p := NewKeyPool([]string{"key-a"}, []string{"original"})
+	idx := p.AddKey("key-b", "新key")
+	if idx != 1 {
+		t.Errorf("AddKey index = %d, want 1", idx)
+	}
+	if n := p.Name(1); n != "新key" {
+		t.Errorf("Name(1) after AddKey = %q, want %q", n, "新key")
+	}
+}
+
 func BenchmarkKeyPoolNext(b *testing.B) {
 	keySet := []string{"ka", "kb", "kc", "kd", "ke", "kf", "kg", "kh", "ki", "kj"}
 	for _, n := range []int{1, 5, 10} {
-		p := NewKeyPool(keySet[:n])
+		p := NewKeyPool(keySet[:n], nil)
 		b.Run(fmt.Sprintf("keys-%d", n), func(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {

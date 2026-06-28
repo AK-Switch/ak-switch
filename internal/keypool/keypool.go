@@ -15,6 +15,7 @@ import (
 type KeyPool struct {
 	counter        uint64
 	keys           []string
+	names          []string
 	cooldowns      []time.Time
 	disabled       []bool
 	requestHistory [][]time.Time // timestamps of requests in the last 60s per key
@@ -22,10 +23,18 @@ type KeyPool struct {
 	mu             sync.Mutex
 }
 
-// NewKeyPool creates a KeyPool from a slice of API keys.
-func NewKeyPool(keys []string) *KeyPool {
+// NewKeyPool creates a KeyPool from slices of API keys and optional names.
+// names may be nil or shorter than keys — unnamed keys get empty string.
+func NewKeyPool(keys []string, names []string) *KeyPool {
+	n := make([]string, len(keys))
+	for i := range keys {
+		if i < len(names) {
+			n[i] = names[i]
+		}
+	}
 	return &KeyPool{
 		keys:           keys,
+		names:          n,
 		cooldowns:      make([]time.Time, len(keys)),
 		disabled:       make([]bool, len(keys)),
 		requestHistory: make([][]time.Time, len(keys)),
@@ -40,6 +49,16 @@ func (p *KeyPool) Keys() []string {
 	result := make([]string, len(p.keys))
 	copy(result, p.keys)
 	return result
+}
+
+// Name returns the name of a key by index, or empty string if index is out of range.
+func (p *KeyPool) Name(idx int) string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if idx < 0 || idx >= len(p.names) {
+		return ""
+	}
+	return p.names[idx]
 }
 
 // TimeUntilAvailable returns the shortest duration until any key becomes available,
@@ -112,7 +131,15 @@ func (p *KeyPool) Cooldown(idx int, d time.Duration) {
 	if until := time.Now().Add(d); p.cooldowns[idx].Before(until) {
 		p.cooldowns[idx] = until
 	}
-	slog.Info("key on cooldown", "key_index", idx, "duration", d)
+	name := ""
+	if idx >= 0 && idx < len(p.names) {
+		name = p.names[idx]
+	}
+	if name != "" {
+		slog.Info("key on cooldown", "key_index", idx, "key_name", name, "duration", d)
+	} else {
+		slog.Info("key on cooldown", "key_index", idx, "duration", d)
+	}
 }
 
 // Disable marks a key as permanently disabled.
@@ -120,6 +147,13 @@ func (p *KeyPool) Disable(idx int) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.disabled[idx] = true
+	name := ""
+	if idx >= 0 && idx < len(p.names) {
+		name = p.names[idx]
+	}
+	if name != "" {
+		slog.Info("key disabled", "key_index", idx, "key_name", name)
+	}
 }
 
 // ActiveCount returns the number of non-disabled keys.
@@ -168,9 +202,14 @@ func (p *KeyPool) GetKeyDetails() []map[string]interface{} {
 	details := make([]map[string]interface{}, len(p.keys))
 	for i := range p.keys {
 		p.CleanupOldRequests(i)
+		name := ""
+		if i < len(p.names) {
+			name = p.names[i]
+		}
 		keyDetail := map[string]interface{}{
 			"index":               i,
 			"key":                 utils.MaskKey(p.keys[i]),
+			"name":                name,
 			"disabled":            p.disabled[i],
 			"requests_per_minute": p.RequestsInLastMinute(i),
 			"last_used":           p.lastUsed[i].Format(time.RFC3339),
@@ -192,16 +231,21 @@ func (p *KeyPool) IncrementRequestCount(idx int) {
 }
 
 // AddKey appends a new key to the pool and returns its index.
-func (p *KeyPool) AddKey(key string) int {
+func (p *KeyPool) AddKey(key string, name string) int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.keys = append(p.keys, key)
+	p.names = append(p.names, name)
 	p.cooldowns = append(p.cooldowns, time.Time{})
 	p.disabled = append(p.disabled, false)
 	p.requestHistory = append(p.requestHistory, []time.Time{})
 	p.lastUsed = append(p.lastUsed, time.Time{})
 	idx := len(p.keys) - 1
-	slog.Info("key added to pool", "key_index", idx)
+	if name != "" {
+		slog.Info("key added to pool", "key_index", idx, "key_name", name)
+	} else {
+		slog.Info("key added to pool", "key_index", idx)
+	}
 	return idx
 }
 
@@ -212,11 +256,20 @@ func (p *KeyPool) RemoveKey(idx int) error {
 	if idx < 0 || idx >= len(p.keys) {
 		return fmt.Errorf("key index %d out of range (0-%d)", idx, len(p.keys)-1)
 	}
+	name := ""
+	if idx < len(p.names) {
+		name = p.names[idx]
+	}
 	p.keys = append(p.keys[:idx], p.keys[idx+1:]...)
+	p.names = append(p.names[:idx], p.names[idx+1:]...)
 	p.cooldowns = append(p.cooldowns[:idx], p.cooldowns[idx+1:]...)
 	p.disabled = append(p.disabled[:idx], p.disabled[idx+1:]...)
 	p.requestHistory = append(p.requestHistory[:idx], p.requestHistory[idx+1:]...)
 	p.lastUsed = append(p.lastUsed[:idx], p.lastUsed[idx+1:]...)
-	slog.Info("key removed from pool", "key_index", idx)
+	if name != "" {
+		slog.Info("key removed from pool", "key_index", idx, "key_name", name)
+	} else {
+		slog.Info("key removed from pool", "key_index", idx)
+	}
 	return nil
 }

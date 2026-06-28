@@ -30,7 +30,7 @@ func setupAlvus(tb testing.TB, upstream *httptest.Server, poolKeys []string, max
 			MaxRetries:  maxRetries,
 			CooldownSec: cooldownSec,
 		}
-	pool := keypool.NewKeyPool(poolKeys)
+	pool := keypool.NewKeyPool(poolKeys, nil)
 	state := newServerState(cfg, pool)
 	return httptest.NewServer(state.mux)
 }
@@ -413,7 +413,7 @@ func TestProxyWithKeyManagement(t *testing.T) {
 		AdminToken:  "",
 		Keys:        []string{"initial-key"},
 	}
-	pool := keypool.NewKeyPool([]string{"initial-key"})
+	pool := keypool.NewKeyPool([]string{"initial-key"}, nil)
 	state := newServerState(cfg, pool)
 	alvus := httptest.NewServer(state.mux)
 	defer alvus.Close()

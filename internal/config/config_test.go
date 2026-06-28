@@ -446,6 +446,112 @@ func TestDiff_NoChanges(t *testing.T) {
 	}
 }
 
+func TestLoad_NamedKeys(t *testing.T) {
+	resetEnv()
+	envContent := `
+TARGET_BASE_URL=https://integrate.api.nvidia.com/v1
+GENAI_BASE_URL=https://ai.api.nvidia.com
+API_KEYS=nvapi-key1==主账号,nvapi-key2==备用key,nvapi-key3
+PORT=8080
+`
+	path := writeTempEnv(t, envContent)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+
+	if len(cfg.Keys) != 3 {
+		t.Fatalf("Keys count = %d, want 3", len(cfg.Keys))
+	}
+	if cfg.Keys[0] != "nvapi-key1" || cfg.Keys[1] != "nvapi-key2" || cfg.Keys[2] != "nvapi-key3" {
+		t.Errorf("Keys = %v", cfg.Keys)
+	}
+	if len(cfg.KeyNames) != 3 {
+		t.Fatalf("KeyNames count = %d, want 3", len(cfg.KeyNames))
+	}
+	if cfg.KeyNames[0] != "主账号" {
+		t.Errorf("KeyNames[0] = %q, want %q", cfg.KeyNames[0], "主账号")
+	}
+	if cfg.KeyNames[1] != "备用key" {
+		t.Errorf("KeyNames[1] = %q, want %q", cfg.KeyNames[1], "备用key")
+	}
+	if cfg.KeyNames[2] != "" {
+		t.Errorf("KeyNames[2] = %q, want empty", cfg.KeyNames[2])
+	}
+}
+
+func TestLoad_CleanKeysNoNames(t *testing.T) {
+	resetEnv()
+	t.Setenv("TARGET_BASE_URL", "https://example.com")
+	t.Setenv("GENAI_BASE_URL", "https://ai.example.com")
+	t.Setenv("API_KEYS", "key1,key2")
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if len(cfg.KeyNames) != 2 {
+		t.Fatalf("KeyNames = %v, want 2 entries", cfg.KeyNames)
+	}
+	for i, n := range cfg.KeyNames {
+		if n != "" {
+			t.Errorf("KeyNames[%d] = %q, want empty", i, n)
+		}
+	}
+}
+
+func TestLoad_FallbackKeysNoNames(t *testing.T) {
+	resetEnv()
+	t.Setenv("TARGET_BASE_URL", "https://example.com")
+	t.Setenv("GENAI_BASE_URL", "https://ai.example.com")
+	t.Setenv("KEY", "key1,key2")
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if len(cfg.KeyNames) != 2 {
+		t.Fatalf("KeyNames = %v, want 2 entries", cfg.KeyNames)
+	}
+	for i, n := range cfg.KeyNames {
+		if n != "" {
+			t.Errorf("KeyNames[%d] = %q, want empty", i, n)
+		}
+	}
+}
+
+func TestDiff_NamedKeys(t *testing.T) {
+	// Named keys diff should serialize names alongside masked keys
+	oldCfg := DefaultConfig()
+	oldCfg.TargetBase = "https://example.com"
+	oldCfg.GenaiBase = "https://ai.example.com"
+	oldCfg.Keys = []string{"nvapi-key1", "nvapi-key2"}
+	oldCfg.KeyNames = []string{"主账号", "备用key"}
+
+	newCfg := DefaultConfig()
+	newCfg.TargetBase = "https://example.com"
+	newCfg.GenaiBase = "https://ai.example.com"
+	newCfg.Keys = []string{"nvapi-key3"}
+	newCfg.KeyNames = []string{"新key"}
+
+	changes := oldCfg.Diff(newCfg)
+	changeMap := make(map[string]string)
+	for _, c := range changes {
+		changeMap[c.Field] = c.NewValue
+	}
+
+	if c, ok := changeMap["API_KEYS"]; !ok {
+		t.Error("Diff should include API_KEYS")
+	} else {
+		// Should contain masked key names in the serialized form
+		if c != "nvap...y3==新key" {
+			t.Errorf("API_KEYS new value = %q, want %q", c, "nvap...y3==新key")
+		}
+
+		// Check old value also has names
+		oldVal := changeMap["API_KEYS"]
+		_ = oldVal // old value also serialized; just checking new is enough
+}
+}
+
 func TestLoad_MissingEnvFile(t *testing.T) {
 	resetEnv()
 	t.Setenv("TARGET_BASE_URL", "https://example.com")

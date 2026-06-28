@@ -33,6 +33,7 @@ type Config struct {
 	LogLevel        string   // Log level (default "info")
 	CooldownSec     int      // Cooldown seconds after rate-limit (default 60)
 	Keys            []string // API keys (at least one required)
+	KeyNames        []string // Corresponding key names (empty string if unnamed), same length as Keys
 }
 
 // DefaultConfig returns a Config with all optional fields set to their defaults.
@@ -58,7 +59,7 @@ func DefaultConfig() *Config {
 //   - MAX_RETRIES (int, default 3)
 //   - LOG_LEVEL (string, default "info")
 //   - COOLDOWN_SEC (int, default 60)
-//   - API_KEYS (comma-separated, required — at least one)
+//   - API_KEYS (comma-separated, required — at least one; use key==name to name a key)
 //   - KEY (fallback single/comma-separated)
 //   - KEY1, KEY2, ..., KEY5 (fallback individual keys)
 //   - KEYA, KEYB (fallback individual keys)
@@ -130,19 +131,20 @@ func Load(envPath string) (*Config, error) {
 	}
 
 	// Keys: API_KEYS is primary, then fallback to KEY, KEY1-KEY5, KEYA, KEYB
-	keys := parseKeys()
+	keys, names := parseKeys()
 	if len(keys) == 0 {
 		return nil, fmt.Errorf("no API keys found: set API_KEYS, KEY, KEY1-5, or KEYA/KEYB in environment or .env file")
 	}
 	cfg.Keys = keys
+	cfg.KeyNames = names
 
 	return cfg, nil
 }
 
 // parseKeys reads API keys from environment variables.
-// Primary: API_KEYS (comma-separated)
+// Primary: API_KEYS (comma-separated, supports key==name format)
 // Fallback: KEY (single or comma-separated), KEY1-KEY5, KEYA, KEYB
-func parseKeys() []string {
+func parseKeys() ([]string, []string) {
 	// Primary: API_KEYS
 	if raw := os.Getenv("API_KEYS"); raw != "" {
 		return splitKeys(raw)
@@ -150,7 +152,8 @@ func parseKeys() []string {
 
 	// Fallback: KEY
 	if raw := os.Getenv("KEY"); raw != "" {
-		return splitKeys(raw)
+		keys, _ := splitKeys(raw)
+		return keys, make([]string, len(keys))
 	}
 
 	// Fallback: KEY1-KEY5, KEYA, KEYB
@@ -167,19 +170,31 @@ func parseKeys() []string {
 		keys = append(keys, k)
 	}
 	if len(keys) == 0 {
-		return nil
+		return nil, nil
 	}
-	return keys
+	return keys, make([]string, len(keys))
 }
 
-func splitKeys(raw string) []string {
+// splitKeys parses a comma-separated list, where each element can be
+// either a bare key ("key") or a named key ("key==name").
+func splitKeys(raw string) ([]string, []string) {
 	var keys []string
-	for _, k := range strings.Split(raw, ",") {
-		if k = strings.TrimSpace(k); k != "" {
-			keys = append(keys, k)
+	var names []string
+	for _, part := range strings.Split(raw, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		// Check for key==name format
+		if idx := strings.Index(part, "=="); idx > 0 {
+			keys = append(keys, part[:idx])
+			names = append(names, part[idx+2:])
+		} else {
+			keys = append(keys, part)
+			names = append(names, "")
 		}
 	}
-	return keys
+	return keys, names
 }
 
 // Validate checks that all required fields are present and valid.
@@ -202,12 +217,15 @@ func (c *Config) Validate() error {
 
 // Sanitized returns a copy of the Config with sensitive fields masked.
 // API keys in Keys are masked to first 4 chars + "..." + last 2 chars.
+// KeyNames are not sensitive and are copied as-is.
 func (c *Config) Sanitized() *Config {
 	s := *c // shallow copy
 	s.Keys = make([]string, len(c.Keys))
 	for i, k := range c.Keys {
 		s.Keys[i] = maskKey(k)
 	}
+	s.KeyNames = make([]string, len(c.KeyNames))
+	copy(s.KeyNames, c.KeyNames)
 	return &s
 }
 
@@ -220,6 +238,7 @@ func maskKey(key string) string {
 
 // Diff returns a list of ConfigChange entries describing what differs
 // between c and other. Sensitive fields (Keys) are masked in the output.
+// Key names are serialized alongside keys (key==name format) in the diff.
 func (c *Config) Diff(other *Config) []ConfigChange {
 	var changes []ConfigChange
 
@@ -286,10 +305,10 @@ func (c *Config) Diff(other *Config) []ConfigChange {
 			NewValue: strconv.Itoa(other.CooldownSec),
 		})
 	}
-	// Keys: compare as masked strings
+	// Keys: compare as masked strings (with names)
 	if !stringSliceEqual(c.Keys, other.Keys) {
-		oldKeys := maskedSlice(c.Keys)
-		newKeys := maskedSlice(other.Keys)
+		oldKeys := maskedSliceWithNames(c.Keys, c.KeyNames)
+		newKeys := maskedSliceWithNames(other.Keys, other.KeyNames)
 		changes = append(changes, ConfigChange{
 			Field:    "API_KEYS",
 			OldValue: strings.Join(oldKeys, ","),
@@ -304,10 +323,21 @@ func (c *Config) Diff(other *Config) []ConfigChange {
 	return changes
 }
 
-func maskedSlice(keys []string) []string {
+func joinKeyName(key, name string) string {
+	if name == "" {
+		return key
+	}
+	return key + "==" + name
+}
+
+func maskedSliceWithNames(keys []string, names []string) []string {
 	result := make([]string, len(keys))
 	for i, k := range keys {
-		result[i] = maskKey(k)
+		n := ""
+		if i < len(names) {
+			n = names[i]
+		}
+		result[i] = joinKeyName(maskKey(k), n)
 	}
 	return result
 }

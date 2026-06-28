@@ -466,7 +466,7 @@
 
                         const statusClass = key.status === 'ready' ? 'ready' : (key.status === 'disabled' ? 'disabled' : 'cooling');
 
-                        card.innerHTML = '<div class="key-header"><span class="badge badge-' + statusClass + '">' + key.status + '</span><span style="font-size: 0.75rem; color: var(--text-dim)">#' + (key.index + 1) + '</span></div><div class="key-val">' + key.key + '</div><div class="stat-row"><span>RPM</span><span class="stat-val">' + key.requests_per_minute + '</span></div><div class="stat-row"><span>Cooldown Until</span><span class="stat-val">' + (key.cooldown_until !== '0001-01-01T00:00:00Z' ? new Date(key.cooldown_until).toLocaleTimeString() : 'N/A') + '</span></div><div class="stat-row"><span>Last Used</span><span class="stat-val">' + (key.last_used !== '0001-01-01T00:00:00Z' ? new Date(key.last_used).toLocaleTimeString() : 'Never') + '</span></div>';
+                        card.innerHTML = '<div class="key-header"><span class="badge badge-' + statusClass + '">' + key.status + '</span><span style="font-size: 0.75rem; color: var(--text-dim)">(key.name || 'Key ' + (key.index + 1)) + '</span></div><div class="key-val">' + key.key + '</div><div class="stat-row"><span>RPM</span><span class="stat-val">' + key.requests_per_minute + '</span></div><div class="stat-row"><span>Cooldown Until</span><span class="stat-val">' + (key.cooldown_until !== '0001-01-01T00:00:00Z' ? new Date(key.cooldown_until).toLocaleTimeString() : 'N/A') + '</span></div><div class="stat-row"><span>Last Used</span><span class="stat-val">' + (key.last_used !== '0001-01-01T00:00:00Z' ? new Date(key.last_used).toLocaleTimeString() : 'Never') + '</span></div>';
                         grid.appendChild(card);
                     });
                 });
@@ -489,7 +489,7 @@
                         const statusClass = log.status < 400 ? 'ok' : 'err';
                         const shortKey = log.key.substring(0, 8) + '...';
 
-                        tr.innerHTML = '<td style="color: var(--text-dim); font-size: 0.8rem;">' + new Date(log.timestamp).toLocaleTimeString() + '</td><td><span style="font-weight: 700; color: var(--accent-primary)">' + log.method + '</span></td><td style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + log.url + '</td><td><span class="status-tag ' + statusClass + '">' + log.status + '</span></td><td class="key-val">Key #' + log.key_index + '</td><td style="color: var(--text-dim)">' + (log.request_body_size / 1024).toFixed(1) + ' KB</td>';
+                        tr.innerHTML = '<td style="color: var(--text-dim); font-size: 0.8rem;">' + new Date(log.timestamp).toLocaleTimeString() + '</td><td><span style="font-weight: 700; color: var(--accent-primary)">' + log.method + '</span></td><td style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + log.url + '</td><td><span class="status-tag ' + statusClass + '">' + log.status + '</span></td><td class="key-val">(log.key_name || 'Key #' + log.key_index) + '</td><td style="color: var(--text-dim)">' + (log.request_body_size / 1024).toFixed(1) + ' KB</td>';
                         tbody.appendChild(tr);
                     });
                 });

@@ -37,7 +37,7 @@ func loadConfig() (*config.Config, *keypool.KeyPool) {
 		log.Fatalf("config validation failed: %v", err)
 	}
 	slog.Info("config loaded", "keys", len(cfg.Keys), "target", cfg.TargetBase, "genai", cfg.GenaiBase)
-	return cfg, keypool.NewKeyPool(cfg.Keys)
+	return cfg, keypool.NewKeyPool(cfg.Keys, cfg.KeyNames)
 }
 
 func reloadConfig() (*config.Config, *keypool.KeyPool, error) {
@@ -55,7 +55,7 @@ func reloadConfig() (*config.Config, *keypool.KeyPool, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, nil, fmt.Errorf("reloaded config invalid: %w", err)
 	}
-	return cfg, keypool.NewKeyPool(cfg.Keys), nil
+	return cfg, keypool.NewKeyPool(cfg.Keys, cfg.KeyNames), nil
 }
 
 // ── Server ────────────────────────────────────
@@ -254,6 +254,7 @@ func (s *ServerState) keysHandler(w http.ResponseWriter, r *http.Request) {
 				"key":         utils.MaskKey(keys[i]),
 				"status":      pool.KeyStatusLabel(i, now),
 				"requests_1m": pool.RequestsInLastMinute(i),
+				"name":        pool.Name(i),
 			}
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -262,6 +263,7 @@ func (s *ServerState) keysHandler(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		var body struct {
 			Key string `json:"key"`
+				KeyName string `json:"name"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
@@ -271,11 +273,12 @@ func (s *ServerState) keysHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "key is required", http.StatusBadRequest)
 			return
 		}
-		idx := pool.AddKey(body.Key)
+		idx := pool.AddKey(body.Key, body.KeyName)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"index": idx,
 			"key":   utils.MaskKey(body.Key),
+				"name":  body.KeyName,
 		})
 
 	case http.MethodDelete:
@@ -391,7 +394,7 @@ func (s *ServerState) proxyHandler(w http.ResponseWriter, r *http.Request) {
 
 		resp, err := client.Do(req)
 		if err != nil {
-			slog.Warn("key network error", "key_index", idx, "error", err)
+			slog.Warn("key network error", "key_index", idx, "key_name", pool.Name(idx), "error", err)
 			pool.Cooldown(idx, time.Duration(cfg.CooldownSec)*time.Second)
 			continue
 		}
@@ -406,14 +409,14 @@ func (s *ServerState) proxyHandler(w http.ResponseWriter, r *http.Request) {
 					cooldown = time.Duration(secs+2) * time.Second
 				}
 			}
-			slog.Warn("key rate limited", "key_index", idx, "status", resp.StatusCode, "cooldown", cooldown, "body", string(body))
+			slog.Warn("key rate limited", "key_index", idx, "key_name", pool.Name(idx), "status", resp.StatusCode, "cooldown", cooldown, "body", string(body))
 			pool.Cooldown(idx, cooldown)
 			continue
 
 		case http.StatusUnauthorized, http.StatusForbidden:
 			body, _ := io.ReadAll(resp.Body)
 			resp.Body.Close()
-			slog.Warn("key disabled", "key_index", idx, "status", resp.StatusCode, "body", string(body))
+			slog.Warn("key disabled", "key_index", idx, "key_name", pool.Name(idx), "status", resp.StatusCode, "body", string(body))
 			pool.Disable(idx)
 			if pool.ActiveCount() == 0 {
 				http.Error(w, "alvus: all keys are invalid or revoked", http.StatusServiceUnavailable)
@@ -428,7 +431,7 @@ func (s *ServerState) proxyHandler(w http.ResponseWriter, r *http.Request) {
 			io.Copy(w, resp.Body)
 			resp.Body.Close()
 
-			s.logs.Append(utils.LogEntry{Timestamp: time.Now().Format(time.RFC3339), Key: key, KeyIndex: idx + 1, Method: r.Method, URL: target, Status: resp.StatusCode, RequestBodySize: len(bodyBytes)})
+			s.logs.Append(utils.LogEntry{Timestamp: time.Now().Format(time.RFC3339), Key: key, KeyIndex: idx + 1, KeyName: pool.Name(idx), Method: r.Method, URL: target, Status: resp.StatusCode, RequestBodySize: len(bodyBytes)})
 			slog.Warn("terminal client error", "method", r.Method, "url", target, "status", resp.StatusCode)
 			return
 		}
@@ -464,8 +467,8 @@ func (s *ServerState) proxyHandler(w http.ResponseWriter, r *http.Request) {
 		resp.Body.Close()
 
 		pool.IncrementRequestCount(idx)
-		s.logs.Append(utils.LogEntry{Timestamp: time.Now().Format(time.RFC3339), Key: key, KeyIndex: idx + 1, Method: r.Method, URL: target, Status: resp.StatusCode, RequestBodySize: len(bodyBytes)})
-		slog.Info("proxy success", "method", r.Method, "url", target, "status", resp.StatusCode, "key_index", idx, "attempt", attempt+1)
+		s.logs.Append(utils.LogEntry{Timestamp: time.Now().Format(time.RFC3339), Key: key, KeyIndex: idx + 1, KeyName: pool.Name(idx), Method: r.Method, URL: target, Status: resp.StatusCode, RequestBodySize: len(bodyBytes)})
+		slog.Info("proxy success", "method", r.Method, "url", target, "status", resp.StatusCode, "key_index", idx, "key_name", pool.Name(idx), "attempt", attempt+1)
 		return
 	}
 
