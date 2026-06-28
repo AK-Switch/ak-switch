@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // ---------------------------------------------------------------------------
@@ -162,6 +163,7 @@ func TestMetricsVerification_RequestDuration(t *testing.T) {
 	sumDelta := readMetricsDelta(alvus.URL, "alvus_request_duration_seconds_sum",
 		`method="GET",status="2xx"`,
 		func() {
+			time.Sleep(50 * time.Millisecond)
 			resp, err := http.Get(alvus.URL + "/v1/models")
 			if err != nil {
 				t.Fatalf("proxy request: %v", err)
