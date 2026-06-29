@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -59,8 +60,20 @@ func main() {
 	// Initial key pool metric refresh
 	state.Metrics().RefreshKeyPoolGauge(pool)
 
-	go server.WatchEnvFile(state, stop)
-	go server.RefreshKeyPoolMetrics(state, stop)
+	// Use WaitGroup to ensure background goroutines complete before exit
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		server.WatchEnvFile(state, stop)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		server.RefreshKeyPoolMetrics(state, stop)
+	}()
 
 	addr := fmt.Sprintf("%s:%d", host, cfg.Port)
 
@@ -75,7 +88,7 @@ func main() {
 
 	go func() {
 		<-stop
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		if err := httpServer.Shutdown(ctx); err != nil {
 			slog.Error("shutdown error", "error", err)
@@ -95,4 +108,8 @@ func main() {
 		slog.Error("server error", "error", err)
 		log.Fatalf("Server error: %v", err)
 	}
+
+	// Wait for all background goroutines to finish before exiting
+	wg.Wait()
+	slog.Info("server stopped gracefully")
 }
