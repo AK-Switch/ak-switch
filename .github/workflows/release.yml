@@ -44,7 +44,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          go build -ldflags="-s -w" -o alvus-${{ matrix.suffix }} main.go
+          go build -ldflags="-s -w" -o alvus-${{ matrix.suffix }} *.go
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
