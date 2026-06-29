@@ -85,7 +85,26 @@ func (s *ServerState) proxyHandler(w http.ResponseWriter, r *http.Request) {
 		target = cfg.TargetBase + path
 	}
 
-	slog.Info("proxy request", "method", r.Method, "url", target, "bytes", len(bodyBytes))
+	slog.Info("proxy request", "method", r.Method, "url", target, "body_size", len(bodyBytes))
+
+	// Debug-level request details (only outputs when log level is debug)
+	if auth := r.Header.Get("Authorization"); auth != "" {
+		maskedAuth := auth
+		if len(auth) > 12 {
+			maskedAuth = auth[:7] + "..." + auth[len(auth)-4:]
+		} else {
+			maskedAuth = "****"
+		}
+		bodyPreview := ""
+		if len(bodyBytes) > 0 {
+			preview := string(bodyBytes)
+			if len(preview) > 1024 {
+				preview = preview[:1024]
+			}
+			bodyPreview = MaskSensitiveData(preview, 1024)
+		}
+		slog.Debug("proxy request debug", "method", r.Method, "path", r.URL.Path, "auth", maskedAuth, "body_size", len(bodyBytes), "body_preview", bodyPreview)
+	}
 
 	for attempt := 0; attempt < cfg.MaxRetries; attempt++ {
 		// 1. Check upstream circuit breaker (fail fast)
@@ -164,7 +183,7 @@ func (s *ServerState) proxyHandler(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			pool.Cooldown(idx, cooldown)
-			slog.Warn("key rate limited", "key_index", idx, "key_name", pool.Name(idx), "status", resp.StatusCode, "cb_state", fmt.Sprintf("%d", keyCBs[idx].State()), "cb_attempt", keyCBs[idx].Attempt(), "body", string(body))
+			slog.Warn("key rate limited", "key_index", idx, "key_name", pool.Name(idx), "status", resp.StatusCode, "cb_state", fmt.Sprintf("%d", keyCBs[idx].State()), "cb_attempt", keyCBs[idx].Attempt(), "body_preview", string(body))
 			s.metrics.UpstreamErrors.WithLabelValues("rate_limited").Inc()
 			if keyCBs[idx].State() == circuitbreaker.StatePermanent {
 				slog.Warn("key quota exhausted, disabling permanently", "key_index", idx, "key_name", pool.Name(idx))
@@ -180,7 +199,7 @@ func (s *ServerState) proxyHandler(w http.ResponseWriter, r *http.Request) {
 		case http.StatusBadGateway, http.StatusServiceUnavailable:
 			body, _ := io.ReadAll(resp.Body)
 			resp.Body.Close()
-			slog.Warn("upstream server error", "key_index", idx, "key_name", pool.Name(idx), "status", resp.StatusCode, "body", string(body))
+			slog.Warn("upstream server error", "key_index", idx, "key_name", pool.Name(idx), "status", resp.StatusCode, "body_preview", string(body))
 			s.metrics.UpstreamErrors.WithLabelValues("server_error").Inc()
 			upCB.RecordFailure() // upstream error, not key fault
 			continue
@@ -188,7 +207,7 @@ func (s *ServerState) proxyHandler(w http.ResponseWriter, r *http.Request) {
 		case http.StatusUnauthorized, http.StatusForbidden:
 			body, _ := io.ReadAll(resp.Body)
 			resp.Body.Close()
-			slog.Warn("key disabled", "key_index", idx, "key_name", pool.Name(idx), "status", resp.StatusCode, "body", string(body))
+			slog.Warn("key disabled", "key_index", idx, "key_name", pool.Name(idx), "status", resp.StatusCode, "body_preview", string(body))
 			s.metrics.UpstreamErrors.WithLabelValues("auth_rejected").Inc()
 			pool.Disable(idx)
 			keyCBs[idx].RecordPerma("auth_rejected")
@@ -208,6 +227,7 @@ func (s *ServerState) proxyHandler(w http.ResponseWriter, r *http.Request) {
 
 			s.logs.Append(utils.LogEntry{Timestamp: time.Now().Format(time.RFC3339), Key: key, KeyIndex: idx + 1, KeyName: pool.Name(idx), Method: r.Method, URL: target, Status: resp.StatusCode, RequestBodySize: len(bodyBytes)})
 			slog.Warn("terminal client error", "method", r.Method, "url", target, "status", resp.StatusCode)
+			slog.Debug("proxy response debug", "status", resp.StatusCode, "duration_ms", time.Since(start).Seconds()*1000, "retries", attempt+1)
 			recordMetrics("4xx", fmt.Sprintf("%d", idx))
 			return
 		}
@@ -215,7 +235,7 @@ func (s *ServerState) proxyHandler(w http.ResponseWriter, r *http.Request) {
 		if resp.StatusCode >= 500 {
 			body, _ := io.ReadAll(resp.Body)
 			resp.Body.Close()
-			slog.Warn("upstream error, retrying", "status", resp.StatusCode, "body", string(body))
+			slog.Warn("upstream error, retrying", "status", resp.StatusCode, "body_preview", string(body))
 			s.metrics.UpstreamErrors.WithLabelValues("server_error").Inc()
 			upCB.RecordFailure()
 			continue
@@ -250,10 +270,12 @@ func (s *ServerState) proxyHandler(w http.ResponseWriter, r *http.Request) {
 		pool.IncrementRequestCount(idx)
 		s.logs.Append(utils.LogEntry{Timestamp: time.Now().Format(time.RFC3339), Key: key, KeyIndex: idx + 1, KeyName: pool.Name(idx), Method: r.Method, URL: target, Status: resp.StatusCode, RequestBodySize: len(bodyBytes)})
 		slog.Info("proxy success", "method", r.Method, "url", target, "status", resp.StatusCode, "key_index", idx, "key_name", pool.Name(idx), "attempt", attempt+1)
+		slog.Debug("proxy response debug", "status", resp.StatusCode, "duration_ms", time.Since(start).Seconds()*1000, "retries", attempt+1)
 		recordMetrics(alvusmetrics.StatusLabel(resp.StatusCode), fmt.Sprintf("%d", idx))
 		return
 	}
 
 	writeProxyError(w, http.StatusServiceUnavailable, ErrorExhaustedRetries, "exhausted all retries")
+	slog.Debug("proxy response debug", "status", 503, "duration_ms", time.Since(start).Seconds()*1000, "retries", cfg.MaxRetries)
 	recordMetrics("5xx", "")
 }

@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -106,6 +107,7 @@ func NewServerState(cfg *config.Config, pool *keypool.KeyPool, dashboardHTML str
 	s.mux.HandleFunc("DELETE /api/keys/{index}", s.deleteKeyHandler)
 	s.mux.HandleFunc("GET /api/stats", s.statsHandler)
 	s.mux.HandleFunc("POST /api/reload", s.reloadHandler)
+	s.mux.HandleFunc("/api/log-level", s.logLevelHandler)
 	s.mux.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
 	// Block service worker requests to prevent 404s and unnecessary upstream proxying
 	s.mux.HandleFunc("/sw.js", s.swHandler)
@@ -159,6 +161,56 @@ func (s *ServerState) PersistKeys() {
 	if err := keypool.SaveFullStore(cfg.KeysFile, &keypool.KeyStore{Keys: entries}); err != nil {
 		slog.Error("failed to persist keys", "path", cfg.KeysFile, "error", err)
 	}
+}
+
+// ApplyLogLevel sets the global slog handler's minimum level based on a string.
+// Supported values: "debug", "info", "warn", "error".
+// Unknown or empty values default to slog.LevelInfo.
+func ApplyLogLevel(level string) {
+	var lvl slog.Level
+	switch strings.ToLower(level) {
+	case "debug":
+		lvl = slog.LevelDebug
+	case "info":
+		lvl = slog.LevelInfo
+	case "warn":
+		lvl = slog.LevelWarn
+	case "error":
+		lvl = slog.LevelError
+	default:
+		lvl = slog.LevelInfo
+	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: lvl})))
+}
+
+// MaskSensitiveData scrubs potential API key patterns from a string for safe debug logging.
+// It masks any word-like token that starts with "sk-" by replacing it with "***".
+// It also truncates the result to maxLen bytes.
+func MaskSensitiveData(data string, maxLen int) string {
+	if len(data) > maxLen {
+		data = data[:maxLen]
+	}
+	// Mask sk- prefixed tokens (API key patterns)
+	result := data
+	lower := strings.ToLower(data)
+	idx := strings.Index(lower, "sk-")
+	for idx >= 0 {
+		// Find end of token (word boundary)
+		end := idx + 3 // start of actual key after "sk-"
+		for end < len(result) && (isAlphaNum(result[end]) || result[end] == '-' || result[end] == '_') {
+			end++
+		}
+		if end > idx+3 {
+			result = result[:idx] + "***" + result[end:]
+			lower = strings.ToLower(result)
+		}
+		idx = strings.Index(lower, "sk-")
+	}
+	return result
+}
+
+func isAlphaNum(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
 }
 
 // LoadConfig loads configuration from .env and validates it.

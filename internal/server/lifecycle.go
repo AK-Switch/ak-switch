@@ -61,6 +61,7 @@ func WatchEnvFile(state *ServerState, stop <-chan struct{}) {
 			state.mu.Lock()
 			state.cfg = newCfg
 			state.pool = newPool
+			ApplyLogLevel(newCfg.LogLevel)
 			state.mu.Unlock()
 
 			slog.Info("config reloaded", "keys", len(newPool.Keys()), "target", newCfg.TargetBase, "genai", newCfg.GenaiBase)

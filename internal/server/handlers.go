@@ -24,6 +24,34 @@ func (s *ServerState) swHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (s *ServerState) logLevelHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	s.mu.RLock()
+	cfg := s.cfg
+	s.mu.RUnlock()
+	if !s.adminAuth(cfg, w, r) {
+		return
+	}
+	var body struct {
+		Level string `json:"level"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		s.respondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	body.Level = strings.TrimSpace(strings.ToLower(body.Level))
+	switch body.Level {
+	case "debug", "info", "warn", "error":
+		ApplyLogLevel(body.Level)
+		s.respondJSON(w, http.StatusOK, map[string]string{"level": body.Level})
+	default:
+		s.respondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid log level, use: debug, info, warn, error"})
+	}
+}
+
 func (s *ServerState) configHandler(w http.ResponseWriter, r *http.Request) {
 	s.mu.RLock()
 	cfg := s.cfg

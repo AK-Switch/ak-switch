@@ -804,3 +804,86 @@ func TestReloadHandler(t *testing.T) {
 		t.Errorf("expected success=true, got %v", body["success"])
 	}
 }
+
+// ── Log Level API ─────────────────────────────────────
+
+func TestLogLevelHandler_Success(t *testing.T) {
+	alvus := newTestServer([]string{"key-a"})
+	defer alvus.Close()
+
+	resp, err := http.Post(alvus.URL+"/api/log-level", "application/json", strings.NewReader(`{"level":"debug"}`))
+	if err != nil {
+		t.Fatalf("POST /api/log-level: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	var body map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if level, ok := body["level"].(string); !ok || level != "debug" {
+		t.Errorf(`expected level="debug", got %v`, body["level"])
+	}
+}
+
+func TestLogLevelHandler_InvalidLevel(t *testing.T) {
+	alvus := newTestServer([]string{"key-a"})
+	defer alvus.Close()
+
+	resp, err := http.Post(alvus.URL+"/api/log-level", "application/json", strings.NewReader(`{"level":"verbose"}`))
+	if err != nil {
+		t.Fatalf("POST /api/log-level: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected status 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestLogLevelHandler_WrongMethod(t *testing.T) {
+	alvus := newTestServer([]string{"key-a"})
+	defer alvus.Close()
+
+	resp, err := http.Get(alvus.URL + "/api/log-level")
+	if err != nil {
+		t.Fatalf("GET /api/log-level: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusMethodNotAllowed {
+		t.Errorf("expected status 405, got %d", resp.StatusCode)
+	}
+}
+
+func TestLogLevelHandler_Unauthorized(t *testing.T) {
+	cfg := &config.Config{
+		TargetBase:  "http://localhost:19999",
+		GenaiBase:   "http://localhost:19999",
+		Port:        19999,
+		MaxRetries:  3,
+		CooldownSec: 60,
+		AdminToken:  "secret-token",
+		Keys:        []string{"key-a"},
+	}
+	pool := keypool.NewKeyPool([]string{"key-a"}, nil)
+	state := server.NewServerState(cfg, pool, "", "")
+	alvus := httptest.NewServer(state.Handler())
+	defer alvus.Close()
+
+	// No token → 401
+	resp, err := http.Post(alvus.URL+"/api/log-level", "application/json", strings.NewReader(`{"level":"debug"}`))
+	if err != nil {
+		t.Fatalf("POST /api/log-level: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("expected status 401, got %d", resp.StatusCode)
+	}
+}
