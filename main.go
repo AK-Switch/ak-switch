@@ -239,7 +239,7 @@ func buildConfig() (Config, *KeyPool, error) {
 		GenaiBase:     strings.TrimRight(getenv("GENAI_BASE_URL", "https://ai.api.nvidia.com"), "/"),
 		Port:          getenv("PORT", "3000"),
 		MaxRetries:    10,
-		CooldownSec:   60,
+		CooldownSec:   getenvInt("COOLDOWN_SEC", 60),
 		OverrideModel: getenv("OVERRIDE_MODEL", ""),
 	}
 	return cfg, NewKeyPool(keys), nil
@@ -264,6 +264,15 @@ func reloadConfig() (Config, *KeyPool, error) {
 func getenv(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
+	}
+	return fallback
+}
+
+func getenvInt(key string, fallback int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
 	}
 	return fallback
 }
