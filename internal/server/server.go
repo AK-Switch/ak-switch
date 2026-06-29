@@ -32,8 +32,10 @@ type ServerState struct {
 	metrics         *alvusmetrics.Metrics
 	metricsRegistry *prometheus.Registry
 	keyCBs          []*circuitbreaker.KeyCircuitBreaker // per-key circuit breakers
-	upCB            *circuitbreaker.UpstreamCircuitBreaker
-	dashboardHTML   string
+	upCB                *circuitbreaker.UpstreamCircuitBreaker
+	lastHealthCheckTime time.Time
+	lastHealthCheckOK   bool
+	dashboardHTML       string
 	keysFile        string // path to keys.json for key persistence
 }
 
@@ -116,6 +118,21 @@ func (s *ServerState) Handler() http.Handler {
 	return s.mux
 }
 
+// LastHealthCheck returns the timestamp and result of the most recent active health check.
+func (s *ServerState) LastHealthCheck() (time.Time, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.lastHealthCheckTime, s.lastHealthCheckOK
+}
+
+// SetLastHealthCheck records the result of an active health check probe.
+func (s *ServerState) SetLastHealthCheck(ok bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lastHealthCheckTime = time.Now()
+	s.lastHealthCheckOK = ok
+}
+
 // Metrics returns the prometheus metrics collector.
 func (s *ServerState) Metrics() *alvusmetrics.Metrics {
 	return s.metrics
@@ -192,6 +209,7 @@ func ReloadConfig() (*config.Config, *keypool.KeyPool, error) {
 		"MAX_RETRIES", "DISABLE_THINKING", "GENAI_MODEL", "LOG_LEVEL",
 		"BACKOFF_CAP_SEC", "BACKOFF_MULTIPLIER", "CB_RESET_SEC", "UPSTREAM_CB_THRESHOLD",
 			"KEYS_FILE",
+		"HEALTH_CHECK_INTERVAL_SEC", "HEALTH_CHECK_PATH", "HEALTH_CHECK_TIMEOUT_SEC",
 	} {
 		os.Unsetenv(k)
 	}

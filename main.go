@@ -75,6 +75,12 @@ func main() {
 		server.RefreshKeyPoolMetrics(state, stop)
 	}()
 
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		server.ActiveHealthCheck(state, stop)
+	}()
+
 	addr := fmt.Sprintf("%s:%d", host, cfg.Port)
 
 	// Check port availability and bind

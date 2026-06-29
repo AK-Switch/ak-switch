@@ -56,6 +56,10 @@ type Config struct {
 	BackoffMultiplier   float64 // 指数退避倍数 (default 2)
 	CBResetSec          int     // 上游熔断器 OPEN→HALF_OPEN 超时(秒) (default 30)
 	UpstreamCBThreshold int     // 上游熔断器连续失败触发阈值 (default 5)
+
+	HealthCheckIntervalSec int    // 健康检查间隔(秒)，默认 30，最小 5
+	HealthCheckPath       string // 健康检查路径，默认 "/health"
+	HealthCheckTimeoutSec int    // 健康检查超时(秒)，默认 5，最小 1
 }
 
 // DefaultConfig returns a Config with all optional fields set to their defaults.
@@ -69,6 +73,9 @@ func DefaultConfig() *Config {
 		BackoffMultiplier:   2,
 		CBResetSec:          30,
 		UpstreamCBThreshold: 5,
+		HealthCheckIntervalSec: 30,
+		HealthCheckPath:       "/health",
+		HealthCheckTimeoutSec:  5,
 		KeysFile:            "keys.json",
 	}
 }
@@ -94,8 +101,11 @@ func DefaultConfig() *Config {
 //   - BACKOFF_MULTIPLIER (float, default 2) — 指数退避倍数
 //   - CB_RESET_SEC (int, default 30) — 上游熔断器 OPEN→HALF_OPEN 超时(秒)
 //   - UPSTREAM_CB_THRESHOLD (int, default 5) — 上游熔断器连续失败触发阈值
+//   - HEALTH_CHECK_INTERVAL_SEC (int, default 30) — 健康检查间隔(秒)
+//   - HEALTH_CHECK_PATH (string, default "/health") — 健康检查路径
+//   - HEALTH_CHECK_TIMEOUT_SEC (int, default 5) — 健康检查超时(秒)
 //   - KEYS_FILE (string, default "keys.json") — JSON 文件路径，用于持久化存储 API Key 状态
-	func Load(envPath string) (*Config, error) {
+func Load(envPath string) (*Config, error) {
 	if envPath != "" {
 		if err := loadDotEnv(envPath); err != nil {
 			return nil, &ConfigError{
@@ -201,6 +211,29 @@ func DefaultConfig() *Config {
 		cfg.UpstreamCBThreshold = threshold
 	}
 
+	// HealthCheckIntervalSec
+	if v := os.Getenv("HEALTH_CHECK_INTERVAL_SEC"); v != "" {
+		interval, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, &ConfigError{Category: "config", Message: fmt.Sprintf("配置错误: HEALTH_CHECK_INTERVAL_SEC=\"%s\" 不是有效整数，有效范围 5-3600", v)}
+		}
+		cfg.HealthCheckIntervalSec = interval
+	}
+
+	// HealthCheckPath
+	if v := os.Getenv("HEALTH_CHECK_PATH"); v != "" {
+		cfg.HealthCheckPath = v
+	}
+
+	// HealthCheckTimeoutSec
+	if v := os.Getenv("HEALTH_CHECK_TIMEOUT_SEC"); v != "" {
+		timeout, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, &ConfigError{Category: "config", Message: fmt.Sprintf("配置错误: HEALTH_CHECK_TIMEOUT_SEC=\"%s\" 不是有效整数，有效范围 1-60", v)}
+		}
+		cfg.HealthCheckTimeoutSec = timeout
+	}
+
 	// KeysFile
 	if v := os.Getenv("KEYS_FILE"); v != "" {
 		cfg.KeysFile = v
@@ -299,6 +332,12 @@ func (c *Config) Validate() error {
 	}
 	if c.UpstreamCBThreshold < 2 {
 		return &ConfigError{Category: "config", Message: fmt.Sprintf("配置错误: UPSTREAM_CB_THRESHOLD=%d 不能小于 2", c.UpstreamCBThreshold)}
+	}
+	if c.HealthCheckIntervalSec < 5 {
+		return &ConfigError{Category: "config", Message: fmt.Sprintf("配置错误: HEALTH_CHECK_INTERVAL_SEC=%d 不能小于 5", c.HealthCheckIntervalSec)}
+	}
+	if c.HealthCheckTimeoutSec < 1 {
+		return &ConfigError{Category: "config", Message: fmt.Sprintf("配置错误: HEALTH_CHECK_TIMEOUT_SEC=%d 不能小于 1", c.HealthCheckTimeoutSec)}
 	}
 	return nil
 }
@@ -419,6 +458,27 @@ func (c *Config) Diff(other *Config) []ConfigChange {
 			Field:    "UPSTREAM_CB_THRESHOLD",
 			OldValue: strconv.Itoa(c.UpstreamCBThreshold),
 			NewValue: strconv.Itoa(other.UpstreamCBThreshold),
+		})
+	}
+	if c.HealthCheckIntervalSec != other.HealthCheckIntervalSec {
+		changes = append(changes, ConfigChange{
+			Field:    "HEALTH_CHECK_INTERVAL_SEC",
+			OldValue: strconv.Itoa(c.HealthCheckIntervalSec),
+			NewValue: strconv.Itoa(other.HealthCheckIntervalSec),
+		})
+	}
+	if c.HealthCheckPath != other.HealthCheckPath {
+		changes = append(changes, ConfigChange{
+			Field:    "HEALTH_CHECK_PATH",
+			OldValue: c.HealthCheckPath,
+			NewValue: other.HealthCheckPath,
+		})
+	}
+	if c.HealthCheckTimeoutSec != other.HealthCheckTimeoutSec {
+		changes = append(changes, ConfigChange{
+			Field:    "HEALTH_CHECK_TIMEOUT_SEC",
+			OldValue: strconv.Itoa(c.HealthCheckTimeoutSec),
+			NewValue: strconv.Itoa(other.HealthCheckTimeoutSec),
 		})
 	}
 	// Keys: compare as masked strings (with names)

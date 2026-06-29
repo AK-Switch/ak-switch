@@ -2,6 +2,7 @@ package server
 
 import (
 	"log/slog"
+	"net/http"
 	"os"
 	"time"
 )
@@ -81,6 +82,55 @@ func RefreshKeyPoolMetrics(state *ServerState, stop <-chan struct{}) {
 			pool := state.pool
 			state.mu.RUnlock()
 			state.metrics.RefreshKeyPoolGauge(pool)
+		}
+	}
+}
+
+// ActiveHealthCheck periodically probes the upstream endpoint and updates
+// the upstream circuit breaker state based on the response.
+func ActiveHealthCheck(state *ServerState, stop <-chan struct{}) {
+	ticker := time.NewTicker(time.Duration(state.cfg.HealthCheckIntervalSec) * time.Second)
+	defer ticker.Stop()
+
+	hcClient := &http.Client{
+		Timeout: time.Duration(state.cfg.HealthCheckTimeoutSec) * time.Second,
+	}
+
+	for {
+		select {
+		case <-stop:
+			return
+		case <-ticker.C:
+			state.mu.RLock()
+			target := state.cfg.TargetBase + state.cfg.HealthCheckPath
+			upCB := state.upCB
+			state.mu.RUnlock()
+
+			start := time.Now()
+			resp, err := hcClient.Head(target)
+			dur := time.Since(start)
+
+			// Update duration histogram
+			state.metrics.HealthCheckDuration.Observe(dur.Seconds())
+
+			if err == nil && resp.StatusCode < 500 {
+				// Success — upstream is healthy
+				resp.Body.Close()
+				upCB.RecordSuccess()
+				state.SetLastHealthCheck(true)
+				state.metrics.HealthCheckProbes.WithLabelValues("ok").Inc()
+			} else {
+				// Failure
+				if err == nil {
+					resp.Body.Close()
+				}
+				upCB.RecordFailure()
+				state.SetLastHealthCheck(false)
+				state.metrics.HealthCheckProbes.WithLabelValues("fail").Inc()
+			}
+
+			// Update CB state gauge
+			state.metrics.UpstreamCBState.Set(float64(upCB.State()))
 		}
 	}
 }

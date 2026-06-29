@@ -12,6 +12,10 @@ type Metrics struct {
 	RequestDuration *prometheus.HistogramVec
 	KeyPoolKeys     *prometheus.GaugeVec
 	UpstreamErrors  *prometheus.CounterVec
+
+	UpstreamCBState     prometheus.Gauge       // alvus_upstream_cb_state (0=CLOSED, 1=OPEN, 2=HALF_OPEN)
+	HealthCheckProbes   *prometheus.CounterVec // alvus_healthcheck_probes_total, labels: {"status":"ok"|"fail"}
+	HealthCheckDuration prometheus.Histogram   // alvus_healthcheck_duration_seconds
 }
 
 // NewRegistry creates a non-global Prometheus registry and registers all application metrics.
@@ -50,6 +54,29 @@ func NewRegistry() (*prometheus.Registry, *Metrics) {
 				Help: "Count of upstream errors by type (network, rate_limited, auth_rejected, server_error).",
 			},
 			[]string{"type"},
+		),
+		UpstreamCBState: factory.NewGauge(
+			prometheus.GaugeOpts{
+				Namespace: "alvus",
+				Name:      "upstream_cb_state",
+				Help:      "Upstream circuit breaker state: 0=CLOSED, 1=OPEN, 2=HALF_OPEN",
+			},
+		),
+		HealthCheckProbes: factory.NewCounterVec(
+			prometheus.CounterOpts{
+				Namespace: "alvus",
+				Name:      "healthcheck_probes_total",
+				Help:      "Count of health check probes by status",
+			},
+			[]string{"status"},
+		),
+		HealthCheckDuration: factory.NewHistogram(
+			prometheus.HistogramOpts{
+				Namespace: "alvus",
+				Name:      "healthcheck_duration_seconds",
+				Help:      "Duration of health check probes",
+				Buckets:   prometheus.DefBuckets,
+			},
 		),
 	}
 

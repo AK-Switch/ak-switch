@@ -1,6 +1,7 @@
 package server
 
 import (
+	"alvus/internal/circuitbreaker"
 	"alvus/internal/utils"
 	"crypto/subtle"
 	"encoding/json"
@@ -224,6 +225,7 @@ func (s *ServerState) healthHandler(w http.ResponseWriter, r *http.Request) {
 	s.mu.RLock()
 	cfg := s.cfg
 	pool := s.pool
+	upCB := s.upCB
 	s.mu.RUnlock()
 
 	if cfg.AdminToken != "" && subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Admin-Token")), []byte(cfg.AdminToken)) != 1 {
@@ -231,11 +233,38 @@ func (s *ServerState) healthHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Upstream CB state string
+	var cbState string
+	switch upCB.State() {
+	case circuitbreaker.UpstreamClosed:
+		cbState = "closed"
+	case circuitbreaker.UpstreamOpen:
+		cbState = "open"
+	case circuitbreaker.UpstreamHalfOpen:
+		cbState = "half_open"
+	default:
+		cbState = "unknown"
+	}
+
+	// Last health check info
+	lastCheckTime, lastCheckOK := s.LastHealthCheck()
+	var lastCheckISO string
+	if !lastCheckTime.IsZero() {
+		lastCheckISO = lastCheckTime.Format(time.RFC3339)
+	}
+	var lastCheckResult *bool
+	if !lastCheckTime.IsZero() {
+		lastCheckResult = &lastCheckOK
+	}
+
 	details := pool.GetKeyDetails()
 	s.respondJSON(w, http.StatusOK, map[string]interface{}{
-		"status":  "ok",
-		"keys":    len(details),
-		"details": details,
+		"status":             "ok",
+		"keys":               len(details),
+		"upstream_cb_state":  cbState,
+		"last_health_check":  lastCheckISO,
+		"last_health_check_ok": lastCheckResult,
+		"details":            details,
 	})
 }
 

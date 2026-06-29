@@ -15,6 +15,7 @@ func resetEnv() {
 		"KEY4", "KEY5", "KEYA", "KEYB",
 		"BACKOFF_CAP_SEC", "BACKOFF_MULTIPLIER", "CB_RESET_SEC",
 		"UPSTREAM_CB_THRESHOLD", "KEYS_FILE",
+		"HEALTH_CHECK_INTERVAL_SEC", "HEALTH_CHECK_PATH", "HEALTH_CHECK_TIMEOUT_SEC",
 	} {
 		os.Unsetenv(key)
 	}
@@ -627,5 +628,42 @@ func TestLoad_TrailingSlashesTrimmed(t *testing.T) {
 	}
 	if cfg.GenaiBase != "https://ai.example.com" {
 		t.Errorf("GenaiBase trailing slash not trimmed: %q", cfg.GenaiBase)
+	}
+}
+
+func TestConfig_HealthCheckDefaults(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.HealthCheckIntervalSec != 30 {
+		t.Errorf("HealthCheckIntervalSec default = %d, want 30", cfg.HealthCheckIntervalSec)
+	}
+	if cfg.HealthCheckPath != "/health" {
+		t.Errorf("HealthCheckPath default = %q, want %q", cfg.HealthCheckPath, "/health")
+	}
+	if cfg.HealthCheckTimeoutSec != 5 {
+		t.Errorf("HealthCheckTimeoutSec default = %d, want 5", cfg.HealthCheckTimeoutSec)
+	}
+}
+
+func TestConfig_HealthCheckIntervalTooSmall(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Port = 8080
+	cfg.TargetBase = "https://example.com"
+	cfg.GenaiBase = "https://ai.example.com"
+	cfg.Keys = []string{"nvapi-key1"}
+	cfg.HealthCheckIntervalSec = 4
+	if err := cfg.Validate(); err == nil {
+		t.Error("Validate() expected error for HealthCheckIntervalSec=4, got nil")
+	}
+}
+
+func TestConfig_HealthCheckTimeoutTooSmall(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Port = 8080
+	cfg.TargetBase = "https://example.com"
+	cfg.GenaiBase = "https://ai.example.com"
+	cfg.Keys = []string{"nvapi-key1"}
+	cfg.HealthCheckTimeoutSec = 0
+	if err := cfg.Validate(); err == nil {
+		t.Error("Validate() expected error for HealthCheckTimeoutSec=0, got nil")
 	}
 }
