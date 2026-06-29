@@ -373,33 +373,53 @@ func (c *Config) Sanitized() *Config {
 	return &s
 }
 
+// fieldDef defines a single configuration field for diff comparison.
+type fieldDef struct {
+	name   string                       // env var name for diff output
+	equal  func(c, o *Config) bool      // equality check
+	valStr func(c *Config) string       // serializes field value for diff
+}
+
+// configDiffFields is the registry of all diff-comparable config fields.
+// Add new fields here instead of adding if-blocks to Diff().
+var configDiffFields = []fieldDef{
+	{"PORT", func(c, o *Config) bool { return c.Port == o.Port }, func(c *Config) string { return strconv.Itoa(c.Port) }},
+	{"TARGET_BASE_URL", func(c, o *Config) bool { return c.TargetBase == o.TargetBase }, func(c *Config) string { return c.TargetBase }},
+	{"GENAI_BASE_URL", func(c, o *Config) bool { return c.GenaiBase == o.GenaiBase }, func(c *Config) string { return c.GenaiBase }},
+	{"DISABLE_THINKING", func(c, o *Config) bool { return c.DisableThinking == o.DisableThinking }, func(c *Config) string { return strconv.FormatBool(c.DisableThinking) }},
+	{"GENAI_MODEL", func(c, o *Config) bool { return c.GenaiModel == o.GenaiModel }, func(c *Config) string { return c.GenaiModel }},
+	{"MAX_RETRIES", func(c, o *Config) bool { return c.MaxRetries == o.MaxRetries }, func(c *Config) string { return strconv.Itoa(c.MaxRetries) }},
+	{"LOG_LEVEL", func(c, o *Config) bool { return c.LogLevel == o.LogLevel }, func(c *Config) string { return c.LogLevel }},
+	{"COOLDOWN_SEC", func(c, o *Config) bool { return c.CooldownSec == o.CooldownSec }, func(c *Config) string { return strconv.Itoa(c.CooldownSec) }},
+	{"BACKOFF_CAP_SEC", func(c, o *Config) bool { return c.BackoffCapSec == o.BackoffCapSec }, func(c *Config) string { return strconv.Itoa(c.BackoffCapSec) }},
+	{"BACKOFF_MULTIPLIER", func(c, o *Config) bool { return c.BackoffMultiplier == o.BackoffMultiplier }, func(c *Config) string { return strconv.FormatFloat(c.BackoffMultiplier, 'g', -1, 64) }},
+	{"CB_RESET_SEC", func(c, o *Config) bool { return c.CBResetSec == o.CBResetSec }, func(c *Config) string { return strconv.Itoa(c.CBResetSec) }},
+	{"UPSTREAM_CB_THRESHOLD", func(c, o *Config) bool { return c.UpstreamCBThreshold == o.UpstreamCBThreshold }, func(c *Config) string { return strconv.Itoa(c.UpstreamCBThreshold) }},
+	{"HEALTH_CHECK_INTERVAL_SEC", func(c, o *Config) bool { return c.HealthCheckIntervalSec == o.HealthCheckIntervalSec }, func(c *Config) string { return strconv.Itoa(c.HealthCheckIntervalSec) }},
+	{"HEALTH_CHECK_PATH", func(c, o *Config) bool { return c.HealthCheckPath == o.HealthCheckPath }, func(c *Config) string { return c.HealthCheckPath }},
+	{"HEALTH_CHECK_TIMEOUT_SEC", func(c, o *Config) bool { return c.HealthCheckTimeoutSec == o.HealthCheckTimeoutSec }, func(c *Config) string { return strconv.Itoa(c.HealthCheckTimeoutSec) }},
+}
+
 // Diff returns a list of ConfigChange entries describing what differs
 // between c and other. Sensitive fields (Keys) are masked in the output.
 // Key names are serialized alongside keys (key==name format) in the diff.
 func (c *Config) Diff(other *Config) []ConfigChange {
 	var changes []ConfigChange
 
-	if c.Port != other.Port {
-		changes = append(changes, ConfigChange{
-			Field:    "PORT",
-			OldValue: strconv.Itoa(c.Port),
-			NewValue: strconv.Itoa(other.Port),
-		})
+	// Iterate over the field registry
+	for _, f := range configDiffFields {
+		if !f.equal(c, other) {
+			changes = append(changes, ConfigChange{
+				Field:    f.name,
+				OldValue: f.valStr(c),
+				NewValue: f.valStr(other),
+			})
+		}
 	}
-	if c.TargetBase != other.TargetBase {
-		changes = append(changes, ConfigChange{
-			Field:    "TARGET_BASE_URL",
-			OldValue: c.TargetBase,
-			NewValue: other.TargetBase,
-		})
-	}
-	if c.GenaiBase != other.GenaiBase {
-		changes = append(changes, ConfigChange{
-			Field:    "GENAI_BASE_URL",
-			OldValue: c.GenaiBase,
-			NewValue: other.GenaiBase,
-		})
-	}
+
+	// Special fields that need custom handling
+
+	// AdminToken — redact values
 	if c.AdminToken != other.AdminToken {
 		changes = append(changes, ConfigChange{
 			Field:    "ADMIN_TOKEN",
@@ -407,91 +427,8 @@ func (c *Config) Diff(other *Config) []ConfigChange {
 			NewValue: "(redacted)",
 		})
 	}
-	if c.DisableThinking != other.DisableThinking {
-		changes = append(changes, ConfigChange{
-			Field:    "DISABLE_THINKING",
-			OldValue: fmt.Sprintf("%t", c.DisableThinking),
-			NewValue: fmt.Sprintf("%t", other.DisableThinking),
-		})
-	}
-	if c.GenaiModel != other.GenaiModel {
-		changes = append(changes, ConfigChange{
-			Field:    "GENAI_MODEL",
-			OldValue: c.GenaiModel,
-			NewValue: other.GenaiModel,
-		})
-	}
-	if c.MaxRetries != other.MaxRetries {
-		changes = append(changes, ConfigChange{
-			Field:    "MAX_RETRIES",
-			OldValue: strconv.Itoa(c.MaxRetries),
-			NewValue: strconv.Itoa(other.MaxRetries),
-		})
-	}
-	if c.LogLevel != other.LogLevel {
-		changes = append(changes, ConfigChange{
-			Field:    "LOG_LEVEL",
-			OldValue: c.LogLevel,
-			NewValue: other.LogLevel,
-		})
-	}
-	if c.CooldownSec != other.CooldownSec {
-		changes = append(changes, ConfigChange{
-			Field:    "COOLDOWN_SEC",
-			OldValue: strconv.Itoa(c.CooldownSec),
-			NewValue: strconv.Itoa(other.CooldownSec),
-		})
-	}
-	if c.BackoffCapSec != other.BackoffCapSec {
-		changes = append(changes, ConfigChange{
-			Field:    "BACKOFF_CAP_SEC",
-			OldValue: strconv.Itoa(c.BackoffCapSec),
-			NewValue: strconv.Itoa(other.BackoffCapSec),
-		})
-	}
-	if c.BackoffMultiplier != other.BackoffMultiplier {
-		changes = append(changes, ConfigChange{
-			Field:    "BACKOFF_MULTIPLIER",
-			OldValue: strconv.FormatFloat(c.BackoffMultiplier, 'g', -1, 64),
-			NewValue: strconv.FormatFloat(other.BackoffMultiplier, 'g', -1, 64),
-		})
-	}
-	if c.CBResetSec != other.CBResetSec {
-		changes = append(changes, ConfigChange{
-			Field:    "CB_RESET_SEC",
-			OldValue: strconv.Itoa(c.CBResetSec),
-			NewValue: strconv.Itoa(other.CBResetSec),
-		})
-	}
-	if c.UpstreamCBThreshold != other.UpstreamCBThreshold {
-		changes = append(changes, ConfigChange{
-			Field:    "UPSTREAM_CB_THRESHOLD",
-			OldValue: strconv.Itoa(c.UpstreamCBThreshold),
-			NewValue: strconv.Itoa(other.UpstreamCBThreshold),
-		})
-	}
-	if c.HealthCheckIntervalSec != other.HealthCheckIntervalSec {
-		changes = append(changes, ConfigChange{
-			Field:    "HEALTH_CHECK_INTERVAL_SEC",
-			OldValue: strconv.Itoa(c.HealthCheckIntervalSec),
-			NewValue: strconv.Itoa(other.HealthCheckIntervalSec),
-		})
-	}
-	if c.HealthCheckPath != other.HealthCheckPath {
-		changes = append(changes, ConfigChange{
-			Field:    "HEALTH_CHECK_PATH",
-			OldValue: c.HealthCheckPath,
-			NewValue: other.HealthCheckPath,
-		})
-	}
-	if c.HealthCheckTimeoutSec != other.HealthCheckTimeoutSec {
-		changes = append(changes, ConfigChange{
-			Field:    "HEALTH_CHECK_TIMEOUT_SEC",
-			OldValue: strconv.Itoa(c.HealthCheckTimeoutSec),
-			NewValue: strconv.Itoa(other.HealthCheckTimeoutSec),
-		})
-	}
-	// EncryptionKey: only expose set/unset state
+
+	// EncryptionKey — only expose set/unset state
 	if string(c.EncryptionKey) != string(other.EncryptionKey) {
 		changes = append(changes, ConfigChange{
 			Field:    "KEYS_ENCRYPTION_KEY",
@@ -499,7 +436,8 @@ func (c *Config) Diff(other *Config) []ConfigChange {
 			NewValue: encKeyState(other.EncryptionKey),
 		})
 	}
-	// Keys: compare as masked strings (with names)
+
+	// Keys — compare as masked strings (with names)
 	if !stringSliceEqual(c.Keys, other.Keys) {
 		oldKeys := maskedSliceWithNames(c.Keys, c.KeyNames)
 		newKeys := maskedSliceWithNames(other.Keys, other.KeyNames)

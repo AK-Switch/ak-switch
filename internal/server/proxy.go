@@ -43,9 +43,9 @@ func (s *ServerState) proxyHandler(w http.ResponseWriter, r *http.Request) {
 	s.mu.RLock()
 	cfg := s.cfg
 	pool := s.pool
-	client := s.client
-	keyCBs := s.keyCBs
-	upCB := s.upCB
+	client := s.proxy.client
+	keyCBs := s.proxy.keyCBs
+	upCB := s.proxy.upCB
 	s.mu.RUnlock()
 
 	start := time.Now()

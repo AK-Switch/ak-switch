@@ -104,7 +104,7 @@ func ActiveHealthCheck(state *ServerState, stop <-chan struct{}) {
 		case <-ticker.C:
 			state.mu.RLock()
 			target := state.cfg.TargetBase + state.cfg.HealthCheckPath
-			upCB := state.upCB
+			upCB := state.proxy.upCB
 			state.mu.RUnlock()
 
 			start := time.Now()

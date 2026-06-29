@@ -256,7 +256,7 @@ func (s *ServerState) healthHandler(w http.ResponseWriter, r *http.Request) {
 	s.mu.RLock()
 	cfg := s.cfg
 	pool := s.pool
-	upCB := s.upCB
+	upCB := s.proxy.upCB
 	s.mu.RUnlock()
 
 	if !s.adminAuth(cfg, w, r) {

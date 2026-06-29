@@ -20,32 +20,15 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-// ServerState holds all server-wide state: configuration, key pool, HTTP client,
-// metrics, circuit breakers, and the request multiplexer.
-type ServerState struct {
-	mu              sync.RWMutex
-	cfg             *config.Config
-	pool            *keypool.KeyPool
-	mux             *http.ServeMux
-	client          *http.Client
-	logs            *logstore.LogStore
-	startTime       time.Time
-	metrics         *alvusmetrics.Metrics
-	metricsRegistry *prometheus.Registry
-	keyCBs          []*circuitbreaker.KeyCircuitBreaker // per-key circuit breakers
-	upCB                *circuitbreaker.UpstreamCircuitBreaker
-	lastHealthCheckTime time.Time
-	lastHealthCheckOK   bool
-	dashboardHTML       string
-	keysFile        string // path to keys.json for key persistence
+// ProxyEngine holds the HTTP client and circuit breakers for upstream proxy requests.
+type ProxyEngine struct {
+	client *http.Client
+	keyCBs []*circuitbreaker.KeyCircuitBreaker // per-key circuit breakers
+	upCB   *circuitbreaker.UpstreamCircuitBreaker
 }
 
-// NewServerState creates a fully initialized ServerState, registering all HTTP routes.
-func NewServerState(cfg *config.Config, pool *keypool.KeyPool, dashboardHTML string, keysFile string) *ServerState {
-	reg, m := alvusmetrics.NewRegistry()
-
-	// Initialize KeyCircuitBreakers (one per key)
-	// Apply CB fallback defaults for inline-constructed configs
+// NewProxyEngine creates a ProxyEngine from config and key count.
+func NewProxyEngine(cfg *config.Config, numKeys int) *ProxyEngine {
 	backoffCapSec := cfg.BackoffCapSec
 	if backoffCapSec <= 0 {
 		backoffCapSec = 120
@@ -64,7 +47,7 @@ func NewServerState(cfg *config.Config, pool *keypool.KeyPool, dashboardHTML str
 	}
 	base := time.Duration(cfg.CooldownSec) * time.Second
 	cap_ := time.Duration(backoffCapSec) * time.Second
-	keyCBs := make([]*circuitbreaker.KeyCircuitBreaker, len(pool.Keys()))
+	keyCBs := make([]*circuitbreaker.KeyCircuitBreaker, numKeys)
 	for i := range keyCBs {
 		keyCBs[i] = circuitbreaker.NewKeyCircuitBreaker(base, cap_, backoffMult)
 	}
@@ -74,8 +57,7 @@ func NewServerState(cfg *config.Config, pool *keypool.KeyPool, dashboardHTML str
 		time.Duration(cbResetSec)*time.Second,
 	)
 
-	s := &ServerState{
-		cfg: cfg, pool: pool, mux: http.NewServeMux(),
+	return &ProxyEngine{
 		client: &http.Client{
 			Timeout: 120 * time.Second,
 			Transport: &http.Transport{
@@ -87,12 +69,43 @@ func NewServerState(cfg *config.Config, pool *keypool.KeyPool, dashboardHTML str
 				return http.ErrUseLastResponse
 			},
 		},
+		keyCBs: keyCBs,
+		upCB:   upCB,
+	}
+}
+
+// ServerState holds all server-wide state: configuration, key pool, HTTP client,
+// metrics, circuit breakers, and the request multiplexer.
+type ServerState struct {
+	mu              sync.RWMutex
+	cfg             *config.Config
+	pool            *keypool.KeyPool
+	mux             *http.ServeMux
+	proxy           *ProxyEngine
+	logs            *logstore.LogStore
+	startTime       time.Time
+	metrics         *alvusmetrics.Metrics
+	metricsRegistry *prometheus.Registry
+	lastHealthCheckTime time.Time
+	lastHealthCheckOK   bool
+	dashboardHTML       string
+	keysFile        string // path to keys.json for key persistence
+}
+
+// NewServerState creates a fully initialized ServerState, registering all HTTP routes.
+func NewServerState(cfg *config.Config, pool *keypool.KeyPool, dashboardHTML string, keysFile string) *ServerState {
+	reg, m := alvusmetrics.NewRegistry()
+
+	// Initialize ProxyEngine with HTTP client and circuit breakers
+	proxy := NewProxyEngine(cfg, len(pool.Keys()))
+
+	s := &ServerState{
+		cfg: cfg, pool: pool, mux: http.NewServeMux(),
+		proxy:           proxy,
 		logs:            logstore.New(1000),
 		startTime:       time.Now(),
 		metrics:         m,
 		metricsRegistry: reg,
-		keyCBs:          keyCBs,
-		upCB:            upCB,
 		dashboardHTML:   dashboardHTML,
 		keysFile:        keysFile,
 	}
@@ -213,6 +226,30 @@ func isAlphaNum(c byte) bool {
 	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
 }
 
+// mergeKeysFromFile loads keys from KeysFile if configured.
+// If autoCreate is true and the file doesn't exist, it creates the file from env keys.
+// Returns the effective keys and names (from file if successful, otherwise from env).
+func mergeKeysFromFile(cfg *config.Config, autoCreate bool) (keys, names []string) {
+	keys = cfg.Keys
+	names = cfg.KeyNames
+	if cfg.KeysFile != "" {
+		fileKeys, fileNames, err := keypool.LoadKeysFromFile(cfg.KeysFile)
+		if err != nil {
+			slog.Warn("load keys file failed, using env keys", "path", cfg.KeysFile, "error", err)
+		} else if fileKeys != nil {
+			// File exists - use its keys as the source of truth
+			keys = fileKeys
+			names = fileNames
+		} else if autoCreate {
+			// File not found - create it from env keys
+			if err := keypool.SaveKeysToFile(cfg.KeysFile, keys, names); err != nil {
+				slog.Warn("create keys file failed", "path", cfg.KeysFile, "error", err)
+			}
+		}
+	}
+	return keys, names
+}
+
 // LoadConfig loads configuration from .env and validates it.
 func LoadConfig() (*config.Config, *keypool.KeyPool) {
 	cfg, err := config.Load(".env")
@@ -229,26 +266,9 @@ func LoadConfig() (*config.Config, *keypool.KeyPool) {
 		slog.Error(err.Error())
 		os.Exit(config.ExitCodeConfig)
 	}
-	// Merge keys from file if KeysFile is configured
-	keys := cfg.Keys
-	names := cfg.KeyNames
-	if cfg.KeysFile != "" {
-		fileKeys, fileNames, err := keypool.LoadKeysFromFile(cfg.KeysFile)
-		if err != nil {
-			slog.Warn("load keys file failed, using env keys", "path", cfg.KeysFile, "error", err)
-		} else if fileKeys != nil {
-			// File exists - use its keys as the source of truth
-			cfg.Keys = fileKeys
-			cfg.KeyNames = fileNames
-			keys = fileKeys
-			names = fileNames
-		} else {
-			// File not found - create it from env keys
-			if err := keypool.SaveKeysToFile(cfg.KeysFile, keys, names); err != nil {
-				slog.Warn("create keys file failed", "path", cfg.KeysFile, "error", err)
-			}
-		}
-	}
+	keys, names := mergeKeysFromFile(cfg, true)
+	cfg.Keys = keys
+	cfg.KeyNames = names
 	slog.Info("config loaded", "keys", len(cfg.Keys), "target", cfg.TargetBase, "genai", cfg.GenaiBase)
 
 	// Set encryption key for key pool persistence
@@ -276,20 +296,7 @@ func ReloadConfig() (*config.Config, *keypool.KeyPool, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, nil, fmt.Errorf("reloaded config invalid: %w", err)
 	}
-	// Merge keys from file if KeysFile is configured
-	keys := cfg.Keys
-	names := cfg.KeyNames
-	if cfg.KeysFile != "" {
-		fileKeys, fileNames, err := keypool.LoadKeysFromFile(cfg.KeysFile)
-		if err != nil {
-			slog.Warn("load keys file failed", "path", cfg.KeysFile, "error", err)
-		} else if fileKeys != nil {
-			keys = fileKeys
-			names = fileNames
-		}
-		// NOTE: during reload, don't auto-create the file
-		// (it should already exist if server has been running)
-	}
+	keys, names := mergeKeysFromFile(cfg, false)
 	cfg.Keys = keys
 	cfg.KeyNames = names
 
