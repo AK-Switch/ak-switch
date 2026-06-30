@@ -629,7 +629,7 @@ $binary = Join-Path $AlvusRepo "alvus.exe"
 if (-not $SkipBuild) {
     Write-Host "`n📦 编译 alvus.exe ..." -ForegroundColor Yellow
     Push-Location $AlvusRepo
-    $buildResult = go build -o alvus.exe . 2>&1
+    $buildResult = go build -o alvus.exe ./cmd/alvus/ 2>&1
     Pop-Location
     if ($LASTEXITCODE -ne 0) {
         Write-Host "❌ 编译失败: $buildResult" -ForegroundColor Red

@@ -5,7 +5,7 @@ FROM golang:1.23-alpine AS builder
 RUN apk add --no-cache ca-certificates
 WORKDIR /src
 COPY . .
-RUN CGO_ENABLED=0 go build -o /alvus .
+RUN CGO_ENABLED=0 go build -o /alvus ./cmd/alvus/
 
 # =============================================================================
 # Stage 2: Runtime — Alpine with busybox (built-in) for HEALTHCHECK
