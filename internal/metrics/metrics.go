@@ -37,7 +37,7 @@ func NewRegistry() (*prometheus.Registry, *Metrics) {
 			prometheus.HistogramOpts{
 				Name:    "alvus_request_duration_seconds",
 				Help:    "Request latency distribution by method and status class.",
-				Buckets: prometheus.DefBuckets, // .005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10
+				Buckets: []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10, 15, 30, 60, 120},
 			},
 			[]string{"method", "status"},
 		),
@@ -75,7 +75,7 @@ func NewRegistry() (*prometheus.Registry, *Metrics) {
 				Namespace: "alvus",
 				Name:      "healthcheck_duration_seconds",
 				Help:      "Duration of health check probes",
-				Buckets:   prometheus.DefBuckets,
+				Buckets:   []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10, 15, 30, 60, 120},
 			},
 		),
 	}

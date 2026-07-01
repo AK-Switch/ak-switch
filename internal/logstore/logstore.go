@@ -22,15 +22,15 @@ func New(maxLen int) *LogStore {
 }
 
 // Append adds an entry. The entry's Key is masked immediately before storing.
-// If the store is full, the oldest entry is removed (FIFO).
+// If the store is full, the oldest entries are dropped in bulk (O(1) amortized).
 func (ls *LogStore) Append(entry utils.LogEntry) {
 	entry.Key = utils.MaskKey(entry.Key)
 	ls.mu.Lock()
 	defer ls.mu.Unlock()
-	if len(ls.logs) >= ls.maxLen {
-		ls.logs = ls.logs[1:]
-	}
 	ls.logs = append(ls.logs, entry)
+	if len(ls.logs) > ls.maxLen {
+		ls.logs = ls.logs[len(ls.logs)-ls.maxLen:]
+	}
 }
 
 // Len returns the current number of entries (thread-safe convenience).

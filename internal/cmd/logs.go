@@ -98,7 +98,7 @@ var logsCmd = &cobra.Command{
 				}
 				// Reformat: show timestamp, method, path, status
 				method := getStrField(entryMap, "method", "?")
-				path := getStrField(entryMap, "path", "?")
+				path := getStrField(entryMap, "url", "?")
 				status := getStrField(entryMap, "status", "?")
 				ts := getStrField(entryMap, "timestamp", "?")
 				fmt.Printf("  [%s] %s %s -> %s\n", ts, method, path, status)

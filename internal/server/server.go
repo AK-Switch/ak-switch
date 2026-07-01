@@ -102,7 +102,7 @@ func NewServerState(cfg *config.Config, pool *keypool.KeyPool, dashboardHTML str
 	s := &ServerState{
 		cfg: cfg, pool: pool, mux: http.NewServeMux(),
 		proxy:           proxy,
-		logs:            logstore.New(1000),
+		logs:            logstore.New(10000),
 		startTime:       time.Now(),
 		metrics:         m,
 		metricsRegistry: reg,
