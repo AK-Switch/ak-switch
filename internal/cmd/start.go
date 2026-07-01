@@ -20,117 +20,103 @@ import (
 var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Start the API key rotation proxy server",
-	Long:  "Loads configuration, initializes the key pool, and starts the HTTP proxy server. Supports both single-provider (.env) and multi-provider (config.toml) modes.",
+	Long:  "Loads TOML configuration, initializes the key pool, and starts the HTTP proxy server on a single port with path-based provider routing.",
 	Run: func(cmd *cobra.Command, args []string) {
-		local, _ := cmd.Flags().GetBool("local")
-		networkOnly, _ := cmd.Flags().GetBool("network-only")
-		tag, _ := cmd.Flags().GetString("tag")
 		providerFilter, _ := cmd.Flags().GetString("provider")
-		startServer(dashHTML, local, networkOnly, tag, providerFilter)
+		startServer(dashHTML, providerFilter)
 	},
 }
 
-func startServer(dashboardHTML string, isLocal, isNetwork bool, processTag, providerFilter string) {
-	// ── Host binding ──────────────────────────────
-	host := "0.0.0.0" // Default (binds to all interfaces)
-	if isLocal {
-		host = "127.0.0.1"
-	} else if isNetwork {
-		host = "0.0.0.0"
-	}
+func startServer(dashboardHTML string, providerFilter string) {
+	// ── Default host and port ─────────────────────────
+	host := "127.0.0.1"
+	port := 0 // will be set from first provider's config
 
-	// ── Detect config source ──────────────────────
-	source, fromToml, err := config.DetectConfigSource("")
+	// ── Detect config source ──────────────────────────
+	xdgPath, err := config.XDGConfigPath()
 	if err != nil {
 		slog.Error("config detection failed", "error", err)
 		os.Exit(1)
 	}
 
-	// ── Create InstanceManager ────────────────────
-	mgr := server.NewInstanceManager(dashboardHTML)
+	// ── Load providers from TOML ──────────────────────
+	providers, err := config.LoadAllTomlProviders(xdgPath)
+	if err != nil {
+		slog.Error("failed to load providers from TOML", "error", err)
+		os.Exit(1)
+	}
+	if len(providers) == 0 {
+		slog.Error("no providers found in TOML config")
+		os.Exit(1)
+	}
 
-	if fromToml {
-		// ── TOML mode: multiple providers ────────────
-		providers, err := config.LoadAllTomlProviders(source)
-		if err != nil {
-			slog.Error("failed to load providers from TOML", "error", err)
-			os.Exit(1)
-		}
-		if len(providers) == 0 {
-			slog.Error("no providers found in TOML config")
-			os.Exit(1)
-		}
-		for name, cfg := range providers {
-			// Apply provider filter if set
-			if providerFilter != "" && name != providerFilter {
-				slog.Debug("skipping provider (filtered by --provider)", "name", name)
-				continue
+	// ── Create ProviderRouter ─────────────────────────
+	router := server.NewProviderRouter(dashboardHTML)
+
+	// Use the first provider's port as the shared server port
+	for name, cfg := range providers {
+			// Set the shared server port from first provider's config
+			if port == 0 && cfg.Port > 0 {
+				port = cfg.Port
 			}
-
-			server.ApplyLogLevel(cfg.LogLevel)
-
-			// Load API keys from encrypted store or env (before validation)
-			keys, keyNames := loadKeysForProvider(name, cfg)
-			cfg.Keys = keys
-			cfg.KeyNames = keyNames
-
-			if err := cfg.Validate(); err != nil {
-				slog.Error("invalid provider config", "provider", name, "error", err)
-				continue
-			}
-			if len(keys) > 0 {
-				keypool.SetEncryptionKey(cfg.EncryptionKey)
-			}
-			pool := keypool.NewKeyPool(keys, keyNames)
-			inst := mgr.AddInstance(name, cfg, pool)
-			_ = inst // tag not used on instance yet
-			slog.Info("provider configured",
-				"name", name,
-				"port", cfg.Port,
-				"keys", len(keys),
-				"target", cfg.TargetBase,
-			)
+		// Apply provider filter if set
+		if providerFilter != "" && name != providerFilter {
+			slog.Debug("skipping provider (filtered by --provider)", "name", name)
+			continue
 		}
 
-		// Warn if filter was set but no provider matched
-		if providerFilter != "" {
-			found := false
-			for _, n := range mgr.InstanceNames() {
-				if n == providerFilter {
-					found = true
-					break
-				}
-			}
-			if !found {
-				slog.Warn("no provider matched --provider filter", "provider", providerFilter)
-			}
-		}
-	} else {
-		// ── .env mode: single provider (backward compat) ──
-		if providerFilter != "" {
-			slog.Warn("--provider filter ignored in .env mode (single provider only)")
-		}
-		cfg, pool := server.LoadConfig()
 		server.ApplyLogLevel(cfg.LogLevel)
-		mgr.AddInstance("default", cfg, pool)
-		slog.Info("provider configured (from .env)",
-			"port", cfg.Port,
-			"keys", len(pool.Keys()),
+
+		// Load API keys from encrypted store or env
+		keys, keyNames := loadKeysForProvider(name, cfg)
+		cfg.Keys = keys
+		cfg.KeyNames = keyNames
+
+		if err := cfg.Validate(); err != nil {
+			slog.Error("invalid provider config", "provider", name, "error", err)
+			continue
+		}
+		if len(keys) > 0 {
+			keypool.SetEncryptionKey(cfg.EncryptionKey)
+		}
+		pool := keypool.NewKeyPool(keys, keyNames)
+		if err := router.AddProvider(name, cfg, pool); err != nil {
+			slog.Error("failed to add provider", "provider", name, "error", err)
+			continue
+		}
+		slog.Info("provider configured",
+			"name", name,
+			"keys", len(keys),
 			"target", cfg.TargetBase,
 		)
 	}
 
-	// ── Start all instances ───────────────────────
-	started := len(mgr.InstanceNames())
-	if started == 0 {
-		slog.Error("no instances configured, exiting")
-		os.Exit(1)
-	}
-	if err := mgr.StartAll(host); err != nil {
-		slog.Error("some instances failed to start", "error", err)
+	// Warn if filter was set but no provider matched
+	if providerFilter != "" {
+		found := false
+		for _, n := range router.ProviderNames() {
+			if n == providerFilter {
+				found = true
+				break
+			}
+		}
+		if !found {
+			slog.Warn("no provider matched --provider filter", "provider", providerFilter)
+		}
 	}
 
-	// ── Write PID file ─────────────────────────────
+	// ── Start server ──────────────────────────────────
+	started := len(router.ProviderNames())
+	if started == 0 {
+		slog.Error("no providers configured, exiting")
+		os.Exit(1)
+	}
+	if err := router.Start(host, port); err != nil {
+		slog.Error("failed to start server", "error", err)
+		os.Exit(1)
+	}
+
+	// ── Write PID file ─────────────────────────────────
 	pidData := []byte(fmt.Sprintf("%d\n", os.Getpid()))
 	if err := os.WriteFile(pidFileName, pidData, 0644); err != nil {
 		slog.Warn("failed to write PID file", "error", err)
@@ -141,21 +127,21 @@ func startServer(dashboardHTML string, isLocal, isNetwork bool, processTag, prov
 		}
 	}()
 
-	// ── Background tasks ──────────────────────────
-	mgr.StartBackgroundTasks()
+	// ── Background tasks ──────────────────────────────
+	router.StartBackgroundTasks()
 
-	// ── Signal handling ───────────────────────────
+	// ── Signal handling ───────────────────────────────
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 	<-sigCh
 	slog.Info("shutting down")
 
-	// ── Graceful shutdown ─────────────────────────
+	// ── Graceful shutdown ─────────────────────────────
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	mgr.Shutdown(ctx)
-	mgr.Stop()
-	slog.Info("all instances stopped gracefully")
+	router.Shutdown(ctx)
+	router.Stop()
+	slog.Info("server stopped gracefully")
 }
 
 // loadKeysForProvider loads API keys for a provider from its keys file or env.
@@ -173,7 +159,6 @@ func loadKeysForProvider(name string, cfg *config.Config) (keys, names []string)
 			_ = keypool.SaveKeysToFile(cfg.KeysFile, keys, names)
 			return keys, names
 		}
-		// Custom path exists but no keys found — fall through to standard store
 	}
 
 	// Fallback: try the standard encrypted store path: <XDG>/keys/<name>.enc

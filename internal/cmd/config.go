@@ -30,8 +30,7 @@ var configInitCmd = &cobra.Command{
 	Long: `Create a default configuration file at the XDG config directory
 (or a custom path via --path).
 
-If the file already exists, the command refuses to overwrite it.
-If a .env file is detected in the current directory, a migration hint is printed.`,
+If the file already exists, the command refuses to overwrite it.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		path, _ := cmd.Flags().GetString("path")
 		if path == "" {
@@ -59,13 +58,11 @@ If a .env file is detected in the current directory, a migration hint is printed
 				"example-a": {
 					Target:      "https://api.example-a.com/v1",
 					Genai:       "https://api.example-a.com",
-					Port:        3001,
 					CooldownSec: 60,
 					MaxRetries:  3,
 				},
 				"example-b": {
 					Target:      "https://api.example-b.com/v1",
-					Port:        3002,
 					CooldownSec: 30,
 					MaxRetries:  5,
 				},
@@ -80,11 +77,6 @@ If a .env file is detected in the current directory, a migration hint is printed
 		fmt.Println("  alvus key add <provider> <api-key>  # to add API keys")
 		fmt.Println("  alvus start                         # to start the proxy")
 
-		// Migration hint if .env exists
-		if _, err := os.Stat(".env"); err == nil {
-			fmt.Println("检测到 .env 文件，建议运行 'alvus config init' 迁移到 TOML 格式")
-		}
-
 		return nil
 	},
 }
@@ -92,13 +84,11 @@ If a .env file is detected in the current directory, a migration hint is printed
 var configViewCmd = &cobra.Command{
 	Use:   "view",
 	Short: "Display current configuration",
-	Long: `Detect the active configuration source (config.toml or .env)
-and print its contents in a human-readable format.`,
+	Long: `Read the TOML configuration file and print its contents in a human-readable format.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Detect config source
-		source, fromToml, err := config.DetectConfigSource("")
+		source, err := config.XDGConfigPath()
 		if err != nil {
-			return fmt.Errorf("failed to detect configuration source: %w", err)
+			return fmt.Errorf("failed to determine XDG config path: %w", err)
 		}
 
 		// Check if the source file actually exists
@@ -106,18 +96,12 @@ and print its contents in a human-readable format.`,
 			return fmt.Errorf("no configuration file found (looked at %s)", source)
 		}
 
-		// Load config from the detected source
-		var cfg *config.Config
-		if fromToml {
-			cfg, err = config.LoadToml(source)
-		} else {
-			cfg, err = config.Load(source)
-		}
+		// Load config from TOML
+		cfg, err := config.LoadToml(source)
 		if err != nil {
 			return fmt.Errorf("failed to load configuration: %w", err)
 		}
 
-		// Print in human-readable format
 		sanitized := cfg.Sanitized()
 		fmt.Printf("Configuration source: %s\n", source)
 		fmt.Printf("Port: %d\n", sanitized.Port)

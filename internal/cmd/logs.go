@@ -5,12 +5,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"sort"
 	"time"
 
 	"alvus/internal/config"
-
 	"github.com/spf13/cobra"
 )
 
@@ -19,94 +16,55 @@ func init() {
 }
 
 var logsCmd = &cobra.Command{
-	Use:   "logs [provider]",
-	Short: "Show request logs from running instances",
-	Long:  `Display recent request logs from one or all running instances.`,
-	Args:  cobra.MaximumNArgs(1),
+	Use:   "logs",
+	Short: "Show request logs",
+	Long:  `Display recent request logs from the running alvus server.`,
+	Args:  cobra.MaximumNArgs(0),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		source, fromToml, err := config.DetectConfigSource("")
-		if err != nil {
-			return fmt.Errorf("failed to detect config source: %w", err)
-		}
-		if !fromToml {
-			return fmt.Errorf("no TOML configuration found (expected at %s)", source)
-		}
-		if _, statErr := os.Stat(source); statErr != nil {
-			return fmt.Errorf("no configuration file found at %s", source)
+		client := &http.Client{Timeout: 5 * time.Second}
+
+		// Determine the server port from config or default
+		port := adminPort
+		if xdgPath, err := config.XDGConfigPath(); err == nil {
+			if providers, err := config.LoadAllTomlProviders(xdgPath); err == nil {
+				for _, cfg := range providers {
+					if cfg.Port > 0 {
+						port = cfg.Port
+						break
+					}
+				}
+			}
 		}
 
-		providers, err := config.LoadAllTomlProviders(source)
+		logURL := fmt.Sprintf("http://127.0.0.1:%d/logs", port)
+		resp, err := client.Get(logURL)
 		if err != nil {
-			return fmt.Errorf("failed to load providers: %w", err)
+			return fmt.Errorf("server not reachable at %s: %w", logURL, err)
 		}
-		if len(providers) == 0 {
-			fmt.Println("No providers configured")
+		defer resp.Body.Close()
+
+		body, _ := io.ReadAll(resp.Body)
+
+		var entries []interface{}
+		if err := json.Unmarshal(body, &entries); err != nil {
+			return fmt.Errorf("failed to parse logs: %w", err)
+		}
+
+		if len(entries) == 0 {
+			fmt.Println("No log entries")
 			return nil
 		}
 
-		// Filter by provider name if specified
-		filterName := ""
-		if len(args) > 0 {
-			filterName = args[0]
-			if _, ok := providers[filterName]; !ok {
-				return fmt.Errorf("provider %q not found in configuration", filterName)
-			}
-		}
-
-		client := &http.Client{Timeout: 5 * time.Second}
-
-		names := make([]string, 0, len(providers))
-		for n := range providers {
-			names = append(names, n)
-		}
-		sort.Strings(names)
-
-		found := false
-		for _, name := range names {
-			if filterName != "" && name != filterName {
+		for _, entry := range entries {
+			entryMap, ok := entry.(map[string]interface{})
+			if !ok {
 				continue
 			}
-
-			cfg := providers[name]
-			logURL := fmt.Sprintf("http://127.0.0.1:%d/logs", cfg.Port)
-			resp, err := client.Get(logURL)
-			if err != nil {
-				fmt.Printf("Provider %q (port %d): not reachable\n", name, cfg.Port)
-				continue
-			}
-
-			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
-
-			var entries []interface{}
-			if err := json.Unmarshal(body, &entries); err != nil {
-				fmt.Printf("Provider %q (port %d): failed to parse logs\n", name, cfg.Port)
-				continue
-			}
-
-			found = true
-			if len(entries) == 0 {
-				fmt.Printf("Provider %q (port %d): no log entries\n", name, cfg.Port)
-				continue
-			}
-
-			fmt.Printf("=== Provider %q (port %d) ===\n", name, cfg.Port)
-			for _, entry := range entries {
-				entryMap, ok := entry.(map[string]interface{})
-				if !ok {
-					continue
-				}
-				// Reformat: show timestamp, method, path, status
-				method := getStrField(entryMap, "method", "?")
-				path := getStrField(entryMap, "url", "?")
-				status := getStrField(entryMap, "status", "?")
-				ts := getStrField(entryMap, "timestamp", "?")
-				fmt.Printf("  [%s] %s %s -> %s\n", ts, method, path, status)
-			}
-		}
-
-		if !found && filterName != "" {
-			fmt.Printf("No logs available for provider %q\n", filterName)
+			method := getStrField(entryMap, "method", "?")
+			path := getStrField(entryMap, "url", "?")
+			status := getStrField(entryMap, "status", "?")
+			ts := getStrField(entryMap, "timestamp", "?")
+			fmt.Printf("  [%s] %s %s -> %s\n", ts, method, path, status)
 		}
 
 		return nil

@@ -58,16 +58,9 @@ Example:
 			return fmt.Errorf("--port/-p is required")
 		}
 
-		// Detect config source; if not TOML, use XDG path
-		source, fromToml, err := config.DetectConfigSource("")
+		source, err := config.XDGConfigPath()
 		if err != nil {
-			return fmt.Errorf("failed to detect config source: %w", err)
-		}
-		if !fromToml {
-			source, err = config.XDGConfigPath()
-			if err != nil {
-				return fmt.Errorf("cannot determine XDG config path: %w", err)
-			}
+			return fmt.Errorf("cannot determine XDG config path: %w", err)
 		}
 
 		// Load existing config or create a fresh one
@@ -122,12 +115,9 @@ Example output:
     nvidia      https://integrate.api.nvidia.com/v1               3002
     sensenova   https://api.sensenova.com/v1                      3001`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		source, fromToml, err := config.DetectConfigSource("")
+		source, err := config.XDGConfigPath()
 		if err != nil {
-			return fmt.Errorf("failed to detect config source: %w", err)
-		}
-		if !fromToml {
-			return fmt.Errorf("no TOML configuration found (expected at %s)", source)
+			return fmt.Errorf("failed to determine XDG config path: %w", err)
 		}
 		if _, statErr := os.Stat(source); statErr != nil {
 			return fmt.Errorf("no configuration file found at %s", source)
@@ -175,12 +165,9 @@ Example:
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
 
-		source, fromToml, err := config.DetectConfigSource("")
+		source, err := config.XDGConfigPath()
 		if err != nil {
-			return fmt.Errorf("failed to detect config source: %w", err)
-		}
-		if !fromToml {
-			return fmt.Errorf("no TOML configuration found (expected at %s)", source)
+			return fmt.Errorf("failed to determine XDG config path: %w", err)
 		}
 		if _, statErr := os.Stat(source); statErr != nil {
 			return fmt.Errorf("no configuration file found at %s", source)

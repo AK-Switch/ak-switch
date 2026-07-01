@@ -1,10 +1,8 @@
 package main
 
 import (
-	"bytes"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -30,7 +28,7 @@ func resetConfigEnv() {
 func TestConfigInit_CreatesFile(t *testing.T) {
 	resetConfigEnv()
 	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.toml")
+	configPath := tmpDir + "/config.toml"
 
 	oldArgs := os.Args
 	t.Cleanup(func() { os.Args = oldArgs })
@@ -58,30 +56,22 @@ func TestConfigInit_CreatesFile(t *testing.T) {
 }
 
 // TestConfigView_ShowsConfig verifies that "alvus config view" prints
-// the current configuration from a .env file.
+// the current configuration from config.toml.
 func TestConfigView_ShowsConfig(t *testing.T) {
 	resetConfigEnv()
-	// Ensure XDG config does not exist, otherwise it would take priority
-	xdgPath, _ := config.XDGConfigPath()
-	if _, err := os.Stat(xdgPath); err == nil {
-		t.Skipf("XDG config exists at %s, would interfere with config view test", xdgPath)
-	}
-
 	tmpDir := t.TempDir()
-	oldDir, _ := os.Getwd()
-	t.Cleanup(func() { os.Chdir(oldDir) })
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatal(err)
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+
+	xdgPath, err := config.XDGConfigPath()
+	if err != nil {
+		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
 
-	// Create a .env file in the temp directory
-	envContent := `TARGET_BASE_URL=https://api.example.com
-GENAI_BASE_URL=https://ai.example.com
-API_KEYS=nvapi-key1-abcdef
-`
-	envPath := filepath.Join(tmpDir, ".env")
-	if err := os.WriteFile(envPath, []byte(envContent), 0644); err != nil {
-		t.Fatal(err)
+	oldArgs := os.Args
+	t.Cleanup(func() { os.Args = oldArgs })
+	os.Args = []string{"alvus", "config", "init", "-p", xdgPath}
+	if err := cmd.Execute(""); err != nil {
+		t.Fatalf("config init failed: %v", err)
 	}
 
 	// Capture stdout
@@ -89,85 +79,21 @@ API_KEYS=nvapi-key1-abcdef
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	oldArgs := os.Args
-	t.Cleanup(func() { os.Args = oldArgs })
 	os.Args = []string{"alvus", "config", "view"}
-
-	err := cmd.Execute("")
+	err = cmd.Execute("")
 	w.Close()
 	os.Stdout = oldStdout
 
 	out, _ := io.ReadAll(r)
-
 	if err != nil {
 		t.Fatalf("config view failed: %v", err)
 	}
 
 	output := string(out)
-
-	// Verify output contains expected fields
 	if !strings.Contains(output, "Configuration source:") {
-		t.Error("config view output missing 'Configuration source:'")
+		t.Error("output missing 'Configuration source:'")
 	}
-	if !strings.Contains(output, "https://api.example.com") {
-		t.Error("config view output missing target URL")
-	}
-	if !strings.Contains(output, "nvap...cdef") {
-		t.Error("config view output missing masked API key, got:", output)
-	}
-}
-
-// TestConfigInit_DetectsEnvFile verifies that "alvus config init" prints
-// a migration hint when a .env file exists in the current directory.
-func TestConfigInit_DetectsEnvFile(t *testing.T) {
-	resetConfigEnv()
-	tmpDir := t.TempDir()
-	oldDir, _ := os.Getwd()
-	t.Cleanup(func() { os.Chdir(oldDir) })
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatal(err)
-	}
-
-	// Create .env in the temp directory
-	envContent := `TARGET_BASE_URL=https://example.com
-GENAI_BASE_URL=https://ai.example.com
-API_KEYS=nvapi-key1
-`
-	envPath := filepath.Join(tmpDir, ".env")
-	if err := os.WriteFile(envPath, []byte(envContent), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	configPath := filepath.Join(tmpDir, "config.toml")
-
-	// Capture stdout
-	var buf bytes.Buffer
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	oldArgs := os.Args
-	t.Cleanup(func() { os.Args = oldArgs })
-	os.Args = []string{"alvus", "config", "init", "-p", configPath}
-
-	err := cmd.Execute("")
-	w.Close()
-	os.Stdout = oldStdout
-
-	_, _ = io.Copy(&buf, r)
-
-	if err != nil {
-		t.Fatalf("config init failed: %v", err)
-	}
-
-	// Check file was created
-	if _, statErr := os.Stat(configPath); os.IsNotExist(statErr) {
-		t.Error("config.toml was not created")
-	}
-
-	// Check for migration hint about .env
-	output := buf.String()
-	if !strings.Contains(output, ".env") {
-		t.Error("config init output should mention .env migration hint")
+	if !strings.Contains(output, "api.example-a.com") {
+		t.Errorf("output missing expected URL: %s", output)
 	}
 }

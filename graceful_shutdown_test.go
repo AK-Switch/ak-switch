@@ -111,18 +111,17 @@ func TestGracefulShutdown_BackgroundGoroutinesStop(t *testing.T) {
 		CooldownSec: 60,
 	}
 	pool := keypool.NewKeyPool([]string{"test-key"}, nil)
-	state := server.NewServerState(cfg, pool, "", "")
+	state := server.NewServerState("test", cfg, pool, "", "")
+	_ = state
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		server.WatchEnvFile(state, stop)
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		server.RefreshKeyPoolMetrics(state, stop)
 	}()
 
 	// Give them a moment to start

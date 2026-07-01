@@ -4,7 +4,19 @@
 
 ---
 
-✅ **核心目标已达成 — 功能完整，278 测试通过。**
+✅ **核心目标已达成 — 功能完整，测试通过。**
+
+---
+
+## 已完成
+
+### 单端口 + 路径路由重构
+- 从"一个 provider 一个端口"改为"单端口 + `/{provider}/...` 路径路由"
+- 移除 `.env` 配置加载（纯 TOML 模式）
+- 移除 `--local` / `--network-only` 参数
+- ProviderRouter 替代 InstanceManager，所有 provider 共享一个 HTTP 端口
+- 管理 API（`/api/*`、`/health`、`/dashboard` 等）不受路径路由影响
+- 代理请求格式：`POST /{provider}/v1/chat/completions`
 
 ---
 

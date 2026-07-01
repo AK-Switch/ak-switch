@@ -5,12 +5,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"sort"
 	"time"
 
 	"alvus/internal/config"
-
 	"github.com/spf13/cobra"
 )
 
@@ -20,90 +17,70 @@ func init() {
 
 var statusCmd = &cobra.Command{
 	Use:   "status",
-	Short: "Show runtime status of all instances",
-	Long:  `Query all running instances and display their health, key counts, and request statistics.`,
+	Short: "Show runtime status",
+	Long:  `Query the running alvus server and display health, key counts, and request statistics.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Detect config source
-		source, fromToml, err := config.DetectConfigSource("")
-		if err != nil {
-			return fmt.Errorf("failed to detect config source: %w", err)
-		}
-		if !fromToml {
-			return fmt.Errorf("no TOML configuration found (expected at %s)", source)
-		}
-		if _, statErr := os.Stat(source); statErr != nil {
-			return fmt.Errorf("no configuration file found at %s", source)
-		}
-
-		// Load all providers
-		providers, err := config.LoadAllTomlProviders(source)
-		if err != nil {
-			return fmt.Errorf("failed to load providers: %w", err)
-		}
-		if len(providers) == 0 {
-			fmt.Println("No providers configured")
-			return nil
-		}
-
 		client := &http.Client{Timeout: 3 * time.Second}
 
-		// Sort names for deterministic output
-		names := make([]string, 0, len(providers))
-		for n := range providers {
-			names = append(names, n)
+		// Determine the server port from config or default
+		port := adminPort
+		if xdgPath, err := config.XDGConfigPath(); err == nil {
+			if providers, err := config.LoadAllTomlProviders(xdgPath); err == nil {
+				for _, cfg := range providers {
+					if cfg.Port > 0 {
+						port = cfg.Port
+						break
+					}
+				}
+			}
 		}
-		sort.Strings(names)
 
-		fmt.Printf("%-15s %-6s %-10s %-12s %-10s %s\n", "PROVIDER", "PORT", "HEALTH", "ACTIVE KEYS", "REQUESTS", "UPTIME")
-		fmt.Println("-----------------------------------------------------------------------------")
+		// Query health endpoint on the server port
+		healthURL := fmt.Sprintf("http://127.0.0.1:%d/health", port)
+		resp, err := client.Get(healthURL)
+		if err != nil {
+			return fmt.Errorf("server not reachable at %s: %w", healthURL, err)
+		}
+		defer resp.Body.Close()
 
-		for _, name := range names {
-			cfg := providers[name]
-			port := cfg.Port
-			health := "unknown"
-			activeKeys := "?"
-			requests := "?"
-			uptime := "?"
+		body, _ := io.ReadAll(resp.Body)
+		var healthData map[string]interface{}
+		if err := json.Unmarshal(body, &healthData); err != nil {
+			return fmt.Errorf("failed to parse health response: %w", err)
+		}
 
-			// Query health endpoint
-			healthURL := fmt.Sprintf("http://127.0.0.1:%d/health", port)
-			healthResp, err := client.Get(healthURL)
-			if err == nil {
-				healthResp.Body.Close()
-				health = "UP"
-				if healthResp.StatusCode == http.StatusOK {
-					health = "UP"
-				} else {
-					health = fmt.Sprintf("ERR-%d", healthResp.StatusCode)
-				}
-			} else {
-				health = "DOWN"
-			}
+		fmt.Printf("Server: http://127.0.0.1:%d\n", adminPort)
+		fmt.Printf("Status: %s\n", healthData["status"])
 
-			// Query stats endpoint
-			if health == "UP" {
-				statsURL := fmt.Sprintf("http://127.0.0.1:%d/api/stats", port)
-				statsResp, err := client.Get(statsURL)
-				if err == nil {
-					var stats map[string]interface{}
-					body, _ := io.ReadAll(statsResp.Body)
-					json.Unmarshal(body, &stats)
-					statsResp.Body.Close()
+		if providers, ok := healthData["providers"]; ok {
+			fmt.Printf("Providers: %v\n", providers)
+		}
 
-					if v, ok := stats["active_keys"]; ok {
-						activeKeys = fmt.Sprintf("%v", v)
-					}
-					if v, ok := stats["total_requests"]; ok {
-						requests = fmt.Sprintf("%v", v)
-					}
-					if v, ok := stats["uptime_seconds"]; ok {
-						secs := v.(float64)
-						uptime = fmt.Sprintf("%.0fs", secs)
+		if details, ok := healthData["details"]; ok {
+			if det, ok2 := details.(map[string]interface{}); ok2 {
+				for name, info := range det {
+					if inf, ok3 := info.(map[string]interface{}); ok3 {
+						fmt.Printf("  %s: keys=%v, cb=%v\n",
+							name, inf["keys"], inf["upstream_cb_state"])
 					}
 				}
 			}
+		}
 
-			fmt.Printf("%-15s %-6d %-10s %-12s %-10s %s\n", name, port, health, activeKeys, requests, uptime)
+		// Query stats endpoint
+		statsURL := fmt.Sprintf("http://127.0.0.1:%d/api/stats", port)
+		statsResp, err := client.Get(statsURL)
+		if err == nil {
+			statsBody, _ := io.ReadAll(statsResp.Body)
+			statsResp.Body.Close()
+			var stats map[string]interface{}
+			if err := json.Unmarshal(statsBody, &stats); err == nil {
+				fmt.Printf("Requests: %v (success: %v, failed: %v)\n",
+					stats["total_requests"], stats["successful_requests"], stats["failed_requests"])
+				fmt.Printf("Active keys: %v, Cooling: %v, Disabled: %v\n",
+					stats["active_keys"], stats["cooling_keys"], stats["disabled_keys"])
+				fmt.Printf("Uptime: %vs\n", stats["uptime_seconds"])
+			}
 		}
 
 		return nil

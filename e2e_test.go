@@ -76,7 +76,7 @@ func TestFullE2E_RealUserSimulation(t *testing.T) {
 
 	// ── 4. alvus start ──────────────────────────────────
 	t.Log("4. alvus start")
-	server := exec.Command(bin, "start", "--local")
+	server := exec.Command(bin, "start")
 	var serverStderr bytes.Buffer
 	server.Stderr = &serverStderr
 	if err := server.Start(); err != nil {
@@ -92,7 +92,7 @@ func TestFullE2E_RealUserSimulation(t *testing.T) {
 
 	// ── 6. Proxy a request ──────────────────────────────
 	t.Log("6. proxy request /chat/completions")
-	resp, err := http.Get("http://127.0.0.1:19901/chat/completions")
+	resp, err := http.Get("http://127.0.0.1:19901/e2e-test/chat/completions")
 	if err != nil {
 		t.Fatalf("proxy request failed: %v", err)
 	}

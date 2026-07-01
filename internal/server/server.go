@@ -7,8 +7,6 @@ import (
 	"alvus/internal/keypool"
 	"alvus/internal/logstore"
 	alvusmetrics "alvus/internal/metrics"
-	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -17,7 +15,6 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // ProxyEngine holds the HTTP client and circuit breakers for upstream proxy requests.
@@ -74,33 +71,37 @@ func NewProxyEngine(cfg *config.Config, numKeys int) *ProxyEngine {
 	}
 }
 
-// ServerState holds all server-wide state: configuration, key pool, HTTP client,
+// ServerState holds per-provider runtime state: configuration, key pool, HTTP client,
 // metrics, circuit breakers, and the request multiplexer.
 type ServerState struct {
-	mu              sync.RWMutex
-	cfg             *config.Config
-	pool            *keypool.KeyPool
-	mux             *http.ServeMux
-	proxy           *ProxyEngine
-	logs            *logstore.LogStore
-	startTime       time.Time
-	metrics         *alvusmetrics.Metrics
-	metricsRegistry *prometheus.Registry
+	mu                  sync.RWMutex
+	name                string
+	cfg                 *config.Config
+	pool                *keypool.KeyPool
+	mux                 *http.ServeMux
+	proxy               *ProxyEngine
+	logs                *logstore.LogStore
+	startTime           time.Time
+	metrics             *alvusmetrics.Metrics
+	metricsRegistry     *prometheus.Registry
 	lastHealthCheckTime time.Time
 	lastHealthCheckOK   bool
 	dashboardHTML       string
-	keysFile        string // path to keys.json for key persistence
+	keysFile            string // path to keys.json for key persistence
 }
 
-// NewServerState creates a fully initialized ServerState, registering all HTTP routes.
-func NewServerState(cfg *config.Config, pool *keypool.KeyPool, dashboardHTML string, keysFile string) *ServerState {
+// NewServerState creates a fully initialized ServerState for a single provider.
+func NewServerState(name string, cfg *config.Config, pool *keypool.KeyPool, dashboardHTML string, keysFile string) *ServerState {
 	reg, m := alvusmetrics.NewRegistry()
 
 	// Initialize ProxyEngine with HTTP client and circuit breakers
 	proxy := NewProxyEngine(cfg, len(pool.Keys()))
 
 	s := &ServerState{
-		cfg: cfg, pool: pool, mux: http.NewServeMux(),
+		name:            name,
+		cfg:             cfg,
+		pool:            pool,
+		mux:             http.NewServeMux(),
 		proxy:           proxy,
 		logs:            logstore.New(10000),
 		startTime:       time.Now(),
@@ -109,22 +110,6 @@ func NewServerState(cfg *config.Config, pool *keypool.KeyPool, dashboardHTML str
 		dashboardHTML:   dashboardHTML,
 		keysFile:        keysFile,
 	}
-	s.mux.HandleFunc("/health", s.healthHandler)
-	s.mux.HandleFunc("/logs", s.logsHandler)
-	s.mux.HandleFunc("/dashboard", s.dashboardHandler)
-	s.mux.HandleFunc("/clear", s.clearHandler)
-	s.mux.HandleFunc("/api/config", s.configHandler)
-	s.mux.HandleFunc("/api/keys", s.keysHandler)
-	s.mux.HandleFunc("POST /api/keys/{index}/disable", s.disableKeyHandler)
-	s.mux.HandleFunc("PUT /api/keys/{index}/cooldown", s.cooldownKeyHandler)
-	s.mux.HandleFunc("DELETE /api/keys/{index}", s.deleteKeyHandler)
-	s.mux.HandleFunc("GET /api/stats", s.statsHandler)
-	s.mux.HandleFunc("POST /api/reload", s.reloadHandler)
-	s.mux.HandleFunc("/api/log-level", s.logLevelHandler)
-	s.mux.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
-	// Block service worker requests to prevent 404s and unnecessary upstream proxying
-	s.mux.HandleFunc("/sw.js", s.swHandler)
-	s.mux.HandleFunc("/", s.proxyHandler)
 	return s
 }
 
@@ -226,82 +211,9 @@ func isAlphaNum(c byte) bool {
 	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
 }
 
-// mergeKeysFromFile loads keys from KeysFile if configured.
-// If autoCreate is true and the file doesn't exist, it creates the file from env keys.
-// Returns the effective keys and names (from file if successful, otherwise from env).
-func mergeKeysFromFile(cfg *config.Config, autoCreate bool) (keys, names []string) {
-	keys = cfg.Keys
-	names = cfg.KeyNames
-	if cfg.KeysFile != "" {
-		fileKeys, fileNames, err := keypool.LoadKeysFromFile(cfg.KeysFile)
-		if err != nil {
-			slog.Warn("load keys file failed, using env keys", "path", cfg.KeysFile, "error", err)
-		} else if fileKeys != nil {
-			// File exists - use its keys as the source of truth
-			keys = fileKeys
-			names = fileNames
-		} else if autoCreate {
-			// File not found - create it from env keys
-			if err := keypool.SaveKeysToFile(cfg.KeysFile, keys, names); err != nil {
-				slog.Warn("create keys file failed", "path", cfg.KeysFile, "error", err)
-			}
-		}
-	}
-	return keys, names
-}
-
-// LoadConfig loads configuration from .env and validates it.
-func LoadConfig() (*config.Config, *keypool.KeyPool) {
-	cfg, err := config.Load(".env")
-	if err != nil {
-		slog.Error(err.Error())
-		var cfgErr *config.ConfigError
-		if errors.As(err, &cfgErr) && cfgErr.Category == "system" {
-			os.Exit(config.ExitCodeSystem)
-		} else {
-			os.Exit(config.ExitCodeConfig)
-		}
-	}
-	if err := cfg.Validate(); err != nil {
-		slog.Error(err.Error())
-		os.Exit(config.ExitCodeConfig)
-	}
-	keys, names := mergeKeysFromFile(cfg, true)
-	cfg.Keys = keys
-	cfg.KeyNames = names
-	slog.Info("config loaded", "keys", len(cfg.Keys), "target", cfg.TargetBase, "genai", cfg.GenaiBase)
-
-	// Set encryption key for key pool persistence
-	keypool.SetEncryptionKey(cfg.EncryptionKey)
-
-	return cfg, keypool.NewKeyPool(keys, names)
-}
-
-// ReloadConfig reloads configuration from .env after clearing environment variables.
-func ReloadConfig() (*config.Config, *keypool.KeyPool, error) {
-	for _, k := range []string{
-		"API_KEYS", "KEY", "KEY1", "KEY2", "KEY3", "KEY4", "KEY5", "KEYA", "KEYB",
-		"TARGET_BASE_URL", "GENAI_BASE_URL", "PORT", "COOLDOWN_SEC", "ADMIN_TOKEN",
-		"MAX_RETRIES", "DISABLE_THINKING", "GENAI_MODEL", "LOG_LEVEL",
-		"BACKOFF_CAP_SEC", "BACKOFF_MULTIPLIER", "CB_RESET_SEC", "UPSTREAM_CB_THRESHOLD",
-			"KEYS_FILE", "KEYS_ENCRYPTION_KEY",
-		"HEALTH_CHECK_INTERVAL_SEC", "HEALTH_CHECK_PATH", "HEALTH_CHECK_TIMEOUT_SEC",
-	} {
-		os.Unsetenv(k)
-	}
-	cfg, err := config.Load(".env")
-	if err != nil {
-		return nil, nil, err
-	}
-	if err := cfg.Validate(); err != nil {
-		return nil, nil, fmt.Errorf("reloaded config invalid: %w", err)
-	}
-	keys, names := mergeKeysFromFile(cfg, false)
-	cfg.Keys = keys
-	cfg.KeyNames = names
-
-	// Sync encryption key for key pool persistence
-	keypool.SetEncryptionKey(cfg.EncryptionKey)
-
-	return cfg, keypool.NewKeyPool(keys, names), nil
+// RouteEntry represents a single provider's routing info.
+type RouteEntry struct {
+	Config *config.Config
+	Pool   *keypool.KeyPool
+	Proxy  *ProxyEngine
 }
