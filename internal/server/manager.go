@@ -42,6 +42,8 @@ type ProviderRouter struct {
 	dashboardHTML   string
 	stop            chan struct{}
 	wg              sync.WaitGroup
+	mux             *http.ServeMux // cached mux for Handler()
+	muxOnce         sync.Once
 }
 
 // NewProviderRouter creates a new ProviderRouter.
@@ -78,9 +80,8 @@ func (pr *ProviderRouter) AddProvider(name string, cfg *config.Config, pool *key
 func (pr *ProviderRouter) Start(host string, port int) error {
 	addr := fmt.Sprintf("%s:%d", host, port)
 
-	// Register routes
-	mux := http.NewServeMux()
-	pr.registerRoutes(mux)
+	// Use cached mux from Handler()
+	mux := pr.Handler()
 
 	pr.mu.Lock()
 	defer pr.mu.Unlock()
@@ -123,6 +124,21 @@ func (pr *ProviderRouter) registerRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /metrics", promhttp.HandlerFor(pr.metricsRegistry, promhttp.HandlerOpts{}))
 	mux.HandleFunc("/sw.js", pr.swHandler)
 	mux.HandleFunc("/", pr.proxyHandler)
+}
+
+// Handler returns the HTTP handler (mux) for use by http.Server, httptest, or Start().
+// The mux is built once and cached for the lifetime of the router.
+func (pr *ProviderRouter) Handler() *http.ServeMux {
+	pr.muxOnce.Do(func() {
+		pr.mu.Lock()
+		mux := http.NewServeMux()
+		pr.registerRoutes(mux)
+		pr.mux = mux
+		pr.mu.Unlock()
+	})
+	pr.mu.RLock()
+	defer pr.mu.RUnlock()
+	return pr.mux
 }
 
 // Shutdown gracefully shuts down the HTTP server.
