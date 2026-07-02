@@ -30,7 +30,7 @@ var startCmd = &cobra.Command{
 func startServer(dashboardHTML string, providerFilter string) {
 	// ── Default host and port ─────────────────────────
 	host := "127.0.0.1"
-	port := 0 // will be set from first provider's config
+	port := 0 // single port shared by all providers, set from first provider's config
 
 	// ── Detect config source ──────────────────────────
 	xdgPath, err := config.XDGConfigPath()
@@ -53,17 +53,19 @@ func startServer(dashboardHTML string, providerFilter string) {
 	// ── Create ProviderRouter ─────────────────────────
 	router := server.NewProviderRouter(dashboardHTML)
 
+	// Determine single port from first configured provider (before filtering)
+	for _, cfg := range providers {
+		if port == 0 && cfg.Port > 0 {
+			port = cfg.Port
+		}
+	}
+
 	for name, cfg := range providers {
-		// Apply provider filter first -- port from first matched provider
+		// Apply provider filter first
 		if providerFilter != "" && name != providerFilter {
 			slog.Debug("skipping provider (filtered by --provider)", "name", name)
 			continue
 		}
-
-		if port == 0 && cfg.Port > 0 {
-			port = cfg.Port
-		}
-		// Load API keys from encrypted store or env
 
 		server.ApplyLogLevel(cfg.LogLevel)
 
