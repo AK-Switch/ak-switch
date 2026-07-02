@@ -773,3 +773,40 @@ genai = "https://ai.example.com"
 	}
 }
 
+
+
+// ── FindServerPort ───────────────────────────────
+
+func TestFindServerPort_WithPort(t *testing.T) {
+	content := "port = 8080\n\n[provider.test]\ntarget = \"https://api.example.com\"\ngenai = \"https://ai.example.com\"\n"
+	path := writeTempToml(t, content)
+	port := FindServerPort(path)
+	if port != 8080 {
+		t.Errorf("FindServerPort() = %d, want 8080", port)
+	}
+}
+
+func TestFindServerPort_NoPort(t *testing.T) {
+	content := "port = 0\n\n[provider.test]\ntarget = \"https://api.example.com\"\ngenai = \"https://ai.example.com\"\n"
+	path := writeTempToml(t, content)
+	port := FindServerPort(path)
+	if port != 8080 {
+		t.Errorf("FindServerPort() = %d, want 8080 (default)", port)
+	}
+}
+
+func TestFindServerPort_MissingFile(t *testing.T) {
+	port := FindServerPort("/nonexistent/path/config.toml")
+	if port != 0 {
+		t.Errorf("FindServerPort() = %d, want 0", port)
+	}
+}
+
+func TestFindServerPort_FirstProviderPicked(t *testing.T) {
+	content := "port = 9999\n\n[provider.first]\ntarget = \"https://first.example.com\"\ngenai = \"https://ai.first.example.com\"\n\n[provider.second]\ntarget = \"https://second.example.com\"\ngenai = \"https://ai.second.example.com\"\n"
+	path := writeTempToml(t, content)
+	port := FindServerPort(path)
+	if port != 9999 {
+		t.Errorf("FindServerPort() = %d, want 9999", port)
+	}
+}
