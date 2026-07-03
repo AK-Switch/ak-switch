@@ -1,4 +1,4 @@
-# Alvus 负载压测
+# AK Switch 负载压测
 
 本项目使用 [Vegeta](https://github.com/tsenart/vegeta) 进行 HTTP 负载压测。
 
@@ -37,7 +37,7 @@ vegeta version
 .\test\load\run-load-test.ps1 -Scenario normal-concurrent -Target http://localhost:4000
 
 # 通过环境变量设置目标
-$env:ALVUS_TARGET = 'http://localhost:4000'
+$env:AKSWITCH_TARGET = 'http://localhost:4000'
 .\test\load\run-load-test.ps1 -Scenario normal-concurrent
 ```
 
@@ -46,7 +46,7 @@ $env:ALVUS_TARGET = 'http://localhost:4000'
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
 | `-Scenario` | 场景名：`normal-concurrent`, `all-keys-cooldown`, `upstream-flaky` | 必填 |
-| `-Target` | 目标代理地址 | `$env:ALVUS_TARGET` 或 `http://localhost:8080` |
+| `-Target` | 目标代理地址 | `$env:AKSWITCH_TARGET` 或 `http://localhost:8080` |
 | `-OutputDir` | 结果输出目录 | `test/load/results/` |
 | `-ListScenarios` | 列出可用场景 | - |
 
@@ -103,7 +103,7 @@ test/load/results/
 .\test\load\run-load-test.ps1 -Scenario all-keys-cooldown -Target http://localhost:8080
 ```
 
-**模拟方法**: 启动 Alvus 时配置上游指向一个专门返回 429 的 mock server。
+**模拟方法**: 启动 AK Switch 时配置上游指向一个专门返回 429 的 mock server。
 
 ### 3. 上游 429 抖动 (`upstream-flaky`)
 

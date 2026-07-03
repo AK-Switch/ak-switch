@@ -1,12 +1,12 @@
-// Package server provides the HTTP server, proxy, and management handlers for Alvus.
+// Package server provides the HTTP server, proxy, and management handlers for AK Switch.
 package server
 
 import (
-	"alvus/internal/circuitbreaker"
-	"alvus/internal/config"
-	"alvus/internal/keypool"
-	"alvus/internal/logstore"
-	alvusmetrics "alvus/internal/metrics"
+	"akswitch/internal/circuitbreaker"
+	"akswitch/internal/config"
+	"akswitch/internal/keypool"
+	"akswitch/internal/logstore"
+	akswitchmetrics "akswitch/internal/metrics"
 	"log/slog"
 	"net/http"
 	"os"
@@ -82,7 +82,7 @@ type ServerState struct {
 	proxy               *ProxyEngine
 	logs                *logstore.LogStore
 	startTime           time.Time
-	metrics             *alvusmetrics.Metrics
+	metrics             *akswitchmetrics.Metrics
 	metricsRegistry     *prometheus.Registry
 	lastHealthCheckTime time.Time
 	lastHealthCheckOK   bool
@@ -92,7 +92,7 @@ type ServerState struct {
 
 // NewServerState creates a fully initialized ServerState for a single provider.
 func NewServerState(name string, cfg *config.Config, pool *keypool.KeyPool, dashboardHTML string, keysFile string) *ServerState {
-	reg, m := alvusmetrics.NewRegistry()
+	reg, m := akswitchmetrics.NewRegistry()
 
 	// Initialize ProxyEngine with HTTP client and circuit breakers
 	proxy := NewProxyEngine(cfg, len(pool.Keys()))
@@ -134,7 +134,7 @@ func (s *ServerState) SetLastHealthCheck(ok bool) {
 }
 
 // Metrics returns the prometheus metrics collector.
-func (s *ServerState) Metrics() *alvusmetrics.Metrics {
+func (s *ServerState) Metrics() *akswitchmetrics.Metrics {
 	return s.metrics
 }
 

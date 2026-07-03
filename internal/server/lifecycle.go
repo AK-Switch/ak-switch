@@ -4,13 +4,13 @@ import (
 	"net/http"
 	"time"
 
-	"alvus/internal/config"
-	"alvus/internal/keypool"
-	alvusmetrics "alvus/internal/metrics"
+	"akswitch/internal/config"
+	"akswitch/internal/keypool"
+	akswitchmetrics "akswitch/internal/metrics"
 )
 
 // RefreshKeyPoolMetrics periodically updates the keypool gauge metrics.
-func RefreshKeyPoolMetrics(metrics *alvusmetrics.Metrics, pool *keypool.KeyPool, stop <-chan struct{}) {
+func RefreshKeyPoolMetrics(metrics *akswitchmetrics.Metrics, pool *keypool.KeyPool, stop <-chan struct{}) {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
@@ -26,7 +26,7 @@ func RefreshKeyPoolMetrics(metrics *alvusmetrics.Metrics, pool *keypool.KeyPool,
 
 // ActiveHealthCheck periodically probes the upstream endpoint and updates
 // the upstream circuit breaker state based on the response.
-func ActiveHealthCheck(cfg *config.Config, proxy *ProxyEngine, metrics *alvusmetrics.Metrics, hcState *ServerState, stop <-chan struct{}) {
+func ActiveHealthCheck(cfg *config.Config, proxy *ProxyEngine, metrics *akswitchmetrics.Metrics, hcState *ServerState, stop <-chan struct{}) {
 	ticker := time.NewTicker(time.Duration(cfg.HealthCheckIntervalSec) * time.Second)
 	defer ticker.Stop()
 

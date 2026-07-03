@@ -44,12 +44,12 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          go build -ldflags="-s -w" -o alvus-${{ matrix.suffix }} main.go
+          go build -ldflags="-s -w" -o akswitch-${{ matrix.suffix }} ./cmd/akswitch/
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: alvus-${{ matrix.suffix }}
-          path: alvus-${{ matrix.suffix }}
+          name: akswitch-${{ matrix.suffix }}
+          path: akswitch-${{ matrix.suffix }}
   release:
     needs: build
     runs-on: ubuntu-latest

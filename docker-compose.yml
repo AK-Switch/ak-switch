@@ -1,6 +1,6 @@
 services:
-  # ── Alvus Proxy ──────────────────────────────────────
-  alvus:
+  # ── AK Switch Proxy ────────────────────────────────────
+  akswitch:
     build: .
     ports:
       - "${PORT:-3000}:3000"
@@ -14,11 +14,11 @@ services:
       # Mount .env for hot-reload (fsnotify detects inotify changes inside container)
       - ./.env:/app/.env:ro
       # Persistent data volume for keys.json
-      - alvus-data:/app/data
+      - akswitch-data:/app/data
     working_dir: /app
     restart: unless-stopped
     networks:
-      - alvus-net
+      - akswitch-net
 
   # ── Prometheus ───────────────────────────────────────
   prometheus:
@@ -30,9 +30,9 @@ services:
       - prometheus-data:/prometheus
     restart: unless-stopped
     networks:
-      - alvus-net
+      - akswitch-net
     depends_on:
-      - alvus
+      - akswitch
 
   # ── Grafana ──────────────────────────────────────────
   grafana:
@@ -53,17 +53,17 @@ services:
       - grafana-data:/var/lib/grafana
     restart: unless-stopped
     networks:
-      - alvus-net
+      - akswitch-net
     depends_on:
       - prometheus
 
 # ── Volumes ──────────────────────────────────────────
 volumes:
-  alvus-data:
+  akswitch-data:
   prometheus-data:
   grafana-data:
 
 # ── Networks ─────────────────────────────────────────
 networks:
-  alvus-net:
+  akswitch-net:
     driver: bridge

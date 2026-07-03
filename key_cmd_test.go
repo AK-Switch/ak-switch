@@ -8,13 +8,13 @@ import (
 	"strings"
 	"testing"
 
-	"alvus/internal/config"
-	"alvus/internal/keypool"
+	"akswitch/internal/config"
+	"akswitch/internal/keypool"
 )
 
 // ── Key CRUD Acceptance Tests ─────────────────────────
 
-// TestKeyAdd_AddsKey verifies that "alvus key add <provider> <key>"
+// TestKeyAdd_AddsKey verifies that "akswitch key add <provider> <key>"
 // adds a key to the provider's encrypted key store.
 func TestKeyAdd_AddsKey(t *testing.T) {
 	resetConfigEnv()
@@ -26,14 +26,14 @@ func TestKeyAdd_AddsKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
-	runCommand(t, "alvus", "config", "init", "-p", xdgPath)
-	runCommand(t, "alvus", "provider", "add", "keytest",
+	runCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+	runCommand(t, "akswitch", "provider", "add", "keytest",
 		"--target", "https://keytest.api.com/v1",
 		"--port", "9501",
 	)
 
 	// Add a key
-	runCommand(t, "alvus", "key", "add", "keytest", "sk-test-key-12345")
+	runCommand(t, "akswitch", "key", "add", "keytest", "sk-test-key-12345")
 
 	// Verify key was added to the store
 	keysDir := filepath.Join(filepath.Dir(xdgPath), "keys")
@@ -50,7 +50,7 @@ func TestKeyAdd_AddsKey(t *testing.T) {
 	}
 }
 
-// TestKeyList_ShowsKeys verifies that "alvus key list <provider>"
+// TestKeyList_ShowsKeys verifies that "akswitch key list <provider>"
 // displays the correct key information.
 func TestKeyList_ShowsKeys(t *testing.T) {
 	resetConfigEnv()
@@ -61,15 +61,15 @@ func TestKeyList_ShowsKeys(t *testing.T) {
 	if err != nil {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
-	runCommand(t, "alvus", "config", "init", "-p", xdgPath)
-	runCommand(t, "alvus", "provider", "add", "listtest",
+	runCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+	runCommand(t, "akswitch", "provider", "add", "listtest",
 		"--target", "https://listtest.api.com/v1",
 		"--port", "9502",
 	)
 
 	// Add two keys
-	runCommand(t, "alvus", "key", "add", "listtest", "sk-list-key-aaaa")
-	runCommand(t, "alvus", "key", "add", "listtest", "sk-list-key-bbbb")
+	runCommand(t, "akswitch", "key", "add", "listtest", "sk-list-key-aaaa")
+	runCommand(t, "akswitch", "key", "add", "listtest", "sk-list-key-bbbb")
 
 	// Capture list output
 	var stdout bytes.Buffer
@@ -77,7 +77,7 @@ func TestKeyList_ShowsKeys(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	runCommand(t, "alvus", "key", "list", "listtest")
+	runCommand(t, "akswitch", "key", "list", "listtest")
 
 	w.Close()
 	os.Stdout = oldStdout
@@ -95,7 +95,7 @@ func TestKeyList_ShowsKeys(t *testing.T) {
 	}
 }
 
-// TestKeyRemove_RemovesKey verifies that "alvus key remove <provider> <index>"
+// TestKeyRemove_RemovesKey verifies that "akswitch key remove <provider> <index>"
 // removes the key at the given index.
 func TestKeyRemove_RemovesKey(t *testing.T) {
 	resetConfigEnv()
@@ -106,16 +106,16 @@ func TestKeyRemove_RemovesKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
-	runCommand(t, "alvus", "config", "init", "-p", xdgPath)
-	runCommand(t, "alvus", "provider", "add", "removetest",
+	runCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+	runCommand(t, "akswitch", "provider", "add", "removetest",
 		"--target", "https://removetest.api.com/v1",
 		"--port", "9503",
 	)
 
 	// Add two keys, then remove the first
-	runCommand(t, "alvus", "key", "add", "removetest", "sk-remove-key-1")
-	runCommand(t, "alvus", "key", "add", "removetest", "sk-remove-key-2")
-	runCommand(t, "alvus", "key", "remove", "removetest", "0")
+	runCommand(t, "akswitch", "key", "add", "removetest", "sk-remove-key-1")
+	runCommand(t, "akswitch", "key", "add", "removetest", "sk-remove-key-2")
+	runCommand(t, "akswitch", "key", "remove", "removetest", "0")
 
 	// Verify key[0] was removed (should now be "sk-remove-key-2")
 	keysDir := filepath.Join(filepath.Dir(xdgPath), "keys")
@@ -132,7 +132,7 @@ func TestKeyRemove_RemovesKey(t *testing.T) {
 	}
 }
 
-// TestKeyDisable_DisablesKey verifies that "alvus key disable <provider> <index>"
+// TestKeyDisable_DisablesKey verifies that "akswitch key disable <provider> <index>"
 // marks the key as disabled.
 func TestKeyDisable_DisablesKey(t *testing.T) {
 	resetConfigEnv()
@@ -143,15 +143,15 @@ func TestKeyDisable_DisablesKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
-	runCommand(t, "alvus", "config", "init", "-p", xdgPath)
-	runCommand(t, "alvus", "provider", "add", "disabletest",
+	runCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+	runCommand(t, "akswitch", "provider", "add", "disabletest",
 		"--target", "https://disabletest.api.com/v1",
 		"--port", "9504",
 	)
 
 	// Add a key and disable it
-	runCommand(t, "alvus", "key", "add", "disabletest", "sk-disable-key-1")
-	runCommand(t, "alvus", "key", "disable", "disabletest", "0")
+	runCommand(t, "akswitch", "key", "add", "disabletest", "sk-disable-key-1")
+	runCommand(t, "akswitch", "key", "disable", "disabletest", "0")
 
 	// Verify key is disabled
 	keysDir := filepath.Join(filepath.Dir(xdgPath), "keys")
@@ -179,14 +179,14 @@ func TestKeyRemove_InvalidIndex(t *testing.T) {
 	if err != nil {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
-	runCommand(t, "alvus", "config", "init", "-p", xdgPath)
-	runCommand(t, "alvus", "provider", "add", "errtest",
+	runCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+	runCommand(t, "akswitch", "provider", "add", "errtest",
 		"--target", "https://errtest.api.com/v1",
 		"--port", "9505",
 	)
-	runCommand(t, "alvus", "key", "add", "errtest", "sk-err-key-1")
+	runCommand(t, "akswitch", "key", "add", "errtest", "sk-err-key-1")
 
-	err = runCommand(t, "alvus", "key", "remove", "errtest", "999")
+	err = runCommand(t, "akswitch", "key", "remove", "errtest", "999")
 	if err == nil {
 		t.Fatal("expected error for out-of-range index, got nil")
 	}

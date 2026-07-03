@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"alvus/internal/config"
-	"alvus/internal/keypool"
-	"alvus/internal/utils"
+	"akswitch/internal/config"
+	"akswitch/internal/keypool"
+	"akswitch/internal/utils"
 
 	"github.com/spf13/cobra"
 )
@@ -67,8 +67,8 @@ it is created. Keys are encrypted using AES-256-GCM when KEYS_ENCRYPTION_KEY
 is set; otherwise they are stored as base64-encoded plaintext.
 
 Example:
-  alvus key add nvidia sk-xxxxxxxxxxxxxxxx
-  alvus key add nvidia sk-xxxxxxxxxxxxxxxx --name my-key`,
+  akswitch key add nvidia sk-xxxxxxxxxxxxxxxx
+  akswitch key add nvidia sk-xxxxxxxxxxxxxxxx --name my-key`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		provider := args[0]
@@ -158,11 +158,11 @@ var keyRemoveCmd = &cobra.Command{
 	Short: "Remove an API key by index",
 	Long: `Remove an API key from the provider's key store at the specified index.
 
-The index corresponds to the key's position as shown in 'alvus key list'.
+The index corresponds to the key's position as shown in 'akswitch key list'.
 This operation cannot be undone.
 
 Example:
-  alvus key remove nvidia 0`,
+  akswitch key remove nvidia 0`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		provider := args[0]
@@ -214,10 +214,10 @@ var keyDisableCmd = &cobra.Command{
 	Long: `Mark an API key as disabled at the specified index.
 
 Disabled keys are not used for new requests but remain in the key store.
-Use 'alvus key remove' to permanently remove a key.
+Use 'akswitch key remove' to permanently remove a key.
 
 Example:
-  alvus key disable nvidia 1`,
+  akswitch key disable nvidia 1`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		provider := args[0]

@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"alvus/internal/config"
+	"akswitch/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -18,7 +18,7 @@ func init() {
 var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show runtime status",
-	Long:  `Query the running alvus server and display health, key counts, and request statistics.`,
+	Long:  `Query the running akswitch server and display health, key counts, and request statistics.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client := &http.Client{Timeout: 3 * time.Second}
 

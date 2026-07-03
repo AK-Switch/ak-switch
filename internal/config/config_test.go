@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"alvus/internal/utils"
+	"akswitch/internal/utils"
 )
 
 // resetEnv cleans up all config-related env vars to prevent leakage between tests.

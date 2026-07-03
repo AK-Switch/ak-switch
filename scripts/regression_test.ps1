@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Alvus 自动回归测试
+    AK Switch 自动回归测试
 .DESCRIPTION
     测试单实例模式（回归）和管理模式（新功能），不依赖真实 API 密钥。
     所有测试在临时目录运行，不与用户真实实例冲突。
@@ -13,7 +13,7 @@
 #>
 
 param(
-    [string]$AlvusRepo = ".",
+    [string]$AkswitchRepo = ".",
     [switch]$SkipBuild,
     [switch]$Verbose,
     [string]$Tag = "test"
@@ -78,7 +78,7 @@ function Wait-ForEndpoint {
 }
 
 # 调用 HTTP GET 返回 JSON
-function Invoke-AlvusGet {
+function Invoke-AkswitchGet {
     param([string]$Url)
     try {
         $req = [System.Net.HttpWebRequest]::Create($Url)
@@ -103,7 +103,7 @@ function Invoke-AlvusGet {
 }
 
 # 调用 HTTP POST 返回 JSON
-function Invoke-AlvusPost {
+function Invoke-AkswitchPost {
     param([string]$Url, [string]$JsonBody)
     try {
         $req = [System.Net.HttpWebRequest]::Create($Url)
@@ -133,8 +133,8 @@ function Invoke-AlvusPost {
     }
 }
 
-# 启动 alvus 进程
-function Start-AlvusProcess {
+# 启动 akswitch 进程
+function Start-AkswitchProcess {
     param(
         [string]$WorkingDir,
         [string]$BinaryPath,
@@ -162,7 +162,7 @@ function Start-AlvusProcess {
 }
 
 # 安全终止测试进程（仅杀自己启动的）
-function Stop-AlvusProcess {
+function Stop-AkswitchProcess {
     param([System.Diagnostics.Process]$Proc)
     if ($Proc -and !$Proc.HasExited) {
         try { taskkill /F /T /PID $Proc.Id 2>&1 | Out-Null } catch {}
@@ -189,7 +189,7 @@ function Get-FreePort {
 function New-TestFixture {
     param([int]$Port, [hashtable]$EnvVars = @{})
 
-    $tmpDir = Join-Path $env:TEMP "alvus-test-$([System.IO.Path]::GetRandomFileName())"
+    $tmpDir = Join-Path $env:TEMP "akswitch-test-$([System.IO.Path]::GetRandomFileName())"
     New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
 
     # 写入 .env
@@ -227,9 +227,9 @@ function Remove-TestFixture {
 function Test-SingleInstanceMode {
     Write-TestHeader "单实例模式（回归测试）"
 
-    $binary = Join-Path $AlvusRepo "alvus.exe"
+    $binary = Join-Path $AkswitchRepo "akswitch.exe"
     if (-not (Test-Path $binary)) {
-        Write-TestSkipped "全部" "alvus.exe 不存在，请先 build"
+        Write-TestSkipped "全部" "akswitch.exe 不存在，请先 build"
         return
     }
 
@@ -238,17 +238,17 @@ function Test-SingleInstanceMode {
     $port = Get-FreePort
     $tmpDir = New-TestFixture -Port $port
     try {
-        $proc = Start-AlvusProcess -WorkingDir $tmpDir -BinaryPath $binary -ArgString "-local" -Tag $Tag
+        $proc = Start-AkswitchProcess -WorkingDir $tmpDir -BinaryPath $binary -ArgString "-local" -Tag $Tag
         $ready = Wait-ForEndpoint -Url "http://127.0.0.1:$port/health" -TimeoutSeconds 5
         if ($ready) {
-            $health = Invoke-AlvusGet "http://127.0.0.1:$port/health"
+            $health = Invoke-AkswitchGet "http://127.0.0.1:$port/health"
             Write-TestResult "启动就绪" ($health.StatusCode -eq 200) "健康检查响应: $($health.StatusCode)"
             try { $j = $health.Body | ConvertFrom-Json; Write-TestResult "健康检查返回 JSON" ($j.status -eq "ok" -and $j.keys -eq 3) "status=$($j.status), keys=$($j.keys)" } catch { Write-TestResult "健康检查返回 JSON" $false "JSON 解析失败: $_" }
         } else {
             Write-TestResult "启动就绪" $false "5 秒内未监听 $port"
         }
     } finally {
-        Stop-AlvusProcess $proc
+        Stop-AkswitchProcess $proc
         Remove-TestFixture $tmpDir
     }
 
@@ -257,25 +257,25 @@ function Test-SingleInstanceMode {
     $port = Get-FreePort
     $tmpDir = New-TestFixture -Port $port
     try {
-        $proc = Start-AlvusProcess -WorkingDir $tmpDir -BinaryPath $binary -ArgString "-local" -Tag $Tag
+        $proc = Start-AkswitchProcess -WorkingDir $tmpDir -BinaryPath $binary -ArgString "-local" -Tag $Tag
         $ready = Wait-ForEndpoint "http://127.0.0.1:$port/health" -TimeoutSeconds 5
         if (-not $ready) { Write-TestResult "启动" $false "5秒超时"; return }
 
-        $logs = Invoke-AlvusGet "http://127.0.0.1:$port/logs"
+        $logs = Invoke-AkswitchGet "http://127.0.0.1:$port/logs"
         Write-TestResult "/logs 返回 200" ($logs.StatusCode -eq 200) ""
 
-        $config = Invoke-AlvusGet "http://127.0.0.1:$port/api/config"
+        $config = Invoke-AkswitchGet "http://127.0.0.1:$port/api/config"
         Write-TestResult "/api/config 返回 200" ($config.StatusCode -eq 200) ""
 
-        $dash = Invoke-AlvusGet "http://127.0.0.1:$port/dashboard"
+        $dash = Invoke-AkswitchGet "http://127.0.0.1:$port/dashboard"
         Write-TestResult "/dashboard 返回 200" ($dash.StatusCode -eq 200) ""
         Write-TestResult "Dashboard 含 HTML" ($dash.Body -match "<!DOCTYPE html>") ""
 
         # sw.js 应该返回 204
-        $sw = Invoke-AlvusGet "http://127.0.0.1:$port/sw.js"
+        $sw = Invoke-AkswitchGet "http://127.0.0.1:$port/sw.js"
         Write-TestResult "/sw.js 返回 204" ($sw.StatusCode -eq 204) "实际: $($sw.StatusCode)"
     } finally {
-        Stop-AlvusProcess $proc
+        Stop-AkswitchProcess $proc
         Remove-TestFixture $tmpDir
     }
 
@@ -284,7 +284,7 @@ function Test-SingleInstanceMode {
     $port = Get-FreePort
     $tmpDir = New-TestFixture -Port $port
     try {
-        $proc = Start-AlvusProcess -WorkingDir $tmpDir -BinaryPath $binary -ArgString "-local" -Tag $Tag
+        $proc = Start-AkswitchProcess -WorkingDir $tmpDir -BinaryPath $binary -ArgString "-local" -Tag $Tag
         if (-not (Wait-ForEndpoint "http://127.0.0.1:$port/health" 5)) { Write-TestResult "启动" $false; return }
 
         # 修改配置
@@ -294,7 +294,7 @@ function Test-SingleInstanceMode {
             keys       = @("new-key-1", "new-key-2")
         } | ConvertTo-Json
 
-        $post = Invoke-AlvusPost -Url "http://127.0.0.1:$port/api/config" -JsonBody $newConfig
+        $post = Invoke-AkswitchPost -Url "http://127.0.0.1:$port/api/config" -JsonBody $newConfig
 
         if ($post.StatusCode -eq 200) {
             Write-TestResult "配置写入成功" $true "POST /api/config → 200"
@@ -306,12 +306,12 @@ function Test-SingleInstanceMode {
         }
 
         # 验证写入
-        $get = Invoke-AlvusGet "http://127.0.0.1:$port/api/config"
+        $get = Invoke-AkswitchGet "http://127.0.0.1:$port/api/config"
         $j = $get.Body | ConvertFrom-Json
         Write-TestResult "配置 targetBase 已更新" ($j.targetBase -eq "https://new-api.example.com/v1") "期望: new-api.example.com, 实际: $($j.targetBase)"
         Write-TestResult "配置 keys 数正确" ($j.keys.Count -eq 2) "期望 2, 实际 $($j.keys.Count) ($($j.keys -join ','))"
     } finally {
-        Stop-AlvusProcess $proc
+        Stop-AkswitchProcess $proc
         Remove-TestFixture $tmpDir
     }
 
@@ -320,16 +320,16 @@ function Test-SingleInstanceMode {
     $port = Get-FreePort
     $tmpDir = New-TestFixture -Port $port -EnvVars @{ API_KEYS = "nvapi-real-key-that-should-be-masked" }
     try {
-        $proc = Start-AlvusProcess -WorkingDir $tmpDir -BinaryPath $binary -ArgString "-local" -Tag $Tag
+        $proc = Start-AkswitchProcess -WorkingDir $tmpDir -BinaryPath $binary -ArgString "-local" -Tag $Tag
         if (-not (Wait-ForEndpoint "http://127.0.0.1:$port/health" 5)) { Write-TestResult "启动" $false; return }
 
-        $config = Invoke-AlvusGet "http://127.0.0.1:$port/api/config"
+        $config = Invoke-AkswitchGet "http://127.0.0.1:$port/api/config"
         $j = $config.Body | ConvertFrom-Json
         $firstKey = $j.keys[0]
         $masked = $firstKey -match "\.\.\."
         Write-TestResult "API key 已掩码" $masked "返回: $firstKey"
     } finally {
-        Stop-AlvusProcess $proc
+        Stop-AkswitchProcess $proc
         Remove-TestFixture $tmpDir
     }
 
@@ -338,13 +338,13 @@ function Test-SingleInstanceMode {
     $port = Get-FreePort
     $tmpDir = New-TestFixture -Port $port
     try {
-        $proc = Start-AlvusProcess -WorkingDir $tmpDir -BinaryPath $binary -ArgString "-local" -Tag $Tag
+        $proc = Start-AkswitchProcess -WorkingDir $tmpDir -BinaryPath $binary -ArgString "-local" -Tag $Tag
         if (-not (Wait-ForEndpoint "http://127.0.0.1:$port/health" 5)) { Write-TestResult "启动" $false; return }
 
-        $clear = Invoke-AlvusPost -Url "http://127.0.0.1:$port/clear" -JsonBody ""
+        $clear = Invoke-AkswitchPost -Url "http://127.0.0.1:$port/clear" -JsonBody ""
         Write-TestResult "日志清空 200" ($clear.StatusCode -eq 200) "实际: $($clear.StatusCode)"
     } finally {
-        Stop-AlvusProcess $proc
+        Stop-AkswitchProcess $proc
         Remove-TestFixture $tmpDir
     }
 }
@@ -354,9 +354,9 @@ function Test-SingleInstanceMode {
 function Test-ManageMode {
     Write-TestHeader "管理模式"
 
-    $binary = Join-Path $AlvusRepo "alvus.exe"
+    $binary = Join-Path $AkswitchRepo "akswitch.exe"
     if (-not (Test-Path $binary)) {
-        Write-TestSkipped "全部" "alvus.exe 不存在"
+        Write-TestSkipped "全部" "akswitch.exe 不存在"
         return
     }
 
@@ -364,7 +364,7 @@ function Test-ManageMode {
     Write-Host "  ── Test 1: 正常启动多实例 ──" -ForegroundColor Magenta
     $port1 = Get-FreePort
     $port2 = Get-FreePort
-    $tmpDir = Join-Path $env:TEMP "alvus-test-manager-$([System.IO.Path]::GetRandomFileName())"
+    $tmpDir = Join-Path $env:TEMP "akswitch-test-manager-$([System.IO.Path]::GetRandomFileName())"
     New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
 
     $manageJson = @"
@@ -378,7 +378,7 @@ function Test-ManageMode {
     Write-Utf8File "$tmpDir\manage.json" $manageJson
 
     try {
-        $proc = Start-AlvusProcess -WorkingDir $tmpDir -BinaryPath $binary -ArgString "--manage manage.json" -Tag $Tag
+        $proc = Start-AkswitchProcess -WorkingDir $tmpDir -BinaryPath $binary -ArgString "--manage manage.json" -Tag $Tag
         Start-Sleep -Seconds 2
 
         $aReady = Wait-ForEndpoint -Url "http://127.0.0.1:$port1/health" -TimeoutSeconds 5
@@ -388,21 +388,21 @@ function Test-ManageMode {
         Write-TestResult "Provider B 就绪" $bReady "port $port2"
 
         if ($aReady) {
-            $h = Invoke-AlvusGet "http://127.0.0.1:$port1/health"
+            $h = Invoke-AkswitchGet "http://127.0.0.1:$port1/health"
             Write-TestResult "Provider A 健康检查" ($h.StatusCode -eq 200) "status=$($h.StatusCode)"
         }
         if ($bReady) {
-            $h = Invoke-AlvusGet "http://127.0.0.1:$port2/health"
+            $h = Invoke-AkswitchGet "http://127.0.0.1:$port2/health"
             Write-TestResult "Provider B 健康检查" ($h.StatusCode -eq 200) "status=$($h.StatusCode)"
         }
     } finally {
-        Stop-AlvusProcess $proc
+        Stop-AkswitchProcess $proc
         Remove-TestFixture $tmpDir
     }
 
     # ── Test 2: 无效 manage.json 路径 ──
     Write-Host "  ── Test 2: 非法配置文件路径 ──" -ForegroundColor Magenta
-    $tmpDir = Join-Path $env:TEMP "alvus-test-badconfig-$([System.IO.Path]::GetRandomFileName())"
+    $tmpDir = Join-Path $env:TEMP "akswitch-test-badconfig-$([System.IO.Path]::GetRandomFileName())"
     New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
     try {
         $psi = New-Object System.Diagnostics.ProcessStartInfo
@@ -417,13 +417,13 @@ function Test-ManageMode {
         $exited = $proc.WaitForExit(5000)
         Write-TestResult "非法路径退出码非零" ($proc.ExitCode -ne 0) "exit code = $($proc.ExitCode)"
     } finally {
-        Stop-AlvusProcess $proc
+        Stop-AkswitchProcess $proc
         Remove-TestFixture $tmpDir
     }
 
     # ── Test 3: 无效 JSON ──
     Write-Host "  ── Test 3: 非法 JSON 配置 ──" -ForegroundColor Magenta
-    $tmpDir = Join-Path $env:TEMP "alvus-test-badjson-$([System.IO.Path]::GetRandomFileName())"
+    $tmpDir = Join-Path $env:TEMP "akswitch-test-badjson-$([System.IO.Path]::GetRandomFileName())"
     New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
     try {
         [System.IO.File]::WriteAllText("$tmpDir\bad.json", "this is not json", [System.Text.Encoding]::UTF8)
@@ -439,7 +439,7 @@ function Test-ManageMode {
         $exited = $proc.WaitForExit(5000)
         Write-TestResult "非法 JSON 退出码非零" ($proc.ExitCode -ne 0) "exit code = $($proc.ExitCode)"
     } finally {
-        Stop-AlvusProcess $proc
+        Stop-AkswitchProcess $proc
         Remove-TestFixture $tmpDir
     }
 }
@@ -449,28 +449,28 @@ function Test-ManageMode {
 function Test-ProcessManagement {
     Write-TestHeader "子进程生命周期"
 
-    $binary = Join-Path $AlvusRepo "alvus.exe"
+    $binary = Join-Path $AkswitchRepo "akswitch.exe"
     if (-not (Test-Path $binary)) {
-        Write-TestSkipped "全部" "alvus.exe 不存在"
+        Write-TestSkipped "全部" "akswitch.exe 不存在"
         return
     }
 
     $port = Get-FreePort
-    $tmpDir = Join-Path $env:TEMP "alvus-test-procmgmt-$([System.IO.Path]::GetRandomFileName())"
+    $tmpDir = Join-Path $env:TEMP "akswitch-test-procmgmt-$([System.IO.Path]::GetRandomFileName())"
     New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
 
     Write-Utf8File "$tmpDir\manage.json" "{ `"providers`": [{ `"name`": `"demo`", `"target_url`": `"https://demo.test.com/v1`", `"api_keys`": [`"demo-key-1`"], `"port`": $port }] }"
 
     try {
-        $mgrProc = Start-AlvusProcess -WorkingDir $tmpDir -BinaryPath $binary -ArgString "--manage manage.json" -Tag $Tag
+        $mgrProc = Start-AkswitchProcess -WorkingDir $tmpDir -BinaryPath $binary -ArgString "--manage manage.json" -Tag $Tag
         $ready = Wait-ForEndpoint -Url "http://127.0.0.1:$port/health" -TimeoutSeconds 5
         Write-TestResult "子进程启动" $ready "port $port"
 
         if ($ready) {
-            # 找子进程 PID（通过父进程 ID 查找，不枚举系统所有 alvus）
+            # 找子进程 PID（通过父进程 ID 查找，不枚举系统所有 akswitch）
             $childPids = @()
             try {
-                $children = Get-CimInstance -ClassName Win32_Process -Filter "Name = 'alvus.exe'" -ErrorAction SilentlyContinue
+                $children = Get-CimInstance -ClassName Win32_Process -Filter "Name = 'akswitch.exe'" -ErrorAction SilentlyContinue
                 foreach ($child in $children) {
                     $mgrPid = $mgrProc.Id
                     if ($child.ParentProcessId -eq $mgrPid) {
@@ -503,18 +503,18 @@ function Test-ProcessManagement {
         }
 
         # 停止 manager
-        Stop-AlvusProcess $mgrProc
+        Stop-AkswitchProcess $mgrProc
         Start-Sleep -Seconds 1
 
         $stillRunning = $false
         try {
-            $residual = Invoke-AlvusGet "http://127.0.0.1:$port/health" -TimeoutSeconds 1
+            $residual = Invoke-AkswitchGet "http://127.0.0.1:$port/health" -TimeoutSeconds 1
             if ($residual.StatusCode -gt 0) { $stillRunning = $true }
         } catch {}
         Write-TestResult "Manager 停止后子进程也停止" (-not $stillRunning) ""
 
     } finally {
-        Stop-AlvusProcess $mgrProc
+        Stop-AkswitchProcess $mgrProc
         Remove-TestFixture $tmpDir
     }
 }
@@ -524,9 +524,9 @@ function Test-ProcessManagement {
 function Test-ProcessIsolation {
     Write-TestHeader "进程隔离"
 
-    $binary = Join-Path $AlvusRepo "alvus.exe"
+    $binary = Join-Path $AkswitchRepo "akswitch.exe"
     if (-not (Test-Path $binary)) {
-        Write-TestSkipped "全部" "alvus.exe 不存在"
+        Write-TestSkipped "全部" "akswitch.exe 不存在"
         return
     }
 
@@ -535,15 +535,15 @@ function Test-ProcessIsolation {
     $port = Get-FreePort
     $tmpDir = New-TestFixture -Port $port
     try {
-        $proc = Start-AlvusProcess -WorkingDir $tmpDir -BinaryPath $binary -ArgString "-local" -Tag $Tag
+        $proc = Start-AkswitchProcess -WorkingDir $tmpDir -BinaryPath $binary -ArgString "-local" -Tag $Tag
         $ready = Wait-ForEndpoint -Url "http://127.0.0.1:$port/health" -TimeoutSeconds 5
         Write-TestResult "-tag 启动健康检查" $ready "port $port, tag=$Tag"
         if ($ready) {
-            $health = Invoke-AlvusGet "http://127.0.0.1:$port/health"
+            $health = Invoke-AkswitchGet "http://127.0.0.1:$port/health"
             Write-TestResult "-tag 实例正常响应" ($health.StatusCode -eq 200) "status=$($health.StatusCode)"
         }
     } finally {
-        Stop-AlvusProcess $proc
+        Stop-AkswitchProcess $proc
         Remove-TestFixture $tmpDir
     }
 
@@ -553,7 +553,7 @@ function Test-ProcessIsolation {
     $tmpDir = New-TestFixture -Port $port
     try {
         # 第一个实例正常启动
-        $proc1 = Start-AlvusProcess -WorkingDir $tmpDir -BinaryPath $binary -ArgString "-local" -Tag $Tag
+        $proc1 = Start-AkswitchProcess -WorkingDir $tmpDir -BinaryPath $binary -ArgString "-local" -Tag $Tag
         $ready1 = Wait-ForEndpoint -Url "http://127.0.0.1:$port/health" -TimeoutSeconds 5
         Write-TestResult "首个实例启动" $ready1 "port $port"
 
@@ -573,19 +573,19 @@ function Test-ProcessIsolation {
         Write-TestResult "端口冲突拒绝启动（退出码非零）" ($proc2.ExitCode -ne 0) "exit=$($proc2.ExitCode), stderr=$stderr"
         if ($hasPortConflict) { Write-TestResult "错误信息提示端口冲突" $true "包含 '端口.*已被占用'" }
     } finally {
-        Stop-AlvusProcess $proc1
-        Stop-AlvusProcess $proc2
+        Stop-AkswitchProcess $proc1
+        Stop-AkswitchProcess $proc2
         Remove-TestFixture $tmpDir
     }
 
     # ── Test 3: manage 模式子进程继承 tag ──
     Write-Host "  ── Test 3: manage 子进程继承 tag ──" -ForegroundColor Magenta
     $port = Get-FreePort
-    $tmpDir = Join-Path $env:TEMP "alvus-test-tag-inherit-$([System.IO.Path]::GetRandomFileName())"
+    $tmpDir = Join-Path $env:TEMP "akswitch-test-tag-inherit-$([System.IO.Path]::GetRandomFileName())"
     New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
     Write-Utf8File "$tmpDir\manage.json" "{ `"providers`": [{ `"name`": `"tag-test`", `"target_url`": `"https://tag-test.example.com/v1`", `"api_keys`": [`"tag-key-1`"], `"port`": $port }] }"
     try {
-        $mgrProc = Start-AlvusProcess -WorkingDir $tmpDir -BinaryPath $binary -ArgString "--manage manage.json" -Tag $Tag
+        $mgrProc = Start-AkswitchProcess -WorkingDir $tmpDir -BinaryPath $binary -ArgString "--manage manage.json" -Tag $Tag
         $ready = Wait-ForEndpoint -Url "http://127.0.0.1:$port/health" -TimeoutSeconds 5
         Write-TestResult "manage 子进程就绪" $ready "port $port"
 
@@ -595,7 +595,7 @@ function Test-ProcessIsolation {
             $childHasTag = $false
             try {
                 # 用 WMI 查子进程的命令行参数
-                $children = Get-CimInstance -ClassName Win32_Process -Filter "Name = 'alvus.exe'" -ErrorAction SilentlyContinue
+                $children = Get-CimInstance -ClassName Win32_Process -Filter "Name = 'akswitch.exe'" -ErrorAction SilentlyContinue
                 foreach ($child in $children) {
                     if ($child.CommandLine -match "-tag\s+$Tag" -and $child.ProcessId -ne $mgrProc.Id) {
                         $childFound = $true
@@ -613,7 +613,7 @@ function Test-ProcessIsolation {
             Write-TestResult "子进程命令行含 -tag $Tag" $childHasTag "tag=$Tag"
         }
     } finally {
-        Stop-AlvusProcess $mgrProc
+        Stop-AkswitchProcess $mgrProc
         Remove-TestFixture $tmpDir
     }
 }
@@ -621,15 +621,15 @@ function Test-ProcessIsolation {
 # ── 主流程 ──────────────────────────────────────
 
 Write-Host "╔══════════════════════════════════════════╗" -ForegroundColor Cyan
-Write-Host "║     Alvus 回归测试套件                    ║" -ForegroundColor Cyan
+Write-Host "║     AK Switch 回归测试套件               ║" -ForegroundColor Cyan
 Write-Host "╚══════════════════════════════════════════╝" -ForegroundColor Cyan
 
 # Step 1: Build
-$binary = Join-Path $AlvusRepo "alvus.exe"
+$binary = Join-Path $AkswitchRepo "akswitch.exe"
 if (-not $SkipBuild) {
-    Write-Host "`n📦 编译 alvus.exe ..." -ForegroundColor Yellow
-    Push-Location $AlvusRepo
-    $buildResult = go build -o alvus.exe ./cmd/alvus/ 2>&1
+    Write-Host "`n📦 编译 akswitch.exe ..." -ForegroundColor Yellow
+    Push-Location $AkswitchRepo
+    $buildResult = go build -o akswitch.exe ./cmd/akswitch/ 2>&1
     Pop-Location
     if ($LASTEXITCODE -ne 0) {
         Write-Host "❌ 编译失败: $buildResult" -ForegroundColor Red

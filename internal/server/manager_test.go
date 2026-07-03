@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"alvus/internal/config"
-	"alvus/internal/keypool"
+	"akswitch/internal/config"
+	"akswitch/internal/keypool"
 )
 
 // ── Test: Multi-Provider Single Port ─────────────────

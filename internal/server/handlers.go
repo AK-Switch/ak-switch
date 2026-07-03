@@ -1,11 +1,11 @@
 package server
 
 import (
-	"alvus/internal/circuitbreaker"
-	"alvus/internal/config"
-	"alvus/internal/keypool"
-	alvusmetrics "alvus/internal/metrics"
-	"alvus/internal/utils"
+	"akswitch/internal/circuitbreaker"
+	"akswitch/internal/config"
+	"akswitch/internal/keypool"
+	akswitchmetrics "akswitch/internal/metrics"
+	"akswitch/internal/utils"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -393,7 +393,7 @@ func (pr *ProviderRouter) handleSuccess(w http.ResponseWriter, ps *ProviderState
 	pr.logs.Append(buildLogEntry(ps, key, idx, method, target, resp.StatusCode, len(bodyBytes), start, attempt+1))
 	slog.Info("proxy success", "provider", ps.Name, "method", method, "url", target, "status", resp.StatusCode, "key_index", idx, "key_name", pool.Name(idx), "attempt", attempt+1)
 	slog.Debug("proxy response debug", "status", resp.StatusCode, "duration_ms", time.Since(start).Seconds()*1000, "retries", attempt+1)
-	pr.recordProxyMetrics(method, alvusmetrics.StatusLabel(resp.StatusCode), fmt.Sprintf("%d", idx), start)
+	pr.recordProxyMetrics(method, akswitchmetrics.StatusLabel(resp.StatusCode), fmt.Sprintf("%d", idx), start)
 }
 
 // ── Proxy Helpers ──────────────────────────────────────

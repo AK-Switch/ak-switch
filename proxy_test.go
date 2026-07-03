@@ -1,9 +1,9 @@
 package main
 
 import (
-	"alvus/internal/config"
-	"alvus/internal/keypool"
-	"alvus/internal/server"
+	"akswitch/internal/config"
+	"akswitch/internal/keypool"
+	"akswitch/internal/server"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -22,9 +22,9 @@ import (
 // Helpers
 // ---------------------------------------------------------------------------
 
-// setupAlvus creates a mock upstream and an Alvus test server, returning both.
+// setupServer creates a mock upstream and an AK Switch test server, returning both.
 // The caller must close both servers.
-func setupAlvus(tb testing.TB, upstream *httptest.Server, poolKeys []string, maxRetries, cooldownSec int) *httptest.Server {
+func setupServer(tb testing.TB, upstream *httptest.Server, poolKeys []string, maxRetries, cooldownSec int) *httptest.Server {
 	tb.Helper()
 	cfg := &config.Config{
 		TargetBase:  upstream.URL,
@@ -75,10 +75,10 @@ func TestProxyBasicForward(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	alvus := setupAlvus(t, upstream, []string{"test-key-a", "test-key-b", "test-key-c"}, 10, 60)
-	defer alvus.Close()
+	srv := setupServer(t, upstream, []string{"test-key-a", "test-key-b", "test-key-c"}, 10, 60)
+	defer srv.Close()
 
-	resp, err := http.Get(alvus.URL + "/test/v1/models")
+	resp, err := http.Get(srv.URL + "/test/v1/models")
 	if err != nil {
 		t.Fatalf("GET /v1/models: %v", err)
 	}
@@ -113,10 +113,10 @@ func TestProxyAuthHeader(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	alvus := setupAlvus(t, upstream, []string{"test-key-a", "test-key-b", "test-key-c"}, 10, 60)
-	defer alvus.Close()
+	srv := setupServer(t, upstream, []string{"test-key-a", "test-key-b", "test-key-c"}, 10, 60)
+	defer srv.Close()
 
-	resp, err := http.Get(alvus.URL + "/test/v1/models")
+	resp, err := http.Get(srv.URL + "/test/v1/models")
 	if err != nil {
 		t.Fatalf("GET /v1/models: %v", err)
 	}
@@ -150,11 +150,11 @@ func TestProxyKeyRotation(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	alvus := setupAlvus(t, upstream, []string{"test-key-a", "test-key-b", "test-key-c"}, 10, 60)
-	defer alvus.Close()
+	srv := setupServer(t, upstream, []string{"test-key-a", "test-key-b", "test-key-c"}, 10, 60)
+	defer srv.Close()
 
 	for i := 0; i < 2; i++ {
-		resp, err := http.Get(alvus.URL + "/test/v1/models")
+		resp, err := http.Get(srv.URL + "/test/v1/models")
 		if err != nil {
 			t.Fatalf("request %d: %v", i, err)
 		}
@@ -184,10 +184,10 @@ func TestProxyRetryAfter429(t *testing.T) {
 	))
 	defer upstream.Close()
 
-	alvus := setupAlvus(t, upstream, []string{"test-key-a", "test-key-b", "test-key-c"}, 10, 60)
-	defer alvus.Close()
+	srv := setupServer(t, upstream, []string{"test-key-a", "test-key-b", "test-key-c"}, 10, 60)
+	defer srv.Close()
 
-	resp, err := http.Get(alvus.URL + "/test/v1/models")
+	resp, err := http.Get(srv.URL + "/test/v1/models")
 	if err != nil {
 		t.Fatalf("GET /v1/models: %v", err)
 	}
@@ -215,10 +215,10 @@ func TestProxyDisableOn401(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	alvus := setupAlvus(t, upstream, []string{"test-key-a", "test-key-b", "test-key-c"}, 10, 60)
-	defer alvus.Close()
+	srv := setupServer(t, upstream, []string{"test-key-a", "test-key-b", "test-key-c"}, 10, 60)
+	defer srv.Close()
 
-	resp, err := http.Get(alvus.URL + "/test/v1/models")
+	resp, err := http.Get(srv.URL + "/test/v1/models")
 	if err != nil {
 		t.Fatalf("GET /v1/models: %v", err)
 	}
@@ -239,10 +239,10 @@ func TestProxyRetryOn503(t *testing.T) {
 	))
 	defer upstream.Close()
 
-	alvus := setupAlvus(t, upstream, []string{"test-key-a", "test-key-b", "test-key-c"}, 10, 60)
-	defer alvus.Close()
+	srv := setupServer(t, upstream, []string{"test-key-a", "test-key-b", "test-key-c"}, 10, 60)
+	defer srv.Close()
 
-	resp, err := http.Get(alvus.URL + "/test/v1/models")
+	resp, err := http.Get(srv.URL + "/test/v1/models")
 	if err != nil {
 		t.Fatalf("GET /v1/models: %v", err)
 	}
@@ -265,10 +265,10 @@ func TestProxyAllKeysExhausted(t *testing.T) {
 
 	// With 3 keys and MaxRetries=3, each key gets exactly one attempt,
 	// all keys briefly cooled -> loop ends -> 503.
-	alvus := setupAlvus(t, upstream, []string{"key-a", "key-b", "key-c"}, 3, 2)
-	defer alvus.Close()
+	srv := setupServer(t, upstream, []string{"key-a", "key-b", "key-c"}, 3, 2)
+	defer srv.Close()
 
-	resp, err := http.Get(alvus.URL + "/test/v1/models")
+	resp, err := http.Get(srv.URL + "/test/v1/models")
 	if err != nil {
 		t.Fatalf("GET /v1/models: %v", err)
 	}
@@ -310,10 +310,10 @@ func TestProxySSEStream(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	alvus := setupAlvus(t, upstream, []string{"test-key-a", "test-key-b", "test-key-c"}, 10, 60)
-	defer alvus.Close()
+	srv := setupServer(t, upstream, []string{"test-key-a", "test-key-b", "test-key-c"}, 10, 60)
+	defer srv.Close()
 
-	resp, err := http.Get(alvus.URL + "/test/v1/models")
+	resp, err := http.Get(srv.URL + "/test/v1/models")
 	if err != nil {
 		t.Fatalf("GET /v1/models: %v", err)
 	}
@@ -356,10 +356,10 @@ func TestProxyEmptyResponse(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	alvus := setupAlvus(t, upstream, []string{"test-key-a", "test-key-b", "test-key-c"}, 10, 60)
-	defer alvus.Close()
+	srv := setupServer(t, upstream, []string{"test-key-a", "test-key-b", "test-key-c"}, 10, 60)
+	defer srv.Close()
 
-	resp, err := http.Get(alvus.URL + "/test/v1/models")
+	resp, err := http.Get(srv.URL + "/test/v1/models")
 	if err != nil {
 		t.Fatalf("GET /v1/models: %v", err)
 	}
@@ -382,11 +382,11 @@ func TestProxyRequestBodyPassthrough(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	alvus := setupAlvus(t, upstream, []string{"test-key-a", "test-key-b", "test-key-c"}, 10, 60)
-	defer alvus.Close()
+	srv := setupServer(t, upstream, []string{"test-key-a", "test-key-b", "test-key-c"}, 10, 60)
+	defer srv.Close()
 
 	payload := `{"hello":"world"}`
-	resp, err := http.Post(alvus.URL+"/test/v1/models", "application/json", bytes.NewReader([]byte(payload)))
+	resp, err := http.Post(srv.URL+"/test/v1/models", "application/json", bytes.NewReader([]byte(payload)))
 	if err != nil {
 		t.Fatalf("POST /v1/models: %v", err)
 	}
@@ -414,7 +414,7 @@ func TestProxyWithKeyManagement(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	// Create Alvus with 1 initial key (must have at least 1 to avoid panic in Next())
+	// Create AK Switch with 1 initial key (must have at least 1 to avoid panic in Next())
 	cfg := &config.Config{
 		TargetBase:  upstream.URL,
 		GenaiBase:   upstream.URL,
@@ -427,12 +427,12 @@ func TestProxyWithKeyManagement(t *testing.T) {
 	pool := keypool.NewKeyPool([]string{"initial-key"}, nil)
 	pr := server.NewProviderRouter("")
 	pr.AddProvider("test", cfg, pool)
-	alvus := httptest.NewServer(pr.Handler())
-	defer alvus.Close()
+	srv := httptest.NewServer(pr.Handler())
+	defer srv.Close()
 
 	// Step 1: POST /api/keys to add a new key
 	addBody := `{"key":"added-key-456"}`
-	resp, err := http.Post(alvus.URL+"/api/keys", "application/json", bytes.NewReader([]byte(addBody)))
+	resp, err := http.Post(srv.URL+"/api/keys", "application/json", bytes.NewReader([]byte(addBody)))
 	if err != nil {
 		t.Fatalf("POST /api/keys: %v", err)
 	}
@@ -442,7 +442,7 @@ func TestProxyWithKeyManagement(t *testing.T) {
 	}
 
 	// Step 2: GET /api/keys to verify count increased
-	resp, err = http.Get(alvus.URL + "/api/keys")
+	resp, err = http.Get(srv.URL + "/api/keys")
 	if err != nil {
 		t.Fatalf("GET /api/keys: %v", err)
 	}
@@ -460,7 +460,7 @@ func TestProxyWithKeyManagement(t *testing.T) {
 	}
 
 	// Step 3: Proxy request still works with the updated pool
-	resp, err = http.Get(alvus.URL + "/test/v1/models")
+	resp, err = http.Get(srv.URL + "/test/v1/models")
 	if err != nil {
 		t.Fatalf("GET /v1/models after key management: %v", err)
 	}
@@ -481,10 +481,10 @@ func TestProxyMaxRetriesConfig(t *testing.T) {
 	defer upstream.Close()
 
 	// MaxRetries=2 -> only 2 attempts, then 503
-	alvus := setupAlvus(t, upstream, []string{"test-key-a", "test-key-b", "test-key-c"}, 2, 60)
-	defer alvus.Close()
+	srv := setupServer(t, upstream, []string{"test-key-a", "test-key-b", "test-key-c"}, 2, 60)
+	defer srv.Close()
 
-	resp, err := http.Get(alvus.URL + "/test/v1/models")
+	resp, err := http.Get(srv.URL + "/test/v1/models")
 	if err != nil {
 		t.Fatalf("GET /v1/models: %v", err)
 	}
@@ -519,8 +519,8 @@ func TestProxyConcurrentRequests(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	alvus := setupAlvus(t, upstream, []string{"key-a", "key-b", "key-c", "key-d", "key-e"}, 10, 60)
-	defer alvus.Close()
+	srv := setupServer(t, upstream, []string{"key-a", "key-b", "key-c", "key-d", "key-e"}, 10, 60)
+	defer srv.Close()
 
 	const concurrency = 20
 	var wg sync.WaitGroup
@@ -530,7 +530,7 @@ func TestProxyConcurrentRequests(t *testing.T) {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			resp, err := http.Get(alvus.URL + "/test/v1/models")
+			resp, err := http.Get(srv.URL + "/test/v1/models")
 			if err != nil {
 				errs <- fmt.Errorf("req %d: %v", id, err)
 				return
@@ -569,8 +569,8 @@ func TestProxyConcurrentKeyRotation(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	alvus := setupAlvus(t, upstream, []string{"key-a", "key-b", "key-c"}, 10, 60)
-	defer alvus.Close()
+	srv := setupServer(t, upstream, []string{"key-a", "key-b", "key-c"}, 10, 60)
+	defer srv.Close()
 
 	const concurrency = 30
 	var wg sync.WaitGroup
@@ -578,7 +578,7 @@ func TestProxyConcurrentKeyRotation(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			resp, err := http.Get(alvus.URL + "/test/v1/models")
+			resp, err := http.Get(srv.URL + "/test/v1/models")
 			if err != nil {
 				t.Errorf("request error: %v", err)
 				return
@@ -623,8 +623,8 @@ func TestProxyConcurrentWithCooldown(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	alvus := setupAlvus(t, upstream, []string{"key-a", "key-b", "key-c", "key-d", "key-e"}, 10, 2)
-	defer alvus.Close()
+	srv := setupServer(t, upstream, []string{"key-a", "key-b", "key-c", "key-d", "key-e"}, 10, 2)
+	defer srv.Close()
 
 	const concurrency = 15
 	var wg sync.WaitGroup
@@ -634,7 +634,7 @@ func TestProxyConcurrentWithCooldown(t *testing.T) {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			resp, err := http.Get(alvus.URL + "/test/v1/models")
+			resp, err := http.Get(srv.URL + "/test/v1/models")
 			if err != nil {
 				errs <- fmt.Errorf("req %d: %v", id, err)
 				return
@@ -673,10 +673,10 @@ func TestProxyFilterSensitiveHeaders(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	alvus := setupAlvus(t, upstream, []string{"test-key"}, 10, 60)
-	defer alvus.Close()
+	srv := setupServer(t, upstream, []string{"test-key"}, 10, 60)
+	defer srv.Close()
 
-	req, err := http.NewRequest("GET", alvus.URL+"/test/v1/models", nil)
+	req, err := http.NewRequest("GET", srv.URL+"/test/v1/models", nil)
 	if err != nil {
 		t.Fatalf("failed to create request: %v", err)
 	}
@@ -735,10 +735,10 @@ func TestProxySlogOutput(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	alvus := setupAlvus(t, upstream, []string{"test-key-a", "test-key-b"}, 10, 60)
-	defer alvus.Close()
+	srv := setupServer(t, upstream, []string{"test-key-a", "test-key-b"}, 10, 60)
+	defer srv.Close()
 
-	resp, err := http.Get(alvus.URL + "/test/v1/models")
+	resp, err := http.Get(srv.URL + "/test/v1/models")
 	if err != nil {
 		t.Fatalf("GET /v1/models: %v", err)
 	}
@@ -783,12 +783,12 @@ func TestProxyError_BadRequest(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	alvus := setupAlvus(t, upstream, []string{"test-key-a"}, 10, 60)
-	defer alvus.Close()
+	srv := setupServer(t, upstream, []string{"test-key-a"}, 10, 60)
+	defer srv.Close()
 
 	// 11MB body exceeds the 10MB MaxBytesReader limit
 	largeBody := make([]byte, 11<<20)
-	req, err := http.NewRequest("POST", alvus.URL+"/test/v1/chat/completions", bytes.NewReader(largeBody))
+	req, err := http.NewRequest("POST", srv.URL+"/test/v1/chat/completions", bytes.NewReader(largeBody))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -833,10 +833,10 @@ func TestProxyError_AllKeysInvalid(t *testing.T) {
 	defer upstream.Close()
 
 	// Only 1 key — after 401 it gets disabled, ActiveCount == 0
-	alvus := setupAlvus(t, upstream, []string{"single-key"}, 10, 60)
-	defer alvus.Close()
+	srv := setupServer(t, upstream, []string{"single-key"}, 10, 60)
+	defer srv.Close()
 
-	resp, err := http.Get(alvus.URL + "/test/v1/models")
+	resp, err := http.Get(srv.URL + "/test/v1/models")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -873,10 +873,10 @@ func TestProxyError_ExhaustedRetries(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	alvus := setupAlvus(t, upstream, []string{"key-a", "key-b", "key-c"}, 3, 2)
-	defer alvus.Close()
+	srv := setupServer(t, upstream, []string{"key-a", "key-b", "key-c"}, 3, 2)
+	defer srv.Close()
 
-	resp, err := http.Get(alvus.URL + "/test/v1/models")
+	resp, err := http.Get(srv.URL + "/test/v1/models")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -925,10 +925,10 @@ func TestProxyError_UpstreamError(t *testing.T) {
 	pool := keypool.NewKeyPool([]string{"test-key-a"}, nil)
 	pr := server.NewProviderRouter("")
 	pr.AddProvider("test", cfg, pool)
-	alvus := httptest.NewServer(pr.Handler())
-	defer alvus.Close()
+	srv := httptest.NewServer(pr.Handler())
+	defer srv.Close()
 
-	resp, err := http.Get(alvus.URL + "/test/v1/models")
+	resp, err := http.Get(srv.URL + "/test/v1/models")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1220,12 +1220,12 @@ func TestProxy_AllDisabled_Returns503(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	alvus := setupAlvus(t, upstream, []string{"key-a", "key-b"}, 10, 60)
-	defer alvus.Close()
+	srv := setupServer(t, upstream, []string{"key-a", "key-b"}, 10, 60)
+	defer srv.Close()
 
 	// Disable both keys via API
 	for _, idx := range []string{"1", "2"} {
-		resp, err := http.Post(alvus.URL+"/api/keys/"+idx+"/disable", "application/json", nil)
+		resp, err := http.Post(srv.URL+"/api/keys/"+idx+"/disable", "application/json", nil)
 		if err != nil {
 			t.Fatalf("POST /api/keys/%s/disable: %v", idx, err)
 		}
@@ -1236,7 +1236,7 @@ func TestProxy_AllDisabled_Returns503(t *testing.T) {
 	}
 
 	// Send proxy request — should get 503 immediately, not spin on retries
-	resp, err := http.Get(alvus.URL + "/test/v1/models")
+	resp, err := http.Get(srv.URL + "/test/v1/models")
 	if err != nil {
 		t.Fatalf("GET /v1/models: %v", err)
 	}
@@ -1279,10 +1279,10 @@ func TestProxy_NonRetryable400_ReturnsImmediately(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	alvus := setupAlvus(t, upstream, []string{"test-key-a", "test-key-b"}, 3, 60)
-	defer alvus.Close()
+	srv := setupServer(t, upstream, []string{"test-key-a", "test-key-b"}, 3, 60)
+	defer srv.Close()
 
-	resp, err := http.Get(alvus.URL + "/test/v1/models")
+	resp, err := http.Get(srv.URL + "/test/v1/models")
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}
@@ -1315,10 +1315,10 @@ func TestProxy_NonRetryable422_ReturnsImmediately(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	alvus := setupAlvus(t, upstream, []string{"test-key-a", "test-key-b"}, 3, 60)
-	defer alvus.Close()
+	srv := setupServer(t, upstream, []string{"test-key-a", "test-key-b"}, 3, 60)
+	defer srv.Close()
 
-	resp, err := http.Get(alvus.URL + "/test/v1/models")
+	resp, err := http.Get(srv.URL + "/test/v1/models")
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}
@@ -1360,11 +1360,11 @@ func TestProxy_NonRetryable_DoesNotPenalizeKey(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	alvus := setupAlvus(t, upstream, []string{"test-key-a"}, 1, 60)
-	defer alvus.Close()
+	srv := setupServer(t, upstream, []string{"test-key-a"}, 1, 60)
+	defer srv.Close()
 
 	// First request — should get 400
-	resp1, err := http.Get(alvus.URL + "/test/v1/models")
+	resp1, err := http.Get(srv.URL + "/test/v1/models")
 	if err != nil {
 		t.Fatalf("first request failed: %v", err)
 	}
@@ -1374,7 +1374,7 @@ func TestProxy_NonRetryable_DoesNotPenalizeKey(t *testing.T) {
 	}
 
 	// Second request — same key should still work
-	resp2, err := http.Get(alvus.URL + "/test/v1/models")
+	resp2, err := http.Get(srv.URL + "/test/v1/models")
 	if err != nil {
 		t.Fatalf("second request failed: %v", err)
 	}
@@ -1411,9 +1411,9 @@ func TestKeyPersistence_AddKeyRestart(t *testing.T) {
 	pool := keypool.NewKeyPool([]string{"initial-key"}, nil)
 	pr := server.NewProviderRouter("")
 	pr.AddProvider("test", cfg, pool)
-	alvus := httptest.NewServer(pr.Handler())
+	srv := httptest.NewServer(pr.Handler())
 
-	resp, err := http.Post(alvus.URL+"/api/keys", "application/json",
+	resp, err := http.Post(srv.URL+"/api/keys", "application/json",
 		strings.NewReader(`{"key":"persistent-key","name":"test-key"}`))
 	if err != nil {
 		t.Fatalf("POST /api/keys: %v", err)
@@ -1423,7 +1423,7 @@ func TestKeyPersistence_AddKeyRestart(t *testing.T) {
 		t.Fatalf("POST /api/keys: got status %d, want 200", resp.StatusCode)
 	}
 
-	alvus.Close()
+	srv.Close()
 
 	data, err := os.ReadFile(keysFile)
 	if err != nil {
@@ -1455,11 +1455,11 @@ func TestKeyPersistence_AddKeyRestart(t *testing.T) {
 	}
 	pr2 := server.NewProviderRouter("")
 	pr2.AddProvider("test", newCfg, restoredPool)
-	alvus2 := httptest.NewServer(pr2.Handler())
-	defer alvus2.Close()
+	srv2 := httptest.NewServer(pr2.Handler())
+	defer srv2.Close()
 
 	// Verify the key through the API
-	resp2, err := http.Get(alvus2.URL + "/api/keys")
+	resp2, err := http.Get(srv2.URL + "/api/keys")
 	if err != nil {
 		t.Fatalf("GET /api/keys: %v", err)
 	}
@@ -1504,10 +1504,10 @@ func TestKeyPersistence_DeleteKeyRestart(t *testing.T) {
 	pool := keypool.NewKeyPool([]string{"key-a", "key-b"}, nil)
 	pr := server.NewProviderRouter("")
 	pr.AddProvider("test", cfg, pool)
-	alvus := httptest.NewServer(pr.Handler())
+	srv := httptest.NewServer(pr.Handler())
 
 	// Delete key-a via API (index 1 = first key, 1-based in URL)
-	req, err := http.NewRequest(http.MethodDelete, alvus.URL+"/api/keys/1", nil)
+	req, err := http.NewRequest(http.MethodDelete, srv.URL+"/api/keys/1", nil)
 	if err != nil {
 		t.Fatalf("NewRequest: %v", err)
 	}
@@ -1520,7 +1520,7 @@ func TestKeyPersistence_DeleteKeyRestart(t *testing.T) {
 		t.Fatalf("DELETE /api/keys/1: got status %d, want 200", resp.StatusCode)
 	}
 
-	alvus.Close()
+	srv.Close()
 
 	fileKeys, _, err := keypool.LoadKeysFromFile(keysFile)
 	if err != nil {
@@ -1571,10 +1571,10 @@ func TestKeyPersistence_DisableKeyAndPersist(t *testing.T) {
 	pool := keypool.NewKeyPool([]string{"key-a", "key-b"}, nil)
 	pr := server.NewProviderRouter("")
 	pr.AddProvider("test", cfg, pool)
-	alvus := httptest.NewServer(pr.Handler())
+	srv := httptest.NewServer(pr.Handler())
 
 	// Disable key 1 (first key, 1-based in URL) via API
-	resp, err := http.Post(alvus.URL+"/api/keys/1/disable", "application/json", nil)
+	resp, err := http.Post(srv.URL+"/api/keys/1/disable", "application/json", nil)
 	if err != nil {
 		t.Fatalf("POST /api/keys/1/disable: %v", err)
 	}
@@ -1583,7 +1583,7 @@ func TestKeyPersistence_DisableKeyAndPersist(t *testing.T) {
 		t.Fatalf("got status %d, want 200", resp.StatusCode)
 	}
 
-	alvus.Close()
+	srv.Close()
 
 	store, err := keypool.LoadFullStore(keysFile)
 	if err != nil {
@@ -1641,10 +1641,10 @@ func TestKeyEncryption_EndToEnd(t *testing.T) {
 
 	pr := server.NewProviderRouter("")
 	pr.AddProvider("test", cfg, pool)
-	alvus := httptest.NewServer(pr.Handler())
+	srv := httptest.NewServer(pr.Handler())
 
 	// Add a key via API — triggers PersistKeys
-	resp, err := http.Post(alvus.URL+"/api/keys", "application/json",
+	resp, err := http.Post(srv.URL+"/api/keys", "application/json",
 		strings.NewReader(`{"key":"encrypted-key-via-api"}`))
 	if err != nil {
 		t.Fatalf("POST /api/keys: %v", err)
@@ -1654,7 +1654,7 @@ func TestKeyEncryption_EndToEnd(t *testing.T) {
 		t.Fatalf("POST /api/keys: got %d, want 200", resp.StatusCode)
 	}
 
-	alvus.Close()
+	srv.Close()
 
 	// Read the raw file — plaintext must NOT appear
 	data, err := os.ReadFile(keysFile)
@@ -1690,11 +1690,11 @@ func TestKeyEncryption_EndToEnd(t *testing.T) {
 	}
 	pr2 := server.NewProviderRouter("")
 	pr2.AddProvider("test", newCfg, restoredPool)
-	alvus2 := httptest.NewServer(pr2.Handler())
-	defer alvus2.Close()
+	srv2 := httptest.NewServer(pr2.Handler())
+	defer srv2.Close()
 
 	// Verify both keys are present via API
-	resp2, err := http.Get(alvus2.URL + "/api/keys")
+	resp2, err := http.Get(srv2.URL + "/api/keys")
 	if err != nil {
 		t.Fatalf("GET /api/keys: %v", err)
 	}
@@ -1770,16 +1770,16 @@ func TestKeyEncryption_NoEncryption_BackwardCompatible(t *testing.T) {
 	pool := keypool.NewKeyPool([]string{"plaintext-key-a"}, nil)
 	pr := server.NewProviderRouter("")
 	pr.AddProvider("test", cfg, pool)
-	alvus := httptest.NewServer(pr.Handler())
+	srv := httptest.NewServer(pr.Handler())
 
 	// Add another key
-	resp, err := http.Post(alvus.URL+"/api/keys", "application/json",
+	resp, err := http.Post(srv.URL+"/api/keys", "application/json",
 		strings.NewReader(`{"key":"plaintext-key-b"}`))
 	if err != nil {
 		t.Fatalf("POST /api/keys: %v", err)
 	}
 	resp.Body.Close()
-	alvus.Close()
+	srv.Close()
 
 	// Read raw file — keys should be plaintext
 	data, err := os.ReadFile(keysFile)
@@ -1804,16 +1804,16 @@ func TestLogEntry_HasNewFields(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	alvus := setupAlvus(t, upstream, []string{"test-key-a", "test-key-b"}, 10, 60)
-	defer alvus.Close()
+	srv := setupServer(t, upstream, []string{"test-key-a", "test-key-b"}, 10, 60)
+	defer srv.Close()
 
-	resp, err := http.Get(alvus.URL + "/test/v1/models")
+	resp, err := http.Get(srv.URL + "/test/v1/models")
 	if err != nil {
 		t.Fatalf("GET /v1/models: %v", err)
 	}
 	resp.Body.Close()
 
-	logResp, err := http.Get(alvus.URL + "/logs")
+	logResp, err := http.Get(srv.URL + "/logs")
 	if err != nil {
 		t.Fatalf("GET /logs: %v", err)
 	}
@@ -1854,10 +1854,10 @@ func TestLogEntry_ExhaustionHas503(t *testing.T) {
 	defer upstream.Close()
 
 	// MaxRetries=2, 3 keys, all 429 -> 503
-	alvus := setupAlvus(t, upstream, []string{"key-a", "key-b", "key-c"}, 2, 2)
-	defer alvus.Close()
+	srv := setupServer(t, upstream, []string{"key-a", "key-b", "key-c"}, 2, 2)
+	defer srv.Close()
 
-	resp, err := http.Get(alvus.URL + "/test/v1/models")
+	resp, err := http.Get(srv.URL + "/test/v1/models")
 	if err != nil {
 		t.Fatalf("GET /v1/models: %v", err)
 	}
@@ -1866,7 +1866,7 @@ func TestLogEntry_ExhaustionHas503(t *testing.T) {
 		t.Fatalf("expected 503, got %d", resp.StatusCode)
 	}
 
-	logResp, err := http.Get(alvus.URL + "/logs")
+	logResp, err := http.Get(srv.URL + "/logs")
 	if err != nil {
 		t.Fatalf("GET /logs: %v", err)
 	}
@@ -1911,16 +1911,16 @@ func TestLogEntry_CLIFormat(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	alvus := setupAlvus(t, upstream, []string{"test-key-a", "test-key-b"}, 10, 60)
-	defer alvus.Close()
+	srv := setupServer(t, upstream, []string{"test-key-a", "test-key-b"}, 10, 60)
+	defer srv.Close()
 
-	resp, err := http.Get(alvus.URL + "/test/v1/models")
+	resp, err := http.Get(srv.URL + "/test/v1/models")
 	if err != nil {
 		t.Fatalf("GET /v1/models: %v", err)
 	}
 	resp.Body.Close()
 
-	logResp, err := http.Get(alvus.URL + "/logs")
+	logResp, err := http.Get(srv.URL + "/logs")
 	if err != nil {
 		t.Fatalf("GET /logs: %v", err)
 	}

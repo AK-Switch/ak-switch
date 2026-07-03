@@ -3,8 +3,8 @@ package main
 import (
 	"testing"
 
-	"alvus/internal/logstore"
-	"alvus/internal/utils"
+	"akswitch/internal/logstore"
+	"akswitch/internal/utils"
 )
 
 func TestAppendAndSnapshot(t *testing.T) {

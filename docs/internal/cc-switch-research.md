@@ -61,9 +61,9 @@ base_url = "http://127.0.0.1:15721/v1"
 GOOGLE_GEMINI_BASE_URL=http://127.0.0.1:15721
 ```
 
-### How CC Switch Interacts with a Backend Proxy Like Alvus
+### How CC Switch Interacts with a Backend Proxy Like AK Switch
 
-When using CC Switch with a local backend proxy (like Alvus):
+When using CC Switch with a local backend proxy (like AK Switch):
 
 ```
 CLI Tool (Claude/Codex/Gemini)
@@ -74,13 +74,13 @@ CC Switch Local Proxy (127.0.0.1:15721)
     |-- performs API format conversion (if needed)
     |-- applies failover logic (if configured)
     v
-Provider Endpoint (e.g., Alvus running locally at 127.0.0.1:11434/v1)
+Provider Endpoint (e.g., AK Switch running locally at 127.0.0.1:11434/v1)
     |
     v
 Upstream API (Anthropic / OpenAI / etc.)
 ```
 
-**Key point**: CC Switch is configured with a "Provider" entry that points to Alvus as the backend. When routing is enabled, the CLI tool sends requests to CC Switch's local proxy, which then forwards them to Alvus. The provider's `base_url` in CC Switch must point to Alvus's address.
+**Key point**: CC Switch is configured with a "Provider" entry that points to AK Switch as the backend. When routing is enabled, the CLI tool sends requests to CC Switch's local proxy, which then forwards them to AK Switch. The provider's `base_url` in CC Switch must point to AK Switch's address.
 
 ### Request Flow (Detailed)
 
@@ -88,8 +88,8 @@ Upstream API (Anthropic / OpenAI / etc.)
 2. CC Switch identifies the request source (Claude/Codex/Gemini)
 3. CC Switch looks up the currently enabled provider for that app
 4. CC Switch records the request log and usage stats
-5. CC Switch forwards the request to the provider's actual endpoint (e.g., Alvus)
-6. Alvus further forwards the request upstream (e.g., Anthropic API)
+5. CC Switch forwards the request to the provider's actual endpoint (e.g., AK Switch)
+6. AK Switch further forwards the request upstream (e.g., Anthropic API)
 7. The response flows back through the same chain
 
 ### API Format Conversion
@@ -261,7 +261,7 @@ In **Settings > Usage** tab, filter by:
 - **Status code**: Look for 4xx/5xx errors around the time of the failure
 - **Failed requests**: Check error details by clicking individual request rows
 - **Common error patterns**:
-  - **502 Bad Gateway**: Upstream provider (e.g., Alvus) is down or unreachable
+  - **502 Bad Gateway**: Upstream provider (e.g., AK Switch) is down or unreachable
   - **401 Unauthorized**: API key expired or invalid
   - **429 Too Many Requests**: Rate limited
   - **500 Internal Server Error**: Provider-side issue
@@ -288,11 +288,11 @@ If all providers are circuit-broken, all requests will fail until the recovery w
 - Ensure routing mode hasn't left a stale `ANTHROPIC_BASE_URL` pointing to the proxy when the proxy is stopped
 - Check `~/.claude/settings.json` -- the `env.ANTHROPIC_BASE_URL` should be correct
 
-### Step 7: Verify Backend Proxy (Alvus) Is Running
+### Step 7: Verify Backend Proxy (AK Switch) Is Running
 
-- If CC Switch is routing to Alvus, ensure Alvus is actually running and healthy
-- Test Alvus directly: `curl http://127.0.0.1:11434/v1/models` (or whatever port Alvus uses)
-- Check Alvus's own logs
+- If CC Switch is routing to AK Switch, ensure AK Switch is actually running and healthy
+- Test AK Switch directly: `curl http://127.0.0.1:11434/v1/models` (or whatever port AK Switch uses)
+- Check AK Switch's own logs
 
 ### Step 8: Check for Known Proxy Issues
 
@@ -303,7 +303,7 @@ From the documentation and community reports:
 | Requests fail after enabling routing | Proxy not running / provider config wrong | Check proxy status, verify provider endpoint |
 | Config not restored after disabling routing | Proxy exited abnormally | Manually edit provider and re-save |
 | Request timeout | Network / provider server / proxy config | Check network, test direct API access |
-| 502 errors | Upstream provider down | Check if Alvus is running; check network |
+| 502 errors | Upstream provider down | Check if AK Switch is running; check network |
 | Failover not triggering | Proxy not running / takeover not enabled / no backup providers | Verify all 3 prerequisites |
 | Old token causing 401 | Token restored from backup | Edit cc-switch.db to remove old tokens |
 
@@ -410,13 +410,13 @@ Each failover event records: time, original provider, new provider, failure reas
 - **Solution**: Manually edit the provider in CC Switch, verify the API key is current, and save
 
 ### Issue: API Format Confusion (Claude + OpenAI-compatible providers)
-- **Cause**: When using Claude Code with an OpenAI-compatible provider (like Alvus), the `apiFormat` must be explicitly set (e.g., `openai_responses` or `openai_chat`)
+- **Cause**: When using Claude Code with an OpenAI-compatible provider (like AK Switch), the `apiFormat` must be explicitly set (e.g., `openai_responses` or `openai_chat`)
 - **Solution**: In provider advanced options, set the correct API format for the upstream provider
 
 ### Issue: Streaming Interruptions Mid-Response
 - **Potential causes**:
   - Stream idle timeout (default 120s general, 180s for Claude)
-  - Backend proxy (Alvus) connection timeout
+  - Backend proxy (AK Switch) connection timeout
   - Network interruption
 - **Solution**: Check timeout settings in failover config; verify backend proxy health
 
@@ -454,17 +454,17 @@ CC Switch can itself use an outbound HTTP/HTTPS proxy for external API access. I
 
 ---
 
-## 11. Summary: How CC Switch Communicates with Backend Proxies (Like Alvus)
+## 11. Summary: How CC Switch Communicates with Backend Proxies (Like AK Switch)
 
-1. **User configures a "Provider" in CC Switch** with Alvus's endpoint (e.g., `http://127.0.0.1:11434/v1`) as the `base_url`
+1. **User configures a "Provider" in CC Switch** with AK Switch's endpoint (e.g., `http://127.0.0.1:11434/v1`) as the `base_url`
 2. **User enables proxy/local routing** in CC Switch
 3. **CC Switch modifies the CLI tool's config** to point `ANTHROPIC_BASE_URL` (for Claude) to `http://127.0.0.1:15721`
 4. **When the CLI tool makes API calls**, they go to CC Switch's proxy
-5. **CC Switch records the request** and forwards it to Alvus
-6. **Alvus processes/reformats/forwards** the request to its upstream API
-7. **The response flows back**: Alvus -> CC Switch (logged) -> CLI tool
+5. **CC Switch records the request** and forwards it to AK Switch
+6. **AK Switch processes/reformats/forwards** the request to its upstream API
+7. **The response flows back**: AK Switch -> CC Switch (logged) -> CLI tool
 
-This means CC Switch is **NOT a replacement for Alvus** -- it is a **management layer that sits between the CLI tool and Alvus**. Alvus handles the actual API relay/proxy to the upstream provider (Anthropic, OpenAI, etc.), while CC Switch handles:
+This means CC Switch is **NOT a replacement for AK Switch** -- it is a **management layer that sits between the CLI tool and AK Switch**. AK Switch handles the actual API relay/proxy to the upstream provider (Anthropic, OpenAI, etc.), while CC Switch handles:
 - Unified provider switching
 - Request logging and usage tracking
 - API format conversion (if needed)

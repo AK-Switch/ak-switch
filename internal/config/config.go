@@ -1,4 +1,4 @@
-// Package config provides centralized configuration management for Alvus.
+// Package config provides centralized configuration management for AK Switch.
 //
 // It reads from TOML configuration files, validates required fields,
 // and supports runtime diffing for hot-reload scenarios.
@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 
-	"alvus/internal/utils"
+	"akswitch/internal/utils"
 	"github.com/pelletier/go-toml/v2"
 )
 
@@ -92,7 +92,7 @@ func (c *Config) Validate() error {
 		return &ConfigError{Category: "config", Message: "配置错误: GENAI_BASE_URL 为必填字段，请设置 GenAI API 基础地址"}
 	}
 	if len(c.Keys) == 0 {
-		return &ConfigError{Category: "config", Message: "配置错误: 至少需要一个 API Key（请通过 alvus key add 添加）"}
+		return &ConfigError{Category: "config", Message: "配置错误: 至少需要一个 API Key（请通过 akswitch key add 添加）"}
 	}
 	if c.BackoffCapSec < 30 {
 		return &ConfigError{Category: "config", Message: fmt.Sprintf("配置错误: BACKOFF_CAP_SEC=%d 不能小于 30 秒", c.BackoffCapSec)}
@@ -358,8 +358,8 @@ func SaveTomlConfig(tc *TomlConfig, path string) error {
 }
 
 // XDGConfigPath 返回平台相关的 XDG 配置路径。
-// Windows: %APPDATA%/alvus/config.toml
-// Linux/macOS: $XDG_CONFIG_HOME/alvus/config.toml → ~/.config/alvus/config.toml
+// Windows: %APPDATA%/akswitch/config.toml
+// Linux/macOS: $XDG_CONFIG_HOME/akswitch/config.toml → ~/.config/akswitch/config.toml
 // $XDG_CONFIG_HOME 环境变量优先于平台默认值（在所有平台上均生效）。
 func XDGConfigPath() (string, error) {
 	configDir := os.Getenv("XDG_CONFIG_HOME")
@@ -370,7 +370,7 @@ func XDGConfigPath() (string, error) {
 			return "", fmt.Errorf("获取用户配置目录失败: %w", err)
 		}
 	}
-	return filepath.Join(configDir, "alvus", "config.toml"), nil
+	return filepath.Join(configDir, "akswitch", "config.toml"), nil
 }
 
 // DetectConfigSource 按优先级自动检测配置源。

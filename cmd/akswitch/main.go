@@ -3,7 +3,7 @@ package main
 import (
 	_ "embed"
 
-	"alvus/internal/cmd"
+	"akswitch/internal/cmd"
 )
 
 //go:embed dashboard.html

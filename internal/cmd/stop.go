@@ -16,14 +16,14 @@ func init() {
 
 var stopCmd = &cobra.Command{
 	Use:   "stop",
-	Short: "Stop the running alvus server",
-	Long:  `Stop the alvus proxy server gracefully using the PID file.`,
+	Short: "Stop the running akswitch server",
+	Long:  `Stop the akswitch proxy server gracefully using the PID file.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		pidData, err := os.ReadFile(pidFileName)
 		if err != nil {
 			fmt.Println("Could not read PID file. Try:")
-			fmt.Println("  - Windows: taskkill /F /IM alvus.exe")
-			fmt.Println("  - Linux/macOS: kill $(pgrep alvus)")
+			fmt.Println("  - Windows: taskkill /F /IM akswitch.exe")
+			fmt.Println("  - Linux/macOS: kill $(pgrep akswitch)")
 			return fmt.Errorf("failed to read PID file: %w", err)
 		}
 
@@ -31,12 +31,12 @@ var stopCmd = &cobra.Command{
 		pid, err := strconv.Atoi(pidStr)
 		if err != nil || pid <= 0 {
 			fmt.Println("Invalid PID in file. Try:")
-			fmt.Println("  - Windows: taskkill /F /IM alvus.exe")
-			fmt.Println("  - Linux/macOS: kill $(pgrep alvus)")
+			fmt.Println("  - Windows: taskkill /F /IM akswitch.exe")
+			fmt.Println("  - Linux/macOS: kill $(pgrep akswitch)")
 			return fmt.Errorf("invalid PID in %s", pidFileName)
 		}
 
-		fmt.Printf("Stopping alvus (PID %d)...\n", pid)
+		fmt.Printf("Stopping akswitch (PID %d)...\n", pid)
 
 		proc, err := os.FindProcess(pid)
 		if err != nil {
@@ -59,7 +59,7 @@ var stopCmd = &cobra.Command{
 		}()
 		select {
 		case <-done:
-			fmt.Println("Alvus stopped gracefully")
+			fmt.Println("AK Switch stopped gracefully")
 			os.Remove(pidFileName)
 			return nil
 		case <-time.After(10 * time.Second):

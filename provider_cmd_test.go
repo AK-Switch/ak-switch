@@ -7,14 +7,14 @@ import (
 	"strings"
 	"testing"
 
-	"alvus/internal/cmd"
-	"alvus/internal/config"
+	"akswitch/internal/cmd"
+	"akswitch/internal/config"
 )
 
 // ── Provider CRUD Acceptance Tests ──────────────────────
 
 // TestProviderAdd_CreatesProviderEntry verifies that
-// "alvus provider add <name> --target <url> --port <port>
+// "akswitch provider add <name> --target <url> --port <port>
 // creates a valid entry in the config.toml.
 func TestProviderAdd_CreatesProviderEntry(t *testing.T) {
 	resetConfigEnv()
@@ -28,7 +28,7 @@ func TestProviderAdd_CreatesProviderEntry(t *testing.T) {
 	}
 
 	// Add a provider
-	addArgs := []string{"alvus", "provider", "add", "test-provider",
+	addArgs := []string{"akswitch", "provider", "add", "test-provider",
 		"--target", "https://test.api.com/v1",
 		"--port", "9999",
 		"--genai", "https://test.api.com",
@@ -74,16 +74,16 @@ func TestProviderAdd_DuplicateRejected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
-	runCommand(t, "alvus", "config", "init", "-p", xdgPath)
+	runCommand(t, "akswitch", "config", "init", "-p", xdgPath)
 
 	// First add succeeds
-	runCommand(t, "alvus", "provider", "add", "dup-test",
+	runCommand(t, "akswitch", "provider", "add", "dup-test",
 		"--target", "https://test1.com/v1",
 		"--port", "9101",
 	)
 
 	// Second add should fail
-	err = runCommand(t, "alvus", "provider", "add", "dup-test",
+	err = runCommand(t, "akswitch", "provider", "add", "dup-test",
 		"--target", "https://test2.com/v1",
 		"--port", "9102",
 	)
@@ -96,7 +96,7 @@ func TestProviderAdd_DuplicateRejected(t *testing.T) {
 }
 
 // TestProviderList_ShowsProviders verifies that
-// "alvus provider list" correctly lists configured providers.
+// "akswitch provider list" correctly lists configured providers.
 func TestProviderList_ShowsProviders(t *testing.T) {
 	resetConfigEnv()
 	tmpDir := t.TempDir()
@@ -106,14 +106,14 @@ func TestProviderList_ShowsProviders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
-	runCommand(t, "alvus", "config", "init", "-p", xdgPath)
+	runCommand(t, "akswitch", "config", "init", "-p", xdgPath)
 
 	// Add two providers
-	runCommand(t, "alvus", "provider", "add", "alpha",
+	runCommand(t, "akswitch", "provider", "add", "alpha",
 		"--target", "https://alpha.test/v1",
 		"--port", "9101",
 	)
-	runCommand(t, "alvus", "provider", "add", "beta",
+	runCommand(t, "akswitch", "provider", "add", "beta",
 		"--target", "https://beta.test/v1",
 		"--port", "9102",
 	)
@@ -124,7 +124,7 @@ func TestProviderList_ShowsProviders(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	err = runCommand(t, "alvus", "provider", "list")
+	err = runCommand(t, "akswitch", "provider", "list")
 
 	w.Close()
 	os.Stdout = oldStdout
@@ -147,7 +147,7 @@ func TestProviderList_ShowsProviders(t *testing.T) {
 }
 
 // TestProviderRemove_RemovesEntry verifies that
-// "alvus provider remove <name>" correctly removes a provider.
+// "akswitch provider remove <name>" correctly removes a provider.
 func TestProviderRemove_RemovesEntry(t *testing.T) {
 	resetConfigEnv()
 	tmpDir := t.TempDir()
@@ -157,14 +157,14 @@ func TestProviderRemove_RemovesEntry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
-	runCommand(t, "alvus", "config", "init", "-p", xdgPath)
-	runCommand(t, "alvus", "provider", "add", "remove-me",
+	runCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+	runCommand(t, "akswitch", "provider", "add", "remove-me",
 		"--target", "https://remove.test/v1",
 		"--port", "9201",
 	)
 
 	// Remove it
-	runCommand(t, "alvus", "provider", "remove", "remove-me")
+	runCommand(t, "akswitch", "provider", "remove", "remove-me")
 
 	// Verify it's gone
 	tc, err := config.LoadTomlConfig(xdgPath)
@@ -187,9 +187,9 @@ func TestProviderRemove_NotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
-	runCommand(t, "alvus", "config", "init", "-p", xdgPath)
+	runCommand(t, "akswitch", "config", "init", "-p", xdgPath)
 
-	err = runCommand(t, "alvus", "provider", "remove", "nonexistent")
+	err = runCommand(t, "akswitch", "provider", "remove", "nonexistent")
 	if err == nil {
 		t.Fatal("expected error for removing nonexistent provider, got nil")
 	}
@@ -197,7 +197,7 @@ func TestProviderRemove_NotFound(t *testing.T) {
 
 // ── Helper ────────────────────────────────────────────
 
-// runCommand executes alvus with the given arguments via cmd.Execute.
+// runCommand executes akswitch with the given arguments via cmd.Execute.
 // It captures stderr but not stdout (use capture in the test if needed).
 func runCommand(t testing.TB, args ...string) error {
 	t.Helper()

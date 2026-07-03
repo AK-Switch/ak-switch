@@ -1,9 +1,9 @@
 package main
 
 import (
-	"alvus/internal/config"
-	"alvus/internal/keypool"
-	"alvus/internal/server"
+	"akswitch/internal/config"
+	"akswitch/internal/keypool"
+	"akswitch/internal/server"
 	"fmt"
 	"io"
 	"net/http"
@@ -102,8 +102,8 @@ func readMetricsDelta(baseURL, metricName, labelFilter string, action func()) fl
 	return after - before
 }
 
-// setupAlvusRouter creates a mock upstream and a ProviderRouter-based Alvus test server.
-func setupAlvusRouter(tb testing.TB, upstream *httptest.Server, poolKeys []string, maxRetries, cooldownSec int) *httptest.Server {
+// setupRouter creates a mock upstream and a ProviderRouter-based AK Switch test server.
+func setupRouter(tb testing.TB, upstream *httptest.Server, poolKeys []string, maxRetries, cooldownSec int) *httptest.Server {
 	tb.Helper()
 	cfg := &config.Config{
 		TargetBase:  upstream.URL,
@@ -125,13 +125,13 @@ func TestMetricsVerification_RequestCount(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	alvus := setupAlvusRouter(t, upstream, []string{"key-a", "key-b", "key-c"}, 10, 60)
-	defer alvus.Close()
+	srv := setupRouter(t, upstream, []string{"key-a", "key-b", "key-c"}, 10, 60)
+	defer srv.Close()
 
-	delta := readMetricsDelta(alvus.URL, "alvus_requests_total",
+	delta := readMetricsDelta(srv.URL, "akswitch_requests_total",
 		`method="GET",status="2xx"`,
 		func() {
-			resp, err := http.Get(alvus.URL + "/test/v1/models")
+			resp, err := http.Get(srv.URL + "/test/v1/models")
 			if err != nil {
 				t.Fatalf("proxy request: %v", err)
 			}
@@ -143,9 +143,9 @@ func TestMetricsVerification_RequestCount(t *testing.T) {
 	)
 
 	if delta < 1 {
-		t.Errorf("alvus_requests_total{method=GET,status=2xx} should increase by >=1, got %.0f", delta)
+		t.Errorf("akswitch_requests_total{method=GET,status=2xx} should increase by >=1, got %.0f", delta)
 	} else {
-		t.Logf("alvus_requests_total increased by %.0f (OK)", delta)
+		t.Logf("akswitch_requests_total increased by %.0f (OK)", delta)
 	}
 }
 
@@ -156,13 +156,13 @@ func TestMetricsVerification_RequestDuration(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	alvus := setupAlvusRouter(t, upstream, []string{"key-a", "key-b", "key-c"}, 10, 60)
-	defer alvus.Close()
+	srv := setupRouter(t, upstream, []string{"key-a", "key-b", "key-c"}, 10, 60)
+	defer srv.Close()
 
-	delta := readMetricsDelta(alvus.URL, "alvus_request_duration_seconds_count",
+	delta := readMetricsDelta(srv.URL, "akswitch_request_duration_seconds_count",
 		`method="GET",status="2xx"`,
 		func() {
-			resp, err := http.Get(alvus.URL + "/test/v1/models")
+			resp, err := http.Get(srv.URL + "/test/v1/models")
 			if err != nil {
 				t.Fatalf("proxy request: %v", err)
 			}
@@ -171,17 +171,17 @@ func TestMetricsVerification_RequestDuration(t *testing.T) {
 	)
 
 	if delta < 1 {
-		t.Errorf("alvus_request_duration_seconds_count should increase by >=1, got %.0f", delta)
+		t.Errorf("akswitch_request_duration_seconds_count should increase by >=1, got %.0f", delta)
 	} else {
-		t.Logf("alvus_request_duration_seconds_count increased by %.0f (OK)", delta)
+		t.Logf("akswitch_request_duration_seconds_count increased by %.0f (OK)", delta)
 	}
 
 	// Also verify sum increased (using a fresh request to avoid stale baseline)
-	sumDelta := readMetricsDelta(alvus.URL, "alvus_request_duration_seconds_sum",
+	sumDelta := readMetricsDelta(srv.URL, "akswitch_request_duration_seconds_sum",
 		`method="GET",status="2xx"`,
 		func() {
 			time.Sleep(50 * time.Millisecond)
-			resp, err := http.Get(alvus.URL + "/test/v1/models")
+			resp, err := http.Get(srv.URL + "/test/v1/models")
 			if err != nil {
 				t.Fatalf("proxy request: %v", err)
 			}
@@ -189,31 +189,25 @@ func TestMetricsVerification_RequestDuration(t *testing.T) {
 		},
 	)
 	if sumDelta <= 0 {
-		t.Errorf("alvus_request_duration_seconds_sum should increase by >0, got %f", sumDelta)
+		t.Errorf("akswitch_request_duration_seconds_sum should increase by >0, got %f", sumDelta)
 	} else {
-		t.Logf("alvus_request_duration_seconds_sum increased by %f (OK)", sumDelta)
+		t.Logf("akswitch_request_duration_seconds_sum increased by %f (OK)", sumDelta)
 	}
 }
 
 func TestMetricsVerification_RateLimited(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		auth := r.Header.Get("Authorization")
-		if strings.Contains(auth, "key-a") {
-			w.WriteHeader(http.StatusTooManyRequests)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ok"}`))
+		w.WriteHeader(http.StatusTooManyRequests)
 	}))
 	defer upstream.Close()
 
-	alvus := setupAlvusRouter(t, upstream, []string{"key-a", "key-b", "key-c"}, 3, 2)
-	defer alvus.Close()
+	srv := setupRouter(t, upstream, []string{"key-a", "key-b", "key-c"}, 3, 2)
+	defer srv.Close()
 
-	delta := readMetricsDelta(alvus.URL, "alvus_upstream_errors_total",
+	delta := readMetricsDelta(srv.URL, "akswitch_upstream_errors_total",
 		`type="rate_limited"`,
 		func() {
-			resp, err := http.Get(alvus.URL + "/test/v1/models")
+			resp, err := http.Get(srv.URL + "/test/v1/models")
 			if err != nil {
 				t.Fatalf("proxy request: %v", err)
 			}
@@ -222,31 +216,25 @@ func TestMetricsVerification_RateLimited(t *testing.T) {
 	)
 
 	if delta < 1 {
-		t.Errorf("alvus_upstream_errors_total{type=rate_limited} should increase by >=1, got %.0f", delta)
+		t.Errorf("akswitch_upstream_errors_total{type=rate_limited} should increase by >=1, got %.0f", delta)
 	} else {
-		t.Logf("alvus_upstream_errors_total{type=rate_limited} increased by %.0f (OK)", delta)
+		t.Logf("akswitch_upstream_errors_total{type=rate_limited} increased by %.0f (OK)", delta)
 	}
 }
 
 func TestMetricsVerification_AuthRejected(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		auth := r.Header.Get("Authorization")
-		if strings.Contains(auth, "key-a") {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ok"}`))
+		w.WriteHeader(http.StatusUnauthorized)
 	}))
 	defer upstream.Close()
 
-	alvus := setupAlvusRouter(t, upstream, []string{"key-a", "key-b", "key-c"}, 3, 2)
-	defer alvus.Close()
+	srv := setupRouter(t, upstream, []string{"key-a", "key-b", "key-c"}, 3, 2)
+	defer srv.Close()
 
-	delta := readMetricsDelta(alvus.URL, "alvus_upstream_errors_total",
+	delta := readMetricsDelta(srv.URL, "akswitch_upstream_errors_total",
 		`type="auth_rejected"`,
 		func() {
-			resp, err := http.Get(alvus.URL + "/test/v1/models")
+			resp, err := http.Get(srv.URL + "/test/v1/models")
 			if err != nil {
 				t.Fatalf("proxy request: %v", err)
 			}
@@ -255,31 +243,25 @@ func TestMetricsVerification_AuthRejected(t *testing.T) {
 	)
 
 	if delta < 1 {
-		t.Errorf("alvus_upstream_errors_total{type=auth_rejected} should increase by >=1, got %.0f", delta)
+		t.Errorf("akswitch_upstream_errors_total{type=auth_rejected} should increase by >=1, got %.0f", delta)
 	} else {
-		t.Logf("alvus_upstream_errors_total{type=auth_rejected} increased by %.0f (OK)", delta)
+		t.Logf("akswitch_upstream_errors_total{type=auth_rejected} increased by %.0f (OK)", delta)
 	}
 }
 
 func TestMetricsVerification_ServerError(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		auth := r.Header.Get("Authorization")
-		if strings.Contains(auth, "key-a") {
-			w.WriteHeader(http.StatusServiceUnavailable)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ok"}`))
+		w.WriteHeader(http.StatusServiceUnavailable)
 	}))
 	defer upstream.Close()
 
-	alvus := setupAlvusRouter(t, upstream, []string{"key-a", "key-b", "key-c"}, 3, 2)
-	defer alvus.Close()
+	srv := setupRouter(t, upstream, []string{"key-a", "key-b", "key-c"}, 3, 2)
+	defer srv.Close()
 
-	delta := readMetricsDelta(alvus.URL, "alvus_upstream_errors_total",
+	delta := readMetricsDelta(srv.URL, "akswitch_upstream_errors_total",
 		`type="server_error"`,
 		func() {
-			resp, err := http.Get(alvus.URL + "/test/v1/models")
+			resp, err := http.Get(srv.URL + "/test/v1/models")
 			if err != nil {
 				t.Fatalf("proxy request: %v", err)
 			}
@@ -288,21 +270,15 @@ func TestMetricsVerification_ServerError(t *testing.T) {
 	)
 
 	if delta < 1 {
-		t.Errorf("alvus_upstream_errors_total{type=server_error} should increase by >=1, got %.0f", delta)
+		t.Errorf("akswitch_upstream_errors_total{type=server_error} should increase by >=1, got %.0f", delta)
 	} else {
-		t.Logf("alvus_upstream_errors_total{type=server_error} increased by %.0f (OK)", delta)
+		t.Logf("akswitch_upstream_errors_total{type=server_error} increased by %.0f (OK)", delta)
 	}
 }
 
 func TestMetricsVerification_KeyPoolDisabled(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		auth := r.Header.Get("Authorization")
-		if strings.Contains(auth, "key-a") {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ok"}`))
+		w.WriteHeader(http.StatusUnauthorized)
 	}))
 	defer upstream.Close()
 
@@ -317,20 +293,20 @@ func TestMetricsVerification_KeyPoolDisabled(t *testing.T) {
 	pool := keypool.NewKeyPool([]string{"key-a", "key-b"}, nil)
 	pr := server.NewProviderRouter("")
 	pr.AddProvider("test", cfg, pool)
-	alvus := httptest.NewServer(pr.Handler())
-	defer alvus.Close()
+	srv := httptest.NewServer(pr.Handler())
+	defer srv.Close()
 
 	// Before: record disabled count
-	resp, err := http.Get(alvus.URL + "/metrics")
+	resp, err := http.Get(srv.URL + "/metrics")
 	if err != nil {
 		t.Fatalf("GET /metrics before: %v", err)
 	}
 	bodyBefore, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
-	disabledBefore := readMetricValue(string(bodyBefore), "alvus_keypool_keys", `state="disabled"`)
+	disabledBefore := readMetricValue(string(bodyBefore), "akswitch_keypool_keys", `state="disabled"`)
 
 	// Trigger 401 on key-a which will disable it
-	resp, err = http.Get(alvus.URL + "/test/v1/models")
+	resp, err = http.Get(srv.URL + "/test/v1/models")
 	if err != nil {
 		t.Fatalf("proxy request: %v", err)
 	}
@@ -342,9 +318,9 @@ func TestMetricsVerification_KeyPoolDisabled(t *testing.T) {
 
 	delta := disabledAfter - disabledBefore
 	if delta < 1 {
-		t.Errorf("alvus_keypool_keys{state=disabled} should increase by >=1, got delta=%.0f (before=%.0f, after=%.0f)",
+		t.Errorf("akswitch_keypool_keys{state=disabled} should increase by >=1, got delta=%.0f (before=%.0f, after=%.0f)",
 			delta, disabledBefore, disabledAfter)
 	} else {
-		t.Logf("alvus_keypool_keys{state=disabled} increased by %.0f (OK)", delta)
+		t.Logf("akswitch_keypool_keys{state=disabled} increased by %.0f (OK)", delta)
 	}
 }

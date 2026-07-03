@@ -1,21 +1,21 @@
 package metrics
 
 import (
-	"alvus/internal/keypool"
+	"akswitch/internal/keypool"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
-// Metrics holds all Prometheus metric handles for the application.
+// Metrics holds all Prometheus metric handles for AK Switch.
 type Metrics struct {
 	RequestsTotal   *prometheus.CounterVec
 	RequestDuration *prometheus.HistogramVec
 	KeyPoolKeys     *prometheus.GaugeVec
 	UpstreamErrors  *prometheus.CounterVec
 
-	UpstreamCBState     prometheus.Gauge       // alvus_upstream_cb_state (0=CLOSED, 1=OPEN, 2=HALF_OPEN)
-	HealthCheckProbes   *prometheus.CounterVec // alvus_healthcheck_probes_total, labels: {"status":"ok"|"fail"}
-	HealthCheckDuration prometheus.Histogram   // alvus_healthcheck_duration_seconds
+	UpstreamCBState     prometheus.Gauge       // akswitch_upstream_cb_state (0=CLOSED, 1=OPEN, 2=HALF_OPEN)
+	HealthCheckProbes   *prometheus.CounterVec // akswitch_healthcheck_probes_total, labels: {"status":"ok"|"fail"}
+	HealthCheckDuration prometheus.Histogram   // akswitch_healthcheck_duration_seconds
 }
 
 // NewRegistry creates a non-global Prometheus registry and registers all application metrics.
@@ -28,14 +28,14 @@ func NewRegistry() (*prometheus.Registry, *Metrics) {
 	m := &Metrics{
 		RequestsTotal: factory.NewCounterVec(
 			prometheus.CounterOpts{
-				Name: "alvus_requests_total",
+				Name: "akswitch_requests_total",
 				Help: "Total number of proxy requests by method, status class, and key index.",
 			},
 			[]string{"method", "status", "key_index"},
 		),
 		RequestDuration: factory.NewHistogramVec(
 			prometheus.HistogramOpts{
-				Name:    "alvus_request_duration_seconds",
+				Name:    "akswitch_request_duration_seconds",
 				Help:    "Request latency distribution by method and status class.",
 				Buckets: []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10, 15, 30, 60, 120},
 			},
@@ -43,28 +43,28 @@ func NewRegistry() (*prometheus.Registry, *Metrics) {
 		),
 		KeyPoolKeys: factory.NewGaugeVec(
 			prometheus.GaugeOpts{
-				Name: "alvus_keypool_keys",
+				Name: "akswitch_keypool_keys",
 				Help: "Current number of keys by state (active, cooling, disabled).",
 			},
 			[]string{"state"},
 		),
 		UpstreamErrors: factory.NewCounterVec(
 			prometheus.CounterOpts{
-				Name: "alvus_upstream_errors_total",
+				Name: "akswitch_upstream_errors_total",
 				Help: "Count of upstream errors by type (network, rate_limited, auth_rejected, server_error).",
 			},
 			[]string{"type"},
 		),
 		UpstreamCBState: factory.NewGauge(
 			prometheus.GaugeOpts{
-				Namespace: "alvus",
+				Namespace: "akswitch",
 				Name:      "upstream_cb_state",
 				Help:      "Upstream circuit breaker state: 0=CLOSED, 1=OPEN, 2=HALF_OPEN",
 			},
 		),
 		HealthCheckProbes: factory.NewCounterVec(
 			prometheus.CounterOpts{
-				Namespace: "alvus",
+				Namespace: "akswitch",
 				Name:      "healthcheck_probes_total",
 				Help:      "Count of health check probes by status",
 			},
@@ -72,7 +72,7 @@ func NewRegistry() (*prometheus.Registry, *Metrics) {
 		),
 		HealthCheckDuration: factory.NewHistogram(
 			prometheus.HistogramOpts{
-				Namespace: "alvus",
+				Namespace: "akswitch",
 				Name:      "healthcheck_duration_seconds",
 				Help:      "Duration of health check probes",
 				Buckets:   []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10, 15, 30, 60, 120},

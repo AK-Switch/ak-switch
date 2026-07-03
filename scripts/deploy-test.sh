@@ -1,5 +1,5 @@
 #!/bin/bash
-# Acceptance test for Docker Compose full stack (Alvus + Prometheus + Grafana).
+# Acceptance test for Docker Compose full stack (AK Switch + Prometheus + Grafana).
 # Runs from WSL2 where Docker is available.
 #
 # Usage:
@@ -7,7 +7,7 @@
 #
 # Prerequisites:
 #   - Docker & docker compose installed
-#   - Ports 9090, 3001 available (Alvus port from .env, default 3000)
+#   - Ports 9090, 3001 available (AK Switch port from .env, default 3000)
 #   - .env file exists at project root
 
 set -uo pipefail
@@ -15,15 +15,15 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT"
 
-# Detect host port for Alvus from .env (Docker Compose reads this)
-ALVUS_PORT="${PORT:-3000}"
+# Detect host port for AK Switch from .env (Docker Compose reads this)
+AKSWITCH_PORT="${PORT:-3000}"
 if [ -f .env ]; then
   ENV_PORT=$(grep -E '^PORT=' .env | cut -d= -f2 | tr -d '[:space:]' || true)
   if [ -n "$ENV_PORT" ]; then
-    ALVUS_PORT="$ENV_PORT"
+    AKSWITCH_PORT="$ENV_PORT"
   fi
 fi
-echo "Alvus port: $ALVUS_PORT"
+echo "AK Switch port: $AKSWITCH_PORT"
 cd "$ROOT"
 
 PASS=0
@@ -80,8 +80,8 @@ docker compose up -d 2>&1 | sed 's/^/  /'
 echo ""
 echo "[3] Service readiness"
 
-echo "  Waiting for Alvus..."
-wait_for_http "http://localhost:${ALVUS_PORT}/health" "Alvus" 30 || assert "Alvus /health responds" "false"
+echo "  Waiting for AK Switch..."
+wait_for_http "http://localhost:${AKSWITCH_PORT}/health" "AK Switch" 30 || assert "AK Switch /health responds" "false"
 
 echo "  Waiting for Prometheus..."
 wait_for_http "http://localhost:9090/-/ready" "Prometheus" 30 || assert "Prometheus ready" "false"
@@ -89,21 +89,21 @@ wait_for_http "http://localhost:9090/-/ready" "Prometheus" 30 || assert "Prometh
 echo "  Waiting for Grafana..."
 wait_for_http "http://localhost:3001/api/health" "Grafana" 30 || assert "Grafana ready" "false"
 
-# ── 4. Alvus health check ─────────────────────────
+# ── 4. AK Switch health check ─────────────────────────
 echo ""
-echo "[4] Alvus health endpoint"
-ALVUS_HEALTH=$(curl -sf http://localhost:${ALVUS_PORT}/health 2>/dev/null || echo "")
-assert "Alvus /health returns status ok" \
-  "echo '$ALVUS_HEALTH' | grep -q '\"status\":\"ok\"'"
-assert "Alvus /health returns keys count" \
-  "echo '$ALVUS_HEALTH' | grep -q '\"keys\"'"
+echo "[4] AK Switch health endpoint"
+AKSWITCH_HEALTH=$(curl -sf http://localhost:${AKSWITCH_PORT}/health 2>/dev/null || echo "")
+assert "AK Switch /health returns status ok" \
+  "echo '$AKSWITCH_HEALTH' | grep -q '\"status\":\"ok\"'"
+assert "AK Switch /health returns keys count" \
+  "echo '$AKSWITCH_HEALTH' | grep -q '\"keys\"'"
 
 # ── 5. Prometheus target scraping ─────────────────
 echo ""
 echo "[5] Prometheus targets"
 PROM_TARGETS=$(curl -sf 'http://localhost:9090/api/v1/targets' 2>/dev/null || echo "")
-assert "Prometheus has alvus target" \
-  "echo '$PROM_TARGETS' | grep -q 'alvus:3000'"
+assert "Prometheus has akswitch target" \
+  "echo '$PROM_TARGETS' | grep -q 'akswitch:3000'"
 
 # ── 6. Prometheus metric query ────────────────────
 echo ""
@@ -111,13 +111,13 @@ echo "[6] Prometheus metric scraping"
 # Wait for at least one scrape cycle
 sleep 15
 
-# Check alvus_keypool_keys (Gauge — always available, even without proxy requests)
-PROM_KEYS=$(curl -sf 'http://localhost:9090/api/v1/query?query=alvus_keypool_keys' 2>/dev/null || echo "")
-assert "Prometheus has alvus_keypool_keys metric" \
-  "echo '$PROM_KEYS' | grep -q 'alvus_keypool_keys'"
+# Check akswitch_keypool_keys (Gauge — always available, even without proxy requests)
+PROM_KEYS=$(curl -sf 'http://localhost:9090/api/v1/query?query=akswitch_keypool_keys' 2>/dev/null || echo "")
+assert "Prometheus has akswitch_keypool_keys metric" \
+  "echo '$PROM_KEYS' | grep -q 'akswitch_keypool_keys'"
 
 # Check the active key count is correct
-assert "Prometheus: alvus_keypool_keys shows active keys" \
+assert "Prometheus: akswitch_keypool_keys shows active keys" \
   "echo '$PROM_KEYS' | grep -q 'active'"
 
 # Check Go runtime metrics (emitted automatically)
@@ -144,17 +144,17 @@ assert "Grafana has Prometheus datasource" \
 # ── 9. Grafana dashboard provisioning ─────────────
 echo ""
 echo "[9] Grafana dashboard provisioning"
-SEARCH_URL='http://localhost:3001/api/search?query=Alvus'
+SEARCH_URL='http://localhost:3001/api/search?query=AK%20Switch'
 DASH_RESULT=$(curl -sf "$SEARCH_URL" 2>/dev/null || curl -sf -u "admin:admin" "$SEARCH_URL" 2>/dev/null || echo "")
-assert "Grafana has pre-provisioned 'Alvus Overview' dashboard" \
-  "echo '$DASH_RESULT' | grep -q 'Alvus Overview'"
+assert "Grafana has pre-provisioned 'AK Switch Overview' dashboard" \
+  "echo '$DASH_RESULT' | grep -q 'AK Switch Overview'"
 
 # ── 10. Container health ─────────────────────────
 echo ""
 echo "[10] Container state"
 CONTAINERS=$(docker compose ps --format json 2>/dev/null || echo "")
-assert "Alvus container is running" \
-  "echo '$CONTAINERS' | grep -q 'alvus' && docker compose ps --services | grep -q '^alvus$'"
+assert "AK Switch container is running" \
+  "echo '$CONTAINERS' | grep -q 'akswitch' && docker compose ps --services | grep -q '^akswitch$'"
 assert "Prometheus container is running" \
   "docker compose ps --services | grep -q '^prometheus$'"
 assert "Grafana container is running" \

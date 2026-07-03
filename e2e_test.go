@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-// TestFullE2E_RealUserSimulation builds the real alvus binary, sets up a clean
+// TestFullE2E_RealUserSimulation builds the real akswitch binary, sets up a clean
 // environment, and runs through the complete user workflow to verify everything
 // works end-to-end. This is the ultimate acceptance test.
 //
@@ -22,19 +22,19 @@ import (
 //  1. provider add   — configure a provider with upstream URL
 //  2. key add (x2)   — add API keys to encrypted store
 //  3. key list       — verify keys are visible
-//  4. alvus start    — start the proxy server
+//  4. akswitch start    — start the proxy server
 //  5. health check   — wait for server readiness
 //  6. proxy request  — send a real request through the proxy
 //  7. management API — query /api/stats on the running instance
-//  8. alvus status   — verify runtime CLI command
-//  9. alvus logs     — verify logs CLI command
-// 10. alvus stop     — graceful shutdown
+//  8. akswitch status   — verify runtime CLI command
+//  9. akswitch logs     — verify logs CLI command
+// 10. akswitch stop     — graceful shutdown
 // 11. verify down    — confirm server is unreachable
 func TestFullE2E_RealUserSimulation(t *testing.T) {
 	// ── Build binary ─────────────────────────────────────
-	t.Log("Building alvus binary...")
-	bin := filepath.Join(t.TempDir(), "alvus-e2e.exe")
-	if out, err := exec.Command("go", "build", "-o", bin, "./cmd/alvus/").CombinedOutput(); err != nil {
+	t.Log("Building akswitch binary...")
+	bin := filepath.Join(t.TempDir(), "akswitch-e2e.exe")
+	if out, err := exec.Command("go", "build", "-o", bin, "./cmd/akswitch/").CombinedOutput(); err != nil {
 		t.Fatalf("build failed: %v\n%s", err, out)
 	}
 
@@ -54,7 +54,7 @@ func TestFullE2E_RealUserSimulation(t *testing.T) {
 	defer upstream.Close()
 
 	// ── 1. provider add ──────────────────────────────────
-	t.Log("1. alvus provider add")
+	t.Log("1. akswitch provider add")
 	mustRun(t, bin, "provider", "add", "e2e-test",
 		"--target", upstream.URL+"/v1",
 		"--genai", upstream.URL,
@@ -62,20 +62,20 @@ func TestFullE2E_RealUserSimulation(t *testing.T) {
 	)
 
 	// ── 2. key add (x2) ─────────────────────────────────
-	t.Log("2. alvus key add (x2)")
+	t.Log("2. akswitch key add (x2)")
 	mustRun(t, bin, "key", "add", "e2e-test", "sk-e2e-key-001")
 	mustRun(t, bin, "key", "add", "e2e-test", "sk-e2e-key-002")
 
 	// ── 3. key list ──────────────────────────────────────
-	t.Log("3. alvus key list")
+	t.Log("3. akswitch key list")
 	out := mustRun(t, bin, "key", "list", "e2e-test")
 	if !strings.Contains(string(out), "active") {
 		t.Error("key list should show 'active' status")
 	}
 	t.Logf("   keys:\n%s", out)
 
-	// ── 4. alvus start ──────────────────────────────────
-	t.Log("4. alvus start")
+	// ── 4. akswitch start ──────────────────────────────────
+	t.Log("4. akswitch start")
 	server := exec.Command(bin, "start")
 	var serverStderr bytes.Buffer
 	server.Stderr = &serverStderr
@@ -128,8 +128,8 @@ func TestFullE2E_RealUserSimulation(t *testing.T) {
 		}
 	}
 
-	// ── 8. alvus status ─────────────────────────────────
-	t.Log("8. alvus status")
+	// ── 8. akswitch status ─────────────────────────────────
+	t.Log("8. akswitch status")
 	statusOut, _ := exec.Command(bin, "status").CombinedOutput()
 	statusStr := string(bytes.TrimSpace(statusOut))
 	if statusStr != "" {
@@ -138,8 +138,8 @@ func TestFullE2E_RealUserSimulation(t *testing.T) {
 		t.Log("   (no output)")
 	}
 
-	// ── 9. alvus logs ──────────────────────────────────
-	t.Log("9. alvus logs")
+	// ── 9. akswitch logs ──────────────────────────────────
+	t.Log("9. akswitch logs")
 	logsOut, _ := exec.Command(bin, "logs").CombinedOutput()
 	logsStr := string(bytes.TrimSpace(logsOut))
 	if logsStr != "" {
@@ -148,19 +148,19 @@ func TestFullE2E_RealUserSimulation(t *testing.T) {
 		t.Log("   (no output)")
 	}
 
-	// ── 10. alvus stop ─────────────────────────────────
-	t.Log("10. alvus stop")
+	// ── 10. akswitch stop ─────────────────────────────────
+	t.Log("10. akswitch stop")
 	if out, err := exec.Command(bin, "stop").CombinedOutput(); err != nil {
-		t.Logf("   'alvus stop' error (expected on Windows): %v", err)
+		t.Logf("   'akswitch stop' error (expected on Windows): %v", err)
 		t.Logf("   stderr: %s", bytes.TrimSpace(out))
 	} else {
-		t.Log("   ✓ 'alvus stop' returned success")
+		t.Log("   ✓ 'akswitch stop' returned success")
 	}
 
 	// Wait a moment for graceful shutdown to start
 	time.Sleep(500 * time.Millisecond)
 
-	// Force-kill the server process (alvus stop may not work on Windows)
+	// Force-kill the server process (akswitch stop may not work on Windows)
 	t.Log("   force killing server process...")
 	exec.Command("taskkill", "/F", "/T", "/PID", fmt.Sprintf("%d", serverPid)).Run()
 	server.Wait()

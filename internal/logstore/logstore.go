@@ -3,7 +3,7 @@ package logstore
 import (
 	"sync"
 
-	"alvus/internal/utils"
+	"akswitch/internal/utils"
 )
 
 // LogStore is a thread-safe, fixed-size log store for API usage logs.

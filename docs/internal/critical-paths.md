@@ -1,4 +1,4 @@
-# Alvus 关键路径覆盖清单
+# AK Switch 关键路径覆盖清单
 
 > 所有用户可见行为及其测试覆盖状态。目标：**每个 CLI 行为都有对应的 CLI 入口测试。**
 
@@ -14,7 +14,7 @@
 
 ---
 
-## 路径 1：alvus start — TOML 多 provider 模式
+## 路径 1：akswitch start — TOML 多 provider 模式
 
 | # | 步骤 | 覆盖 | 测试文件 |
 |---|------|------|---------|
@@ -26,44 +26,44 @@
 | 1.6 | 优雅关闭（信号 → Shutdown → Stop） | ⚠️ | `manager_test.go` / `graceful_shutdown_test.go` — 绕过启动流程 |
 | 1.7 | 后台任务启动（env watcher、metrics、health check） | ❌ | 不存在 |
 
-## 路径 2：alvus start — .env 单 provider 模式
+## 路径 2：akswitch start — .env 单 provider 模式
 
 | # | 步骤 | 覆盖 | 测试文件 |
 |---|------|------|---------|
 | 2.1 | server.LoadConfig 读取 .env + Validate | ⚠️ | `integration_test.go` — 子进程模式，但用的是 `server.LoadConfig()` 不是 `cmd.Execute` |
 | 2.2 | 单实例 InstanceManager 启动 | ⚠️ | `manager_test.go` — 同上，绕过 |
 
-## 路径 3：alvus config
+## 路径 3：akswitch config
 
 | # | 步骤 | 覆盖 | 测试文件 |
 |---|------|------|---------|
-| 3.1 | `alvus config init` 生成 config.toml | ✅ | `config_cmd_test.go` — `cmd.Execute` |
-| 3.2 | `alvus config view` 打印配置 | ✅ | `config_cmd_test.go` — `cmd.Execute` |
+| 3.1 | `akswitch config init` 生成 config.toml | ✅ | `config_cmd_test.go` — `cmd.Execute` |
+| 3.2 | `akswitch config view` 打印配置 | ✅ | `config_cmd_test.go` — `cmd.Execute` |
 
-## 路径 4：alvus provider
-
-| # | 步骤 | 覆盖 | 测试文件 |
-|---|------|------|---------|
-| 4.1 | `alvus provider add` 写入 config.toml | ✅ | `provider_cmd_test.go` |
-| 4.2 | `alvus provider list` 打印 | ✅ | `provider_cmd_test.go` |
-| 4.3 | `alvus provider remove` 删除 | ✅ | `provider_cmd_test.go` |
-
-## 路径 5：alvus key
+## 路径 4：akswitch provider
 
 | # | 步骤 | 覆盖 | 测试文件 |
 |---|------|------|---------|
-| 5.1 | `alvus key add` 写入加密存储 | ✅ | `key_cmd_test.go` |
-| 5.2 | `alvus key list` 打印脱敏 Key | ✅ | `key_cmd_test.go` |
-| 5.3 | `alvus key remove` 删除 Key | ✅ | `key_cmd_test.go` |
-| 5.4 | `alvus key disable` 禁用 Key | ✅ | `key_cmd_test.go` |
+| 4.1 | `akswitch provider add` 写入 config.toml | ✅ | `provider_cmd_test.go` |
+| 4.2 | `akswitch provider list` 打印 | ✅ | `provider_cmd_test.go` |
+| 4.3 | `akswitch provider remove` 删除 | ✅ | `provider_cmd_test.go` |
 
-## 路径 6：alvus status / logs / stop
+## 路径 5：akswitch key
 
 | # | 步骤 | 覆盖 | 测试文件 |
 |---|------|------|---------|
-| 6.1 | `alvus status` 查询运行实例 | ❌ | 不存在 |
-| 6.2 | `alvus logs` 查询请求日志 | ❌ | 不存在 |
-| 6.3 | `alvus stop` PID → 信号 → 关闭 | ❌ | 不存在 |
+| 5.1 | `akswitch key add` 写入加密存储 | ✅ | `key_cmd_test.go` |
+| 5.2 | `akswitch key list` 打印脱敏 Key | ✅ | `key_cmd_test.go` |
+| 5.3 | `akswitch key remove` 删除 Key | ✅ | `key_cmd_test.go` |
+| 5.4 | `akswitch key disable` 禁用 Key | ✅ | `key_cmd_test.go` |
+
+## 路径 6：akswitch status / logs / stop
+
+| # | 步骤 | 覆盖 | 测试文件 |
+|---|------|------|---------|
+| 6.1 | `akswitch status` 查询运行实例 | ❌ | 不存在 |
+| 6.2 | `akswitch logs` 查询请求日志 | ❌ | 不存在 |
+| 6.3 | `akswitch stop` PID → 信号 → 关闭 | ❌ | 不存在 |
 
 ## 路径 7：Proxy 请求转发
 
@@ -89,14 +89,14 @@
 
 | 优先级 | 缺失路径 | 后果 |
 |--------|---------|------|
-| **P0** | `alvus start`（TOML 模式）全链路 | 今天的两组 bug 活到了生产环境 |
-| P1 | `alvus status` / `logs` / `stop` | 运行时命令无回归保证 |
+| **P0** | `akswitch start`（TOML 模式）全链路 | 今天的两组 bug 活到了生产环境 |
+| P1 | `akswitch status` / `logs` / `stop` | 运行时命令无回归保证 |
 | P2 | 管理 API 从 CLI 入口测试 | 当前通过 `NewServerState` 绕过 |
 
 ## 纪律
 
 详见 CLAUDE.md「关键路径覆盖纪律」：
 - 所有 CLI 命令必须有对应的 CLI 入口测试
-- `alvus start` 通过子进程模式测试
+- `akswitch start` 通过子进程模式测试
 - 其他 CLI 命令通过 `runCommand` 测试
 - 纯内部逻辑（算法、数据结构、状态机）是唯一允许没有 CLI 入口测试的例外

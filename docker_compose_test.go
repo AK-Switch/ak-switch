@@ -23,7 +23,7 @@ var expectedPanels = []string{
 // TestGrafanaDashboardJSON_IsValid validates the pre-built Grafana dashboard JSON
 // is valid and contains all expected panels with correct metadata.
 func TestGrafanaDashboardJSON_IsValid(t *testing.T) {
-	data, err := os.ReadFile("grafana/provisioning/dashboards/alvus-overview.json")
+	data, err := os.ReadFile("grafana/provisioning/dashboards/akswitch-overview.json")
 	if err != nil {
 		t.Fatalf("failed to read dashboard JSON: %v", err)
 	}
@@ -38,8 +38,8 @@ func TestGrafanaDashboardJSON_IsValid(t *testing.T) {
 		field    string
 		expected string
 	}{
-		{"title", "Alvus Overview"},
-		{"uid", "alvus-overview"},
+		{"title", "AK Switch Overview"},
+		{"uid", "akswitch-overview"},
 	}
 	for _, c := range cases {
 		if v, ok := doc[c.field].(string); !ok || v != c.expected {
@@ -71,7 +71,7 @@ func TestGrafanaDashboardJSON_IsValid(t *testing.T) {
 // TestGrafanaDashboard_PanelsHaveTargets verifies every panel has at least one
 // PromQL target expression and a non-empty expr field.
 func TestGrafanaDashboard_PanelsHaveTargets(t *testing.T) {
-	data, err := os.ReadFile("grafana/provisioning/dashboards/alvus-overview.json")
+	data, err := os.ReadFile("grafana/provisioning/dashboards/akswitch-overview.json")
 	if err != nil {
 		t.Fatalf("failed to read dashboard JSON: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestGrafanaDashboard_PanelsHaveTargets(t *testing.T) {
 }
 
 // TestPrometheusConfig_Exists validates the Prometheus config file exists
-// and contains the expected scrape target for alvus.
+// and contains the expected scrape target for akswitch.
 func TestPrometheusConfig_Exists(t *testing.T) {
 	data, err := os.ReadFile("prometheus/prometheus.yml")
 	if err != nil {
@@ -122,7 +122,7 @@ func TestPrometheusConfig_Exists(t *testing.T) {
 		pattern string
 		desc    string
 	}{
-		{"alvus:3000", "scrape target alvus:3000"},
+		{"akswitch:3000", "scrape target akswitch:3000"},
 		{"/metrics", "metrics path /metrics"},
 		{"scrape_interval: 15s", "scrape interval"},
 	}
@@ -167,7 +167,7 @@ func TestGrafanaProvisioning_ConfigsExist(t *testing.T) {
 		pattern string
 		desc    string
 	}{
-		{"Alvus", "provider name"},
+		{"AK Switch", "provider name"},
 		{"file", "provisioning type"},
 		{"/etc/grafana/provisioning/dashboards", "dashboard path"},
 	}
@@ -194,7 +194,7 @@ func TestDockerCompose_MinimalServices(t *testing.T) {
 		pattern string
 		desc    string
 	}{
-		{"alvus", "alvus:", "alvus service"},
+		{"akswitch", "akswitch:", "akswitch service"},
 		{"prometheus", "prometheus:", "prometheus service"},
 		{"grafana", "grafana:", "grafana service"},
 	}
@@ -209,7 +209,7 @@ func TestDockerCompose_MinimalServices(t *testing.T) {
 		pattern string
 		desc    string
 	}{
-		{"alvus-data", "alvus data volume"},
+		{"akswitch-data", "akswitch data volume"},
 		{"prometheus-data", "prometheus data volume"},
 		{"grafana-data", "grafana data volume"},
 	}

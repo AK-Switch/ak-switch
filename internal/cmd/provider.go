@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 
-	"alvus/internal/config"
+	"akswitch/internal/config"
 
 	"github.com/spf13/cobra"
 )
@@ -39,8 +39,8 @@ The --target flag is required. --port is required for the first provider;
 subsequent providers reuse the existing port and --port can be omitted.
 
 Example:
-  alvus provider add nvidia --target https://integrate.api.nvidia.com/v1 --port 3002
-  alvus provider add sensenova --target https://api.sensenova.com/v1`,
+  akswitch provider add nvidia --target https://integrate.api.nvidia.com/v1 --port 3002
+  akswitch provider add sensenova --target https://api.sensenova.com/v1`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
@@ -119,7 +119,7 @@ var providerListCmd = &cobra.Command{
 	Long: `Display all configured providers and their settings from config.toml.
 
 Example output:
-  Providers (from /home/user/.config/alvus/config.toml):
+  Providers (from /home/user/.config/akswitch/config.toml):
     NAME        TARGET                                            PORT
     nvidia      https://integrate.api.nvidia.com/v1               3002
     sensenova   https://api.sensenova.com/v1                      3001`,
@@ -166,10 +166,10 @@ var providerRemoveCmd = &cobra.Command{
 	Long: `Remove a provider from the TOML configuration.
 
 This only removes the provider configuration; any associated keys file
-is NOT deleted. Use 'alvus key remove' to manage individual keys.
+is NOT deleted. Use 'akswitch key remove' to manage individual keys.
 
 Example:
-  alvus provider remove nvidia`,
+  akswitch provider remove nvidia`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]

@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"alvus/internal/config"
+	"akswitch/internal/config"
 
 	"github.com/spf13/cobra"
 )
@@ -21,7 +21,7 @@ func init() {
 var configCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Manage configuration",
-	Long:  `View and initialize the alvus configuration file.`,
+	Long:  `View and initialize the akswitch configuration file.`,
 }
 
 var configInitCmd = &cobra.Command{
@@ -75,8 +75,8 @@ If the file already exists, the command refuses to overwrite it.`,
 
 		fmt.Printf("Example configuration written to %s\n", path)
 		fmt.Println("Edit the file to add your providers, then run:")
-		fmt.Println("  alvus key add <provider> <api-key>  # to add API keys")
-		fmt.Println("  alvus start                         # to start the proxy")
+		fmt.Println("  akswitch key add <provider> <api-key>  # to add API keys")
+		fmt.Println("  akswitch start                         # to start the proxy")
 
 		return nil
 	},
