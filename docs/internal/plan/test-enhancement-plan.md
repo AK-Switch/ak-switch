@@ -41,7 +41,7 @@
 
 ## 二、目标
 
-让回归测试能够真正执行 Alvus 的代理转发逻辑，验证：
+让回归测试能够真正执行 AK Switch 的代理转发逻辑，验证：
 
 1. 基本 HTTP 代理转发正确
 2. Key 轮换机制工作
@@ -99,7 +99,7 @@ SSE 流式传输                 进程隔离
 
 ```
 ┌─────────────────────┐     HTTP      ┌─────────────────────┐
-│  Go 测试 (testing.T) │ ──────────→   │  Alvus ServerState   │
+│  Go 测试 (testing.T) │ ──────────→   │  AK Switch ServerState   │
 │                     │               │  (httptest.NewServer) │
 │  验证响应内容        │               │          │           │
 │  验证 Key 轮换      │               │          │           │
@@ -126,17 +126,17 @@ func TestProxyHandler_BasicForward(t *testing.T) {
     }))
     defer upstream.Close()
 
-    // 2. 构造 Alvus 配置 + KeyPool
+    // 2. 构造 AK Switch 配置 + KeyPool
     cfg := Config{TargetBase: upstream.URL, ...}
     pool := NewKeyPool([]string{"test-key-1", "test-key-2"})
 
-    // 3. 起 Alvus HTTP 服务
+    // 3. 起 AK Switch HTTP 服务
     state := newServerState(cfg, pool)
-    alvus := httptest.NewServer(state.mux)
-    defer alvus.Close()
+    akswitch := httptest.NewServer(state.mux)
+    defer akswitch.Close()
 
-    // 4. 发请求过 Alvus 代理
-    resp, _ := http.Get(alvus.URL + "/v1/chat/completions")
+    // 4. 发请求过 AK Switch 代理
+    resp, _ := http.Get(akswitch.URL + "/v1/chat/completions")
 
     // 5. 验证响应
     assert.Equal(t, 200, resp.StatusCode)
@@ -169,7 +169,7 @@ func TestProxyHandler_BasicForward(t *testing.T) {
 ## 五、文件规划
 
 ```
-alvus-fork/
+akswitch-fork/
 ├── proxy_test.go          # 代理转发核心测试（新建）
 ├── handlers_test.go       # HTTP handler 测试（新建）
 ├── keypool_test.go        # KeyPool 单元测试（新建）

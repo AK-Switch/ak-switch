@@ -1,8 +1,8 @@
 .env
 
-/alvus
-/alvus.exe
-alvus-linux-386
+/akswitch
+/akswitch.exe
+akswitch-linux-386
 
 # User-specific config (use manage.example.json as template)
 manage.json
@@ -18,10 +18,10 @@ logs/
 *.exe
 
 # Build output
-alvus_proxy.exe
+akswitch_proxy.exe
 
 # Runtime PID file
-/alvus.pid
+/akswitch.pid
 
 # Load test results (binary reports, keep .gitkeep)
 test/load/results/*.bin
@@ -33,6 +33,12 @@ test/load/results/*.html
 
 # Spec documents (project-level, not committed to repo)
 .agents/
+
+# Research scratch (temporary analysis documents)
+.research-temp/
+
+# Runtime PID file
+/alvus.pid
 
 # Docker volumes (local runtime state — do not commit)
 data/

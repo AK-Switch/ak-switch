@@ -1,10 +1,10 @@
-# Alvus — API Key 轮转代理
+# AK Switch — API Key 轮转代理
 
 [![Go Version](https://img.shields.io/badge/Go-1.23-blue)](https://go.dev)
-[![Tests](https://img.shields.io/badge/tests-278%20passing-brightgreen)](https://github.com/OmitNomis/Alvus/actions)
+[![Tests](https://img.shields.io/badge/tests-278%20passing-brightgreen)](https://github.com/OmitNomis/akswitch/actions)
 
 > 专注单 provider 内 API Key 的智能轮转与熔断，与 [ccswitch](https://github.com/farion1231/cc-switch) 互补。
-> ccswitch 负责 provider 级路由与故障转移，Alvus 负责 provider 内 key 级轮转与限流处理。
+> ccswitch 负责 provider 级路由与故障转移，AK Switch 负责 provider 内 key 级轮转与限流处理。
 
 ---
 
@@ -12,20 +12,20 @@
 
 ```bash
 # 编译
-go build -o alvus.exe ./cmd/alvus/
+go build -o akswitch.exe ./cmd/akswitch/
 
 # 初始化配置
-./alvus.exe config init
+./akswitch.exe config init
 
 # 添加 provider 和 key
-./alvus.exe provider add nvidia --target https://integrate.api.nvidia.com/v1 --port 3001
-./alvus.exe key add nvidia nvapi-xxxxxxxxxxxx
+./akswitch.exe provider add nvidia --target https://integrate.api.nvidia.com/v1 --port 3001
+./akswitch.exe key add nvidia nvapi-xxxxxxxxxxxx
 
 # 启动
-./alvus.exe start
+./akswitch.exe start
 
 # 查看状态
-./alvus.exe status
+./akswitch.exe status
 ```
 
 ## 核心功能
@@ -37,7 +37,7 @@ go build -o alvus.exe ./cmd/alvus/
 - **加密存储** — API Key 以 AES-256-GCM 加密存储
 - **配置热重载** — `.env` 修改自动生效，配置 diff 日志脱敏输出
 - **Dashboard** — 内置 Web 实时面板
-- **Prometheus 指标** — 开箱即用的监控栈（Alvus + Prometheus + Grafana）
+- **Prometheus 指标** — 开箱即用的监控栈（AK Switch + Prometheus + Grafana）
 
 ## 文档
 
@@ -51,8 +51,8 @@ go build -o alvus.exe ./cmd/alvus/
 
 ## 项目定位
 
-Alvus **不做** provider 级路由、请求整流、响应变换（ccswitch 已成熟）。
-Alvus **只做** 单 provider 内多 Key 的智能轮转、限流处理、自动熔断。
+AK Switch **不做** provider 级路由、请求整流、响应变换（ccswitch 已成熟）。
+AK Switch **只做** 单 provider 内多 Key 的智能轮转、限流处理、自动熔断。
 
 ## License
 

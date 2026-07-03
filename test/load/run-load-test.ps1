@@ -2,10 +2,10 @@
 
 <#
 .SYNOPSIS
-    运行 Alvus 代理的负载压测脚本（基于 Vegeta）
+    运行 AK Switch 代理的负载压测脚本（基于 Vegeta）
 
 .DESCRIPTION
-    使用 vegeta 对 Alvus 代理进行多种场景的负载压测，结果输出到 results/ 目录。
+    使用 vegeta 对 AK Switch 代理进行多种场景的负载压测，结果输出到 results/ 目录。
     需要先安装 vegeta: https://github.com/tsenart/vegeta
 
 .PARAMETER Scenario
@@ -15,7 +15,7 @@
     - upstream-flaky     (上游 429 抖动)
 
 .PARAMETER Target
-    目标代理地址。默认从环境变量 ALVUS_TARGET 读取，未设置则默认为 http://localhost:8080
+    目标代理地址。默认从环境变量 AKSWITCH_TARGET 读取，未设置则默认为 http://localhost:8080
 
 .PARAMETER OutputDir
     结果输出目录。默认 test/load/results/
@@ -36,7 +36,7 @@ param(
     [string]$Scenario,
 
     [Parameter(ParameterSetName = 'Run')]
-    [string]$Target = $(if ($env:ALVUS_TARGET) { $env:ALVUS_TARGET } else { 'http://localhost:8080' }),
+    [string]$Target = $(if ($env:AKSWITCH_TARGET) { $env:AKSWITCH_TARGET } else { 'http://localhost:8080' }),
 
     [Parameter(ParameterSetName = 'Run')]
     [string]$OutputDir = $(Join-Path $PSScriptRoot 'results'),

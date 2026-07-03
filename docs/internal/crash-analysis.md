@@ -3,7 +3,7 @@
 > 分析日期: 2026-06-23
 > 来源: CC Switch GitHub Issues, Anthropic Messages API 协议分析, 同类路由项目(LiteLLM/new-api/one-api)调研
 > 发现: 10 个直接关联 CC Switch Issue + 3 个同类项目 Issue + 协议源头分析
-> 最终结论: 根因在 sensenova/DeepSeek 的 thinking mode + 工具调用兼容性问题, Alvus 和 CC Switch 都只是中间层
+> 最终结论: 根因在 sensenova/DeepSeek 的 thinking mode + 工具调用兼容性问题, AK Switch 和 CC Switch 都只是中间层
 
 ---
 
@@ -153,11 +153,11 @@ Claude Code 收到 end_turn → 认为对话结束
 
 ## 六、解决方案
 
-### 即时方案（走 Alvus）
+### 即时方案（走 AK Switch）
 
 | 措施 | 效果 |
 |------|------|
-| **CC Switch 切到 Alvus provider** | Alvus 纯透传，不修改任何消息内容，绕过 CC Switch 所有整流器 |
+| **CC Switch 切到 AK Switch provider** | AK Switch 纯透传，不修改任何消息内容，绕过 CC Switch 所有整流器 |
 
 ### 快速验证方案
 
@@ -181,7 +181,7 @@ export CLAUDE_CODE_DISABLE_THINKING=1
 
 ## 七、验证方法
 
-1. **直接走 Alvus 测试**（推荐）：看工具调用是否正常
+1. **直接走 AK Switch 测试**（推荐）：看工具调用是否正常
 2. **设 `CLAUDE_CODE_DISABLE_THINKING=1`**：看问题是否消失
 3. **抓包验证**：捕获 SSE 事件流，检查 `message_delta` 中的 `stop_reason` 值
 4. **降级 CC Switch 到 v3.14.1**：看问题是否消失（确认是否为 v3.16.0+ 引入）

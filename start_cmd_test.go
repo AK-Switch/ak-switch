@@ -9,19 +9,19 @@ import (
 	"testing"
 	"time"
 
-	"alvus/internal/cmd"
+	"akswitch/internal/cmd"
 )
 
-// ── Test: alvus start (TOML 模式，完整启动) ─────────────────
+// ── Test: akswitch start (TOML 模式，完整启动) ─────────────────
 //
 // 子进程模式，完整模拟用户操作链：
 //
-//	provider add → key add → alvus start
+//	provider add → key add → akswitch start
 //
 // 验证：服务器启动后 health endpoint 可达。
 func TestStartCmd_TOMLMode(t *testing.T) {
 	if os.Getenv("ALVUS_TEST_START_CHILD") == "1" {
-		os.Args = []string{"alvus", "start"}
+		os.Args = []string{"akswitch", "start"}
 		cmd.Execute("")
 		return
 	}
@@ -30,12 +30,12 @@ func TestStartCmd_TOMLMode(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
-	runCommand(t, "alvus", "provider", "add", "testp",
+	runCommand(t, "akswitch", "provider", "add", "testp",
 		"--target", "http://localhost:18999/v1",
 		"--genai", "http://localhost:18999",
 		"--port", "19301",
 	)
-	runCommand(t, "alvus", "key", "add", "testp", "sk-test-key-12345")
+	runCommand(t, "akswitch", "key", "add", "testp", "sk-test-key-12345")
 
 	testExe, err := os.Executable()
 	if err != nil {
@@ -74,10 +74,10 @@ func TestStartCmd_TOMLMode(t *testing.T) {
 	}
 }
 
-// ── Test: alvus start — 缺少 Key 时的错误处理 ──────────────
+// ── Test: akswitch start — 缺少 Key 时的错误处理 ──────────────
 func TestStartCmd_NoKeys(t *testing.T) {
 	if os.Getenv("ALVUS_TEST_START_CHILD") == "1" {
-		os.Args = []string{"alvus", "start"}
+		os.Args = []string{"akswitch", "start"}
 		cmd.Execute("")
 		return
 	}
@@ -86,7 +86,7 @@ func TestStartCmd_NoKeys(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
-	runCommand(t, "alvus", "provider", "add", "nokey",
+	runCommand(t, "akswitch", "provider", "add", "nokey",
 		"--target", "http://localhost:18999/v1",
 		"--genai", "http://localhost:18999",
 		"--port", "19302",
@@ -116,10 +116,10 @@ func TestStartCmd_NoKeys(t *testing.T) {
 	}
 }
 
-// ── Test: alvus start --provider 过滤 ─────────────────────
+// ── Test: akswitch start --provider 过滤 ─────────────────────
 func TestStartCmd_ProviderFilter(t *testing.T) {
 	if os.Getenv("ALVUS_TEST_START_CHILD") == "1" {
-		os.Args = []string{"alvus", "start", "--provider", "test-a"}
+		os.Args = []string{"akswitch", "start", "--provider", "test-a"}
 		cmd.Execute("")
 		return
 	}
@@ -128,19 +128,19 @@ func TestStartCmd_ProviderFilter(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
-	runCommand(t, "alvus", "provider", "add", "test-a",
+	runCommand(t, "akswitch", "provider", "add", "test-a",
 		"--target", "http://localhost:18999/v1",
 		"--genai", "http://localhost:18999",
 		"--port", "19305",
 	)
-	runCommand(t, "alvus", "key", "add", "test-a", "sk-test-key-aaa")
+	runCommand(t, "akswitch", "key", "add", "test-a", "sk-test-key-aaa")
 
-	runCommand(t, "alvus", "provider", "add", "test-b",
+	runCommand(t, "akswitch", "provider", "add", "test-b",
 		"--target", "http://localhost:18999/v1",
 		"--genai", "http://localhost:18999",
 		"--port", "19306",
 	)
-	runCommand(t, "alvus", "key", "add", "test-b", "sk-test-key-bbb")
+	runCommand(t, "akswitch", "key", "add", "test-b", "sk-test-key-bbb")
 
 	testExe, err := os.Executable()
 	if err != nil {

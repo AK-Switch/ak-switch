@@ -86,7 +86,7 @@
 
 | 命令类型 | 测试方式 | 示例 |
 |---------|---------|------|
-| 非阻塞 CLI 命令（config、provider、key） | `runCommand(t, "alvus", ...)` | `provider_cmd_test.go` |
+| 非阻塞 CLI 命令（config、provider、key） | `runCommand(t, "akswitch", ...)` | `provider_cmd_test.go` |
 | 阻塞/长运行 CLI 命令（start） | 子进程模式：启动 → 验证 → kill | `start_cmd_test.go` |
 
 #### PR 合并前自问
@@ -106,7 +106,7 @@
 
 ## 项目定位
 
-与[ccswitch](https://github.com/farion1231/cc-switch/raw/refs/heads/main/docs/user-manual/zh/README.md)结合使用, ccswitch负责provider的轮转, 而alvus只专注于做单 provider 内的 api key 的轮转, 其他功能有其他已经极为成熟的工具如ccswitch搭配使用, alvus只专精于apikey轮转垂直领域
+与[ccswitch](https://github.com/farion1231/cc-switch/raw/refs/heads/main/docs/user-manual/zh/README.md)结合使用, ccswitch负责provider的轮转, 而akswitch只专注于做单 provider 内的 api key 的轮转, 其他功能有其他已经极为成熟的工具如ccswitch搭配使用, akswitch只专精于apikey轮转垂直领域
 
 ccswitch本身就已经具有了强大的本地路由代理功能了, 比如:
 ```

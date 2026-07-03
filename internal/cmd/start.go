@@ -10,9 +10,9 @@ import (
 	"syscall"
 	"time"
 
-	"alvus/internal/config"
-	"alvus/internal/keypool"
-	"alvus/internal/server"
+	"akswitch/internal/config"
+	"akswitch/internal/keypool"
+	"akswitch/internal/server"
 
 	"github.com/spf13/cobra"
 )

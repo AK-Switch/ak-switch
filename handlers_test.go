@@ -1,10 +1,10 @@
 package main
 
 import (
-	"alvus/internal/config"
-	"alvus/internal/keypool"
-	"alvus/internal/server"
-	"alvus/internal/utils"
+	"akswitch/internal/config"
+	"akswitch/internal/keypool"
+	"akswitch/internal/server"
+	"akswitch/internal/utils"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -33,10 +33,10 @@ func newTestServer(keys []string) *httptest.Server {
 // ── Health ─────────────────────────────────────────
 
 func TestHealthHandler(t *testing.T) {
-		alvus := newTestServer([]string{"key-a", "key-b", "key-c"})
-	defer alvus.Close()
+		srv := newTestServer([]string{"key-a", "key-b", "key-c"})
+	defer srv.Close()
 
-	resp, err := http.Get(alvus.URL + "/health")
+	resp, err := http.Get(srv.URL + "/health")
 	if err != nil {
 		t.Fatalf("GET /health: %v", err)
 	}
@@ -75,10 +75,10 @@ func TestHealthHandler(t *testing.T) {
 // ── Config GET ─────────────────────────────────────
 
 func TestConfigGet(t *testing.T) {
-		alvus := newTestServer([]string{"key-a", "key-b", "key-c"})
-	defer alvus.Close()
+		srv := newTestServer([]string{"key-a", "key-b", "key-c"})
+	defer srv.Close()
 
-	resp, err := http.Get(alvus.URL + "/api/config")
+	resp, err := http.Get(srv.URL + "/api/config")
 	if err != nil {
 		t.Fatalf("GET /api/config: %v", err)
 	}
@@ -159,12 +159,12 @@ func TestConfigPost(t *testing.T) {
 	pool := keypool.NewKeyPool([]string{"key-a", "key-b"}, nil)
 	pr := server.NewProviderRouter("")
 	pr.AddProvider("test", cfg, pool)
-	alvus := httptest.NewServer(pr.Handler())
-	defer alvus.Close()
+	srv := httptest.NewServer(pr.Handler())
+	defer srv.Close()
 
 	// POST /api/config is no longer supported in ProviderRouter architecture
 	reqBody := `{"targetBase":"https://new.example.com/v1","genaiBase":"https://genai.example.com","keys":["new-key-1","new-key-2"]}`
-	resp, err := http.Post(alvus.URL+"/api/config", "application/json", strings.NewReader(reqBody))
+	resp, err := http.Post(srv.URL+"/api/config", "application/json", strings.NewReader(reqBody))
 	if err != nil {
 		t.Fatalf("POST /api/config: %v", err)
 	}
@@ -178,10 +178,10 @@ func TestConfigPost(t *testing.T) {
 // ── Keys GET ───────────────────────────────────────
 
 func TestKeysGet(t *testing.T) {
-		alvus := newTestServer([]string{"key-a", "key-b", "key-c"})
-	defer alvus.Close()
+		srv := newTestServer([]string{"key-a", "key-b", "key-c"})
+	defer srv.Close()
 
-	resp, err := http.Get(alvus.URL + "/api/keys")
+	resp, err := http.Get(srv.URL + "/api/keys")
 	if err != nil {
 		t.Fatalf("GET /api/keys: %v", err)
 	}
@@ -220,12 +220,12 @@ func TestKeysGet(t *testing.T) {
 // ── Keys POST ──────────────────────────────────────
 
 func TestKeysPost(t *testing.T) {
-		alvus := newTestServer([]string{"key-a", "key-b", "key-c"})
-	defer alvus.Close()
+		srv := newTestServer([]string{"key-a", "key-b", "key-c"})
+	defer srv.Close()
 
 	// POST 添加新 key
 	reqBody := `{"key":"new-test-key"}`
-	resp, err := http.Post(alvus.URL+"/api/keys", "application/json", strings.NewReader(reqBody))
+	resp, err := http.Post(srv.URL+"/api/keys", "application/json", strings.NewReader(reqBody))
 	if err != nil {
 		t.Fatalf("POST /api/keys: %v", err)
 	}
@@ -252,7 +252,7 @@ func TestKeysPost(t *testing.T) {
 	}
 
 	// GET 验证 key 数量为 4
-	resp2, err := http.Get(alvus.URL + "/api/keys")
+	resp2, err := http.Get(srv.URL + "/api/keys")
 	if err != nil {
 		t.Fatalf("GET /api/keys: %v", err)
 	}
@@ -270,11 +270,11 @@ func TestKeysPost(t *testing.T) {
 // ── Keys DELETE ────────────────────────────────────
 
 func TestKeysDelete(t *testing.T) {
-		alvus := newTestServer([]string{"key-a", "key-b", "key-c"})
-	defer alvus.Close()
+		srv := newTestServer([]string{"key-a", "key-b", "key-c"})
+	defer srv.Close()
 
 	// 先 GET 确认当前 key 数
-	resp, err := http.Get(alvus.URL + "/api/keys")
+	resp, err := http.Get(srv.URL + "/api/keys")
 	if err != nil {
 		t.Fatalf("GET /api/keys: %v", err)
 	}
@@ -288,7 +288,7 @@ func TestKeysDelete(t *testing.T) {
 
 	// DELETE 移除 index=1 (1-based) 的 key
 	reqBody := `{"index":1}`
-	req, err := http.NewRequest(http.MethodDelete, alvus.URL+"/api/keys", strings.NewReader(reqBody))
+	req, err := http.NewRequest(http.MethodDelete, srv.URL+"/api/keys", strings.NewReader(reqBody))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -312,7 +312,7 @@ func TestKeysDelete(t *testing.T) {
 	}
 
 	// GET 验证 key 数减 1
-	resp3, err := http.Get(alvus.URL + "/api/keys")
+	resp3, err := http.Get(srv.URL + "/api/keys")
 	if err != nil {
 		t.Fatalf("GET /api/keys: %v", err)
 	}
@@ -330,10 +330,10 @@ func TestKeysDelete(t *testing.T) {
 // ── Clear ──────────────────────────────────────────
 
 func TestClearHandler(t *testing.T) {
-		alvus := newTestServer([]string{"key-a", "key-b", "key-c"})
-	defer alvus.Close()
+		srv := newTestServer([]string{"key-a", "key-b", "key-c"})
+	defer srv.Close()
 
-	resp, err := http.Post(alvus.URL+"/clear", "application/json", strings.NewReader(`{}`))
+	resp, err := http.Post(srv.URL+"/clear", "application/json", strings.NewReader(`{}`))
 	if err != nil {
 		t.Fatalf("POST /clear: %v", err)
 	}
@@ -367,11 +367,11 @@ func TestHealthHandlerAuth(t *testing.T) {
 	pool := keypool.NewKeyPool([]string{"key-a", "key-b", "key-c"}, nil)
 	pr := server.NewProviderRouter("")
 	pr.AddProvider("test", cfg, pool)
-	alvus := httptest.NewServer(pr.Handler())
-	defer alvus.Close()
+	srv := httptest.NewServer(pr.Handler())
+	defer srv.Close()
 
 	// Without token → 401
-	resp, err := http.Get(alvus.URL + "/health")
+	resp, err := http.Get(srv.URL + "/health")
 	if err != nil {
 		t.Fatalf("GET /health (no auth): %v", err)
 	}
@@ -381,7 +381,7 @@ func TestHealthHandlerAuth(t *testing.T) {
 	}
 
 	// With wrong token → 401
-	req, _ := http.NewRequest("GET", alvus.URL+"/health", nil)
+	req, _ := http.NewRequest("GET", srv.URL+"/health", nil)
 	req.Header.Set("X-Admin-Token", "wrong-token")
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -393,7 +393,7 @@ func TestHealthHandlerAuth(t *testing.T) {
 	}
 
 	// With correct token → 200
-	req, _ = http.NewRequest("GET", alvus.URL+"/health", nil)
+	req, _ = http.NewRequest("GET", srv.URL+"/health", nil)
 	req.Header.Set("X-Admin-Token", "my-token")
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -427,11 +427,11 @@ func TestClearHandlerAuth(t *testing.T) {
 	pool := keypool.NewKeyPool([]string{"key-a", "key-b", "key-c"}, nil)
 	pr := server.NewProviderRouter("")
 	pr.AddProvider("test", cfg, pool)
-	alvus := httptest.NewServer(pr.Handler())
-	defer alvus.Close()
+	srv := httptest.NewServer(pr.Handler())
+	defer srv.Close()
 
 	// Without token → 401
-	resp, err := http.Post(alvus.URL+"/clear", "application/json", strings.NewReader(`{}`))
+	resp, err := http.Post(srv.URL+"/clear", "application/json", strings.NewReader(`{}`))
 	if err != nil {
 		t.Fatalf("POST /clear (no auth): %v", err)
 	}
@@ -441,7 +441,7 @@ func TestClearHandlerAuth(t *testing.T) {
 	}
 
 	// With wrong token → 401
-	req, _ := http.NewRequest("POST", alvus.URL+"/clear", strings.NewReader(`{}`))
+	req, _ := http.NewRequest("POST", srv.URL+"/clear", strings.NewReader(`{}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Admin-Token", "wrong-token")
 	resp, err = http.DefaultClient.Do(req)
@@ -454,7 +454,7 @@ func TestClearHandlerAuth(t *testing.T) {
 	}
 
 	// With correct token → 200
-	req, _ = http.NewRequest("POST", alvus.URL+"/clear", strings.NewReader(`{}`))
+	req, _ = http.NewRequest("POST", srv.URL+"/clear", strings.NewReader(`{}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Admin-Token", "my-token")
 	resp, err = http.DefaultClient.Do(req)
@@ -478,10 +478,10 @@ func TestClearHandlerAuth(t *testing.T) {
 // ── Stats GET ───────────────────────────────────────
 
 func TestStatsHandler(t *testing.T) {
-		alvus := newTestServer([]string{"key-a", "key-b", "key-c"})
-	defer alvus.Close()
+		srv := newTestServer([]string{"key-a", "key-b", "key-c"})
+	defer srv.Close()
 
-	resp, err := http.Get(alvus.URL + "/api/stats")
+	resp, err := http.Get(srv.URL + "/api/stats")
 	if err != nil {
 		t.Fatalf("GET /api/stats: %v", err)
 	}
@@ -507,11 +507,11 @@ func TestStatsHandler(t *testing.T) {
 // ── Disable Key POST ──────────────────────────────────
 
 func TestDisableKeyHandler(t *testing.T) {
-		alvus := newTestServer([]string{"key-a", "key-b", "key-c"})
-	defer alvus.Close()
+		srv := newTestServer([]string{"key-a", "key-b", "key-c"})
+	defer srv.Close()
 
 	// 禁用 index=1
-	req, _ := http.NewRequest("POST", alvus.URL+"/api/keys/1/disable", nil)
+	req, _ := http.NewRequest("POST", srv.URL+"/api/keys/1/disable", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("POST /api/keys/1/disable: %v", err)
@@ -531,7 +531,7 @@ func TestDisableKeyHandler(t *testing.T) {
 	}
 
 	// GET /api/keys 验证该 key 状态为 "disabled"
-	resp2, err := http.Get(alvus.URL + "/api/keys")
+	resp2, err := http.Get(srv.URL + "/api/keys")
 	if err != nil {
 		t.Fatalf("GET /api/keys: %v", err)
 	}
@@ -550,7 +550,7 @@ func TestDisableKeyHandler(t *testing.T) {
 	}
 
 	// 越界 index=999 → 404
-	req2, _ := http.NewRequest("POST", alvus.URL+"/api/keys/999/disable", nil)
+	req2, _ := http.NewRequest("POST", srv.URL+"/api/keys/999/disable", nil)
 	resp3, err := http.DefaultClient.Do(req2)
 	if err != nil {
 		t.Fatalf("POST /api/keys/999/disable: %v", err)
@@ -574,11 +574,11 @@ func TestDisableKeyHandlerAuth(t *testing.T) {
 	pool := keypool.NewKeyPool([]string{"key-a", "key-b", "key-c"}, nil)
 	pr := server.NewProviderRouter("")
 	pr.AddProvider("test", cfg, pool)
-	alvus := httptest.NewServer(pr.Handler())
-	defer alvus.Close()
+	srv := httptest.NewServer(pr.Handler())
+	defer srv.Close()
 
 	// Without token → 401
-	req, _ := http.NewRequest("POST", alvus.URL+"/api/keys/1/disable", nil)
+	req, _ := http.NewRequest("POST", srv.URL+"/api/keys/1/disable", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("POST /api/keys/1/disable (no auth): %v", err)
@@ -589,7 +589,7 @@ func TestDisableKeyHandlerAuth(t *testing.T) {
 	}
 
 	// Wrong token → 401
-	req, _ = http.NewRequest("POST", alvus.URL+"/api/keys/1/disable", nil)
+	req, _ = http.NewRequest("POST", srv.URL+"/api/keys/1/disable", nil)
 	req.Header.Set("X-Admin-Token", "wrong-token")
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -601,7 +601,7 @@ func TestDisableKeyHandlerAuth(t *testing.T) {
 	}
 
 	// Correct token → 200
-	req, _ = http.NewRequest("POST", alvus.URL+"/api/keys/1/disable", nil)
+	req, _ = http.NewRequest("POST", srv.URL+"/api/keys/1/disable", nil)
 	req.Header.Set("X-Admin-Token", "my-token")
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -624,11 +624,11 @@ func TestDisableKeyHandlerAuth(t *testing.T) {
 // ── Cooldown Key PUT ──────────────────────────────────
 
 func TestCooldownKeyHandler(t *testing.T) {
-		alvus := newTestServer([]string{"key-a", "key-b", "key-c"})
-	defer alvus.Close()
+		srv := newTestServer([]string{"key-a", "key-b", "key-c"})
+	defer srv.Close()
 
 	// 冷却 index=1
-	req, _ := http.NewRequest("PUT", alvus.URL+"/api/keys/1/cooldown", nil)
+	req, _ := http.NewRequest("PUT", srv.URL+"/api/keys/1/cooldown", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("PUT /api/keys/1/cooldown: %v", err)
@@ -648,7 +648,7 @@ func TestCooldownKeyHandler(t *testing.T) {
 	}
 
 	// 越界 index=999 → 404
-	req2, _ := http.NewRequest("PUT", alvus.URL+"/api/keys/999/cooldown", nil)
+	req2, _ := http.NewRequest("PUT", srv.URL+"/api/keys/999/cooldown", nil)
 	resp3, err := http.DefaultClient.Do(req2)
 	if err != nil {
 		t.Fatalf("PUT /api/keys/999/cooldown: %v", err)
@@ -662,11 +662,11 @@ func TestCooldownKeyHandler(t *testing.T) {
 // ── Delete Key by Index ───────────────────────────────
 
 func TestDeleteKeyByIndexHandler(t *testing.T) {
-		alvus := newTestServer([]string{"key-a", "key-b", "key-c"})
-	defer alvus.Close()
+		srv := newTestServer([]string{"key-a", "key-b", "key-c"})
+	defer srv.Close()
 
 	// 删除 index=1
-	req, _ := http.NewRequest("DELETE", alvus.URL+"/api/keys/1", nil)
+	req, _ := http.NewRequest("DELETE", srv.URL+"/api/keys/1", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("DELETE /api/keys/1: %v", err)
@@ -686,7 +686,7 @@ func TestDeleteKeyByIndexHandler(t *testing.T) {
 	}
 
 	// GET /api/keys 验证只剩 2 个 key
-	resp2, err := http.Get(alvus.URL + "/api/keys")
+	resp2, err := http.Get(srv.URL + "/api/keys")
 	if err != nil {
 		t.Fatalf("GET /api/keys: %v", err)
 	}
@@ -701,7 +701,7 @@ func TestDeleteKeyByIndexHandler(t *testing.T) {
 	}
 
 	// 越界 index=999 → 404
-	req2, _ := http.NewRequest("DELETE", alvus.URL+"/api/keys/999", nil)
+	req2, _ := http.NewRequest("DELETE", srv.URL+"/api/keys/999", nil)
 	resp3, err := http.DefaultClient.Do(req2)
 	if err != nil {
 		t.Fatalf("DELETE /api/keys/999: %v", err)
@@ -725,11 +725,11 @@ func TestDeleteKeyByIndexHandlerAuth(t *testing.T) {
 	pool := keypool.NewKeyPool([]string{"key-a", "key-b", "key-c"}, nil)
 	pr := server.NewProviderRouter("")
 	pr.AddProvider("test", cfg, pool)
-	alvus := httptest.NewServer(pr.Handler())
-	defer alvus.Close()
+	srv := httptest.NewServer(pr.Handler())
+	defer srv.Close()
 
 	// Without token → 401
-	req, _ := http.NewRequest("DELETE", alvus.URL+"/api/keys/1", nil)
+	req, _ := http.NewRequest("DELETE", srv.URL+"/api/keys/1", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("DELETE /api/keys/1 (no auth): %v", err)
@@ -740,7 +740,7 @@ func TestDeleteKeyByIndexHandlerAuth(t *testing.T) {
 	}
 
 	// With correct token → 200
-	req, _ = http.NewRequest("DELETE", alvus.URL+"/api/keys/1", nil)
+	req, _ = http.NewRequest("DELETE", srv.URL+"/api/keys/1", nil)
 	req.Header.Set("X-Admin-Token", "my-token")
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -797,10 +797,10 @@ cooldown_sec = 60
 	pool := keypool.NewKeyPool([]string{"key-a", "key-b"}, nil)
 	pr := server.NewProviderRouter("")
 	pr.AddProvider("test", cfg, pool)
-	alvus := httptest.NewServer(pr.Handler())
-	defer alvus.Close()
+	srv := httptest.NewServer(pr.Handler())
+	defer srv.Close()
 
-	resp, err := http.Post(alvus.URL+"/api/reload", "application/json", strings.NewReader(`{}`))
+	resp, err := http.Post(srv.URL+"/api/reload", "application/json", strings.NewReader(`{}`))
 	if err != nil {
 		t.Fatalf("POST /api/reload: %v", err)
 	}
@@ -822,10 +822,10 @@ cooldown_sec = 60
 // ── Log Level API ─────────────────────────────────────
 
 func TestLogLevelHandler_Success(t *testing.T) {
-		alvus := newTestServer([]string{"key-a"})
-	defer alvus.Close()
+		srv := newTestServer([]string{"key-a"})
+	defer srv.Close()
 
-	resp, err := http.Post(alvus.URL+"/api/log-level", "application/json", strings.NewReader(`{"level":"debug"}`))
+	resp, err := http.Post(srv.URL+"/api/log-level", "application/json", strings.NewReader(`{"level":"debug"}`))
 	if err != nil {
 		t.Fatalf("POST /api/log-level: %v", err)
 	}
@@ -846,10 +846,10 @@ func TestLogLevelHandler_Success(t *testing.T) {
 }
 
 func TestLogLevelHandler_InvalidLevel(t *testing.T) {
-		alvus := newTestServer([]string{"key-a"})
-	defer alvus.Close()
+		srv := newTestServer([]string{"key-a"})
+	defer srv.Close()
 
-	resp, err := http.Post(alvus.URL+"/api/log-level", "application/json", strings.NewReader(`{"level":"verbose"}`))
+	resp, err := http.Post(srv.URL+"/api/log-level", "application/json", strings.NewReader(`{"level":"verbose"}`))
 	if err != nil {
 		t.Fatalf("POST /api/log-level: %v", err)
 	}
@@ -861,10 +861,10 @@ func TestLogLevelHandler_InvalidLevel(t *testing.T) {
 }
 
 func TestLogLevelHandler_WrongMethod(t *testing.T) {
-		alvus := newTestServer([]string{"key-a"})
-	defer alvus.Close()
+		srv := newTestServer([]string{"key-a"})
+	defer srv.Close()
 
-	resp, err := http.Get(alvus.URL + "/api/log-level")
+	resp, err := http.Get(srv.URL + "/api/log-level")
 	if err != nil {
 		t.Fatalf("GET /api/log-level: %v", err)
 	}
@@ -888,11 +888,11 @@ func TestLogLevelHandler_Unauthorized(t *testing.T) {
 	pool := keypool.NewKeyPool([]string{"key-a"}, nil)
 	pr := server.NewProviderRouter("")
 	pr.AddProvider("test", cfg, pool)
-	alvus := httptest.NewServer(pr.Handler())
-	defer alvus.Close()
+	srv := httptest.NewServer(pr.Handler())
+	defer srv.Close()
 
 	// No token → 401
-	resp, err := http.Post(alvus.URL+"/api/log-level", "application/json", strings.NewReader(`{"level":"debug"}`))
+	resp, err := http.Post(srv.URL+"/api/log-level", "application/json", strings.NewReader(`{"level":"debug"}`))
 	if err != nil {
 		t.Fatalf("POST /api/log-level: %v", err)
 	}
@@ -906,11 +906,11 @@ func TestLogLevelHandler_Unauthorized(t *testing.T) {
 // ── Keys DELETE — 1-based index validation ─────────────
 
 func TestKeysHandlerDelete_OneBased(t *testing.T) {
-		alvus := newTestServer([]string{"key-a", "key-b", "key-c"})
-	defer alvus.Close()
+		srv := newTestServer([]string{"key-a", "key-b", "key-c"})
+	defer srv.Close()
 
 	// GET initial count
-	resp, err := http.Get(alvus.URL + "/api/keys")
+	resp, err := http.Get(srv.URL + "/api/keys")
 	if err != nil {
 		t.Fatalf("GET /api/keys: %v", err)
 	}
@@ -923,7 +923,7 @@ func TestKeysHandlerDelete_OneBased(t *testing.T) {
 
 	// DELETE index=1 (1-based) → should succeed
 	reqBody := `{"index":1}`
-	req, err := http.NewRequest(http.MethodDelete, alvus.URL+"/api/keys", strings.NewReader(reqBody))
+	req, err := http.NewRequest(http.MethodDelete, srv.URL+"/api/keys", strings.NewReader(reqBody))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -939,7 +939,7 @@ func TestKeysHandlerDelete_OneBased(t *testing.T) {
 	}
 
 	// GET after delete — count should be reduced by 1
-	resp3, err := http.Get(alvus.URL + "/api/keys")
+	resp3, err := http.Get(srv.URL + "/api/keys")
 	if err != nil {
 		t.Fatalf("GET /api/keys: %v", err)
 	}
@@ -955,11 +955,11 @@ func TestKeysHandlerDelete_OneBased(t *testing.T) {
 }
 
 func TestKeysHandlerDelete_IndexZeroReturns400(t *testing.T) {
-		alvus := newTestServer([]string{"key-a", "key-b", "key-c"})
-	defer alvus.Close()
+		srv := newTestServer([]string{"key-a", "key-b", "key-c"})
+	defer srv.Close()
 
 	reqBody := `{"index":0}`
-	req, err := http.NewRequest(http.MethodDelete, alvus.URL+"/api/keys", strings.NewReader(reqBody))
+	req, err := http.NewRequest(http.MethodDelete, srv.URL+"/api/keys", strings.NewReader(reqBody))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -976,11 +976,11 @@ func TestKeysHandlerDelete_IndexZeroReturns400(t *testing.T) {
 }
 
 func TestKeysHandlerDelete_IndexNegativeReturns400(t *testing.T) {
-		alvus := newTestServer([]string{"key-a", "key-b", "key-c"})
-	defer alvus.Close()
+		srv := newTestServer([]string{"key-a", "key-b", "key-c"})
+	defer srv.Close()
 
 	reqBody := `{"index":-1}`
-	req, err := http.NewRequest(http.MethodDelete, alvus.URL+"/api/keys", strings.NewReader(reqBody))
+	req, err := http.NewRequest(http.MethodDelete, srv.URL+"/api/keys", strings.NewReader(reqBody))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -997,11 +997,11 @@ func TestKeysHandlerDelete_IndexNegativeReturns400(t *testing.T) {
 }
 
 func TestKeysHandlerDelete_IndexTooLargeReturns400(t *testing.T) {
-		alvus := newTestServer([]string{"key-a", "key-b", "key-c"})
-	defer alvus.Close()
+		srv := newTestServer([]string{"key-a", "key-b", "key-c"})
+	defer srv.Close()
 
 	reqBody := `{"index":999}`
-	req, err := http.NewRequest(http.MethodDelete, alvus.URL+"/api/keys", strings.NewReader(reqBody))
+	req, err := http.NewRequest(http.MethodDelete, srv.URL+"/api/keys", strings.NewReader(reqBody))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1032,12 +1032,12 @@ func TestKeysHandlerDelete_Unauthenticated(t *testing.T) {
 	pool := keypool.NewKeyPool([]string{"key-a", "key-b", "key-c"}, nil)
 	pr := server.NewProviderRouter("")
 	pr.AddProvider("test", cfg, pool)
-	alvus := httptest.NewServer(pr.Handler())
-	defer alvus.Close()
+	srv := httptest.NewServer(pr.Handler())
+	defer srv.Close()
 
 	// Without token → 401
 	reqBody := `{"index":1}`
-	req, _ := http.NewRequest(http.MethodDelete, alvus.URL+"/api/keys", strings.NewReader(reqBody))
+	req, _ := http.NewRequest(http.MethodDelete, srv.URL+"/api/keys", strings.NewReader(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -1049,7 +1049,7 @@ func TestKeysHandlerDelete_Unauthenticated(t *testing.T) {
 	}
 
 	// With correct token → 200
-	req, _ = http.NewRequest(http.MethodDelete, alvus.URL+"/api/keys", strings.NewReader(reqBody))
+	req, _ = http.NewRequest(http.MethodDelete, srv.URL+"/api/keys", strings.NewReader(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Admin-Token", "my-token")
 	resp, err = http.DefaultClient.Do(req)
@@ -1093,12 +1093,12 @@ func TestConfigHandlerPost_Unauthenticated(t *testing.T) {
 	pool := keypool.NewKeyPool([]string{"key-a", "key-b"}, nil)
 	pr := server.NewProviderRouter("")
 	pr.AddProvider("test", cfg, pool)
-	alvus := httptest.NewServer(pr.Handler())
-	defer alvus.Close()
+	srv := httptest.NewServer(pr.Handler())
+	defer srv.Close()
 
 	// POST /api/config is no longer supported — both no token and with token return 405
 	reqBody := `{"targetBase":"http://example.com","genaiBase":"http://genai.example.com","keys":["new-key"]}`
-	resp, err := http.Post(alvus.URL+"/api/config", "application/json", strings.NewReader(reqBody))
+	resp, err := http.Post(srv.URL+"/api/config", "application/json", strings.NewReader(reqBody))
 	if err != nil {
 		t.Fatalf("POST /api/config (no auth): %v", err)
 	}
@@ -1108,7 +1108,7 @@ func TestConfigHandlerPost_Unauthenticated(t *testing.T) {
 	}
 
 	// With correct token — still 405
-	req, _ := http.NewRequest("POST", alvus.URL+"/api/config", strings.NewReader(reqBody))
+	req, _ := http.NewRequest("POST", srv.URL+"/api/config", strings.NewReader(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Admin-Token", "my-token")
 	resp, err = http.DefaultClient.Do(req)

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"alvus/internal/cmd"
-	"alvus/internal/config"
+	"akswitch/internal/cmd"
+	"akswitch/internal/config"
 )
 
 // resetConfigEnv clears all config-related env vars to prevent interference.
@@ -23,7 +23,7 @@ func resetConfigEnv() {
 	}
 }
 
-// TestConfigInit_CreatesFile verifies that "alvus config init -p <path>"
+// TestConfigInit_CreatesFile verifies that "akswitch config init -p <path>"
 // creates a valid TOML config file at the specified path.
 func TestConfigInit_CreatesFile(t *testing.T) {
 	resetConfigEnv()
@@ -32,7 +32,7 @@ func TestConfigInit_CreatesFile(t *testing.T) {
 
 	oldArgs := os.Args
 	t.Cleanup(func() { os.Args = oldArgs })
-	os.Args = []string{"alvus", "config", "init", "-p", configPath}
+	os.Args = []string{"akswitch", "config", "init", "-p", configPath}
 
 	err := cmd.Execute("")
 	if err != nil {
@@ -55,7 +55,7 @@ func TestConfigInit_CreatesFile(t *testing.T) {
 	}
 }
 
-// TestConfigView_ShowsConfig verifies that "alvus config view" prints
+// TestConfigView_ShowsConfig verifies that "akswitch config view" prints
 // the current configuration from config.toml.
 func TestConfigView_ShowsConfig(t *testing.T) {
 	resetConfigEnv()
@@ -69,7 +69,7 @@ func TestConfigView_ShowsConfig(t *testing.T) {
 
 	oldArgs := os.Args
 	t.Cleanup(func() { os.Args = oldArgs })
-	os.Args = []string{"alvus", "config", "init", "-p", xdgPath}
+	os.Args = []string{"akswitch", "config", "init", "-p", xdgPath}
 	if err := cmd.Execute(""); err != nil {
 		t.Fatalf("config init failed: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestConfigView_ShowsConfig(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	os.Args = []string{"alvus", "config", "view"}
+	os.Args = []string{"akswitch", "config", "view"}
 	err = cmd.Execute("")
 	w.Close()
 	os.Stdout = oldStdout

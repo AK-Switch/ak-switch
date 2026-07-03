@@ -3,12 +3,13 @@ package keypool
 import (
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"alvus/internal/utils"
+	"akswitch/internal/utils"
 )
 
 // KeyPool is a thread-safe, round-robin key pool with cooldown, disable, and request-tracking support.
@@ -33,6 +34,7 @@ func NewKeyPool(keys []string, names []string) *KeyPool {
 		}
 	}
 	return &KeyPool{
+		counter:        rand.Uint64(),
 		keys:           keys,
 		names:          n,
 		cooldowns:      make([]time.Time, len(keys)),
@@ -90,7 +92,7 @@ func (p *KeyPool) Next() (int, string, bool) {
 	if n == 0 {
 		return -1, "", false
 	}
-	start := int(atomic.AddUint64(&p.counter, 1)-1) % n
+	start := int((atomic.AddUint64(&p.counter, 1) - 1) % uint64(n))
 	for i := 0; i < n; i++ {
 		idx := (start + i) % n
 		if !p.disabled[idx] && time.Now().After(p.cooldowns[idx]) {

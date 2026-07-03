@@ -43,25 +43,25 @@ assert "docker compose up" \
 echo "--- C: Wait (15s) ---"
 sleep 15
 
-# Step D: Alvus health
-echo "--- D: Alvus ---"
-ALVUS_PORT="$(grep -E '^PORT=' .env 2>/dev/null | cut -d= -f2 | tr -d '[:space:]')"
-ALVUS_PORT="${ALVUS_PORT:-3000}"
-echo "  Alvus host port: $ALVUS_PORT"
+# Step D: AK Switch health
+echo "--- D: AK Switch ---"
+AKSWITCH_PORT="$(grep -E '^PORT=' .env 2>/dev/null | cut -d= -f2 | tr -d '[:space:]')"
+AKSWITCH_PORT="${AKSWITCH_PORT:-3000}"
+echo "  AK Switch host port: $AKSWITCH_PORT"
 
-assert "Alvus /health returns status ok" \
-  "curl -sf http://localhost:${ALVUS_PORT}/health 2>/dev/null | grep -q 'status.*ok'"
+assert "AK Switch /health returns status ok" \
+  "curl -sf http://localhost:${AKSWITCH_PORT}/health 2>/dev/null | grep -q 'status.*ok'"
 
 # Step E: Prometheus targets
 echo "--- E: Prometheus ---"
-assert "Prometheus has alvus target" \
-  "curl -sf http://localhost:9090/api/v1/targets 2>/dev/null | grep -q 'alvus:3000'"
+assert "Prometheus has akswitch target" \
+  "curl -sf http://localhost:9090/api/v1/targets 2>/dev/null | grep -q 'akswitch:3000'"
 
 # Step F: Prometheus scraping
 echo "--- F: Prometheus scrape ---"
 sleep 15
-assert "Prometheus alvus_keypool_keys" \
-  "curl -sf 'http://localhost:9090/api/v1/query?query=alvus_keypool_keys' 2>/dev/null | grep -q 'alvus_keypool_keys'"
+assert "Prometheus akswitch_keypool_keys" \
+  "curl -sf 'http://localhost:9090/api/v1/query?query=akswitch_keypool_keys' 2>/dev/null | grep -q 'akswitch_keypool_keys'"
 assert "Prometheus go_info" \
   "curl -sf 'http://localhost:9090/api/v1/query?query=go_info' 2>/dev/null | grep -q 'go_info'"
 
@@ -81,17 +81,17 @@ assert "Grafana Prometheus datasource" \
 
 # Step I: Grafana dashboard
 echo "--- I: Grafana dashboard ---"
-DASH="$(curl -sf 'http://localhost:3001/api/search?query=Alvus' 2>/dev/null)"
+DASH="$(curl -sf 'http://localhost:3001/api/search?query=AK%20Switch' 2>/dev/null)"
 if [ -z "$DASH" ]; then
-  DASH="$(curl -sf -u admin:admin 'http://localhost:3001/api/search?query=Alvus' 2>/dev/null)"
+  DASH="$(curl -sf -u admin:admin 'http://localhost:3001/api/search?query=AK%20Switch' 2>/dev/null)"
 fi
-assert "Grafana Alvus dashboard" \
-  "echo '$DASH' | grep -q 'Alvus Overview'"
+assert "Grafana AK Switch dashboard" \
+  "echo '$DASH' | grep -q 'AK Switch Overview'"
 
 # Step J: Container state
 echo "--- J: Containers ---"
 SERVICES="$(docker compose ps --services 2>/dev/null)"
-for s in alvus prometheus grafana; do
+for s in akswitch prometheus grafana; do
   assert "$s container running" \
     "echo '$SERVICES' | grep -q '^${s}$'"
 done

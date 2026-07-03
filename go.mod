@@ -1,4 +1,4 @@
-module alvus
+module akswitch
 
 go 1.23.0
 

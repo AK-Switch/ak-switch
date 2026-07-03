@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"alvus/internal/config"
+	"akswitch/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -19,7 +19,7 @@ func init() {
 var logsCmd = &cobra.Command{
 	Use:   "logs",
 	Short: "Show request logs",
-	Long:  `Display recent request logs from the running alvus server.`,
+	Long:  `Display recent request logs from the running akswitch server.`,
 	Args:  cobra.MaximumNArgs(0),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client := &http.Client{Timeout: 5 * time.Second}

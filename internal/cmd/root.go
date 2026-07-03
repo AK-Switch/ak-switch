@@ -8,13 +8,13 @@ import (
 
 const (
 	adminPort    = 8080
-	pidFileName  = "alvus.pid"
+	pidFileName  = "akswitch.pid"
 )
 
 var dashHTML string
 
 var rootCmd = &cobra.Command{
-	Use:   "alvus",
+	Use:   "akswitch",
 	Short: "API Key rotation proxy for AI providers",
 	Run: func(cmd *cobra.Command, args []string) {
 		providerFilter, _ := cmd.Flags().GetString("provider")
@@ -26,7 +26,7 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print version information",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("alvus version unknown")
+		fmt.Println("akswitch version unknown")
 	},
 }
 

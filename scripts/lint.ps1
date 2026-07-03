@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Run Go static analysis tools on the Alvus project
+    Run Go static analysis tools on the AK Switch project
 .DESCRIPTION
     Runs go vet. Exits 1 if any warnings found.
 #>

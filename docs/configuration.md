@@ -45,14 +45,14 @@ target = "https://api.sensenova.com/v1"
 ### 自动生成
 
 ```bash
-alvus config init
+akswitch config init
 ```
 
 在 XDG 配置目录生成含占位 provider 的示例文件，直接编辑填充即可。
 
 ## 配置热重载
 
-Alvus 每秒监控 `config.toml` 文件的修改时间。检测到变更后：
+AK Switch 每秒监控 `config.toml` 文件的修改时间。检测到变更后：
 
 1. 读取新配置
 2. 生成变更 diff（Key 值脱敏）

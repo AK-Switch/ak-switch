@@ -1,9 +1,9 @@
 package main
 
 import (
-	"alvus/internal/config"
-	"alvus/internal/keypool"
-	"alvus/internal/server"
+	"akswitch/internal/config"
+	"akswitch/internal/keypool"
+	"akswitch/internal/server"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -17,10 +17,10 @@ import (
 // Helpers
 // ---------------------------------------------------------------------------
 
-// newAlvus creates a mock upstream and an Alvus test server with full config control,
+// newServer creates a mock upstream and an AK Switch test server with full config control,
 // returning both the ProviderRouter (for accessing provider state) and the test server.
 // The caller must close both servers.
-func newAlvus(tb testing.TB, cfg *config.Config, keys []string) (*server.ProviderRouter, *httptest.Server) {
+func newServer(tb testing.TB, cfg *config.Config, keys []string) (*server.ProviderRouter, *httptest.Server) {
 	tb.Helper()
 	pool := keypool.NewKeyPool(keys, nil)
 
@@ -117,11 +117,11 @@ func TestActiveHealthCheck_ProbeSuccess(t *testing.T) {
 		HealthCheckPath:        "/health",
 		HealthCheckTimeoutSec:  5,
 	}
-	pr, alvus := newAlvus(t, cfg, []string{"test-key"})
-	defer alvus.Close()
+	pr, srv := newServer(t, cfg, []string{"test-key"})
+	defer srv.Close()
 
 	// WHEN: a proxy request succeeds — the proxy calls upCB.RecordSuccess()
-	resp, err := http.Get(alvus.URL + "/test/v1/models")
+	resp, err := http.Get(srv.URL + "/test/v1/models")
 	if err != nil {
 		t.Fatalf("GET /test/v1/models: %v", err)
 	}
@@ -137,7 +137,7 @@ func TestActiveHealthCheck_ProbeSuccess(t *testing.T) {
 	pr.Provider("test").State.Metrics().HealthCheckProbes.WithLabelValues("ok").Inc()
 
 	// THEN: /health reflects a healthy upstream
-	health := getHealth(t, alvus.URL)
+	health := getHealth(t, srv.URL)
 	if health.CbState != "closed" {
 		t.Errorf("expected upstream_cb_state 'closed', got %q", health.CbState)
 	}
@@ -171,13 +171,13 @@ func TestActiveHealthCheck_ProbeFailure(t *testing.T) {
 		HealthCheckPath:        "/health",
 		HealthCheckTimeoutSec:  5,
 	}
-	pr, alvus := newAlvus(t, cfg, []string{"test-key-a"})
-	defer alvus.Close()
+	pr, srv := newServer(t, cfg, []string{"test-key-a"})
+	defer srv.Close()
 
 	// WHEN: send enough proxy requests to trigger UpstreamCBThreshold failures
 	// Each request returns 503 and the proxy calls upCB.RecordFailure()
 	for i := 0; i < 4; i++ {
-		resp, err := http.Get(alvus.URL + "/test/v1/models")
+		resp, err := http.Get(srv.URL + "/test/v1/models")
 		if err != nil {
 			t.Fatalf("request %d: %v", i, err)
 		}
@@ -189,7 +189,7 @@ func TestActiveHealthCheck_ProbeFailure(t *testing.T) {
 	pr.Provider("test").State.Metrics().HealthCheckProbes.WithLabelValues("fail").Inc()
 
 	// THEN: CB should be open — /health shows "open"
-	health := getHealth(t, alvus.URL)
+	health := getHealth(t, srv.URL)
 	if health.CbState != "open" {
 		t.Errorf("expected upstream_cb_state 'open' after 3 failures, got %q", health.CbState)
 	}
@@ -234,19 +234,19 @@ func TestActiveHealthCheck_Recovery(t *testing.T) {
 		HealthCheckPath:        "/health",
 		HealthCheckTimeoutSec:  5,
 	}
-	pr, alvus := newAlvus(t, cfg, []string{"test-key-a"})
-	defer alvus.Close()
+	pr, srv := newServer(t, cfg, []string{"test-key-a"})
+	defer srv.Close()
 
 	// Phase 1 — Open the CB by sending failures
 	for i := 0; i < 4; i++ {
-		resp, err := http.Get(alvus.URL + "/test/v1/models")
+		resp, err := http.Get(srv.URL + "/test/v1/models")
 		if err != nil {
 			t.Fatalf("failure phase request %d: %v", i, err)
 		}
 		resp.Body.Close()
 	}
 
-	health := getHealth(t, alvus.URL)
+	health := getHealth(t, srv.URL)
 	if health.CbState != "open" {
 		t.Fatalf("CB should be open after failures, got %q", health.CbState)
 	}
@@ -261,7 +261,7 @@ func TestActiveHealthCheck_Recovery(t *testing.T) {
 
 	// WHEN: send a proxy request — Allow() transitions to HALF_OPEN,
 	// upstream returns 200 → RecordSuccess → CLOSED
-	resp, err := http.Get(alvus.URL + "/test/v1/models")
+	resp, err := http.Get(srv.URL + "/test/v1/models")
 	if err != nil {
 		t.Fatalf("recovery request: %v", err)
 	}
@@ -275,7 +275,7 @@ func TestActiveHealthCheck_Recovery(t *testing.T) {
 	pr.Provider("test").State.Metrics().HealthCheckProbes.WithLabelValues("ok").Inc()
 
 	// THEN: CB is closed again
-	health = getHealth(t, alvus.URL)
+	health = getHealth(t, srv.URL)
 	if health.CbState != "closed" {
 		t.Errorf("expected upstream_cb_state 'closed' after recovery, got %q", health.CbState)
 	}
@@ -313,8 +313,8 @@ func TestActiveHealthCheck_ProbeTimeout(t *testing.T) {
 		HealthCheckPath:        "/health",
 		HealthCheckTimeoutSec:  1,
 	}
-	pr, alvus := newAlvus(t, cfg, []string{"test-key-a"})
-	defer alvus.Close()
+	pr, srv := newServer(t, cfg, []string{"test-key-a"})
+	defer srv.Close()
 
 	// Simulate what ActiveHealthCheck does:
 	// 1. Create a short-timeout HTTP client (like the health check goroutine does)
@@ -333,7 +333,7 @@ func TestActiveHealthCheck_ProbeTimeout(t *testing.T) {
 	// 4. Simulate the health check goroutine's failure handling:
 	//    Send a proxied request that hits the slow upstream, which returns 503
 	//    after 2s. The proxy calls upCB.RecordFailure(), opening the CB.
-	resp, err := http.Get(alvus.URL + "/test/v1/models")
+	resp, err := http.Get(srv.URL + "/test/v1/models")
 	if err != nil {
 		t.Logf("proxy request error: %v", err)
 	}
@@ -344,7 +344,7 @@ func TestActiveHealthCheck_ProbeTimeout(t *testing.T) {
 	pr.Provider("test").State.SetLastHealthCheck(false)
 
 	// THEN: CB should have recorded a failure
-	health := getHealth(t, alvus.URL)
+	health := getHealth(t, srv.URL)
 	if health.CbState != "open" {
 		t.Errorf("expected upstream_cb_state 'open' after failure, got %q", health.CbState)
 	}
@@ -390,12 +390,12 @@ func TestActiveHealthCheck_ConfigDriven(t *testing.T) {
 	}
 
 	// Verify ProviderRouter initialises without error with these config values
-	pr, alvus := newAlvus(t, cfg, []string{"test-key"})
-	defer alvus.Close()
+	pr, srv := newServer(t, cfg, []string{"test-key"})
+	defer srv.Close()
 
 	// Server started successfully with health check config
 	// Verify a basic proxy request works
-	resp, err := http.Get(alvus.URL + "/test/v1/models")
+	resp, err := http.Get(srv.URL + "/test/v1/models")
 	if err != nil {
 		t.Fatalf("GET /test/v1/models: %v", err)
 	}

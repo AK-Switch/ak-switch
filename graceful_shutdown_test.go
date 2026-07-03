@@ -1,9 +1,9 @@
 package main
 
 import (
-	"alvus/internal/config"
-	"alvus/internal/keypool"
-	"alvus/internal/server"
+	"akswitch/internal/config"
+	"akswitch/internal/keypool"
+	"akswitch/internal/server"
 	"context"
 	"io"
 	"net"

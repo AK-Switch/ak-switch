@@ -1,7 +1,7 @@
 package logstore
 
 import (
-	"alvus/internal/utils"
+	"akswitch/internal/utils"
 	"testing"
 )
 

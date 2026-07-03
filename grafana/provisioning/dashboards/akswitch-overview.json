@@ -1,7 +1,7 @@
 {
-  "title": "Alvus Overview",
-  "uid": "alvus-overview",
-  "tags": ["alvus", "proxy"],
+  "title": "AK Switch Overview",
+  "uid": "akswitch-overview",
+  "tags": ["akswitch", "proxy"],
   "timezone": "browser",
   "schemaVersion": 39,
   "version": 1,
@@ -42,7 +42,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(alvus_requests_total[$__rate_interval]))",
+          "expr": "sum(rate(akswitch_requests_total[$__rate_interval]))",
           "legendFormat": "Total",
           "refId": "A"
         }
@@ -75,17 +75,17 @@
       },
       "targets": [
         {
-          "expr": "alvus_keypool_keys{state=\"active\"}",
+          "expr": "akswitch_keypool_keys{state=\"active\"}",
           "legendFormat": "Active",
           "refId": "A"
         },
         {
-          "expr": "alvus_keypool_keys{state=\"cooling\"}",
+          "expr": "akswitch_keypool_keys{state=\"cooling\"}",
           "legendFormat": "Cooling",
           "refId": "B"
         },
         {
-          "expr": "alvus_keypool_keys{state=\"disabled\"}",
+          "expr": "akswitch_keypool_keys{state=\"disabled\"}",
           "legendFormat": "Disabled",
           "refId": "C"
         }
@@ -133,7 +133,7 @@
       },
       "targets": [
         {
-          "expr": "alvus_upstream_cb_state",
+          "expr": "akswitch_upstream_cb_state",
           "legendFormat": "State",
           "refId": "A"
         }
@@ -173,7 +173,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(alvus_healthcheck_probes_total{status=\"ok\"}[$__rate_interval])) / (sum(rate(alvus_healthcheck_probes_total{status=\"ok\"}[$__rate_interval])) + sum(rate(alvus_healthcheck_probes_total{status=\"fail\"}[$__rate_interval])))",
+          "expr": "sum(rate(akswitch_healthcheck_probes_total{status=\"ok\"}[$__rate_interval])) / (sum(rate(akswitch_healthcheck_probes_total{status=\"ok\"}[$__rate_interval])) + sum(rate(akswitch_healthcheck_probes_total{status=\"fail\"}[$__rate_interval])))",
           "legendFormat": "Success Rate",
           "refId": "A"
         }
@@ -206,17 +206,17 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum(rate(alvus_request_duration_seconds_bucket[$__rate_interval])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(akswitch_request_duration_seconds_bucket[$__rate_interval])) by (le))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum(rate(alvus_request_duration_seconds_bucket[$__rate_interval])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(akswitch_request_duration_seconds_bucket[$__rate_interval])) by (le))",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum(rate(alvus_request_duration_seconds_bucket[$__rate_interval])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(akswitch_request_duration_seconds_bucket[$__rate_interval])) by (le))",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -243,7 +243,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(alvus_requests_total[$__rate_interval])) by (key_index)",
+          "expr": "sum(rate(akswitch_requests_total[$__rate_interval])) by (key_index)",
           "legendFormat": "Key {{key_index}}",
           "refId": "A"
         }
@@ -280,22 +280,22 @@
       },
       "targets": [
         {
-          "expr": "rate(alvus_upstream_errors_total{type=\"network\"}[$__rate_interval])",
+          "expr": "rate(akswitch_upstream_errors_total{type=\"network\"}[$__rate_interval])",
           "legendFormat": "Network",
           "refId": "A"
         },
         {
-          "expr": "rate(alvus_upstream_errors_total{type=\"rate_limited\"}[$__rate_interval])",
+          "expr": "rate(akswitch_upstream_errors_total{type=\"rate_limited\"}[$__rate_interval])",
           "legendFormat": "Rate Limited",
           "refId": "B"
         },
         {
-          "expr": "rate(alvus_upstream_errors_total{type=\"auth_rejected\"}[$__rate_interval])",
+          "expr": "rate(akswitch_upstream_errors_total{type=\"auth_rejected\"}[$__rate_interval])",
           "legendFormat": "Auth Rejected",
           "refId": "C"
         },
         {
-          "expr": "rate(alvus_upstream_errors_total{type=\"server_error\"}[$__rate_interval])",
+          "expr": "rate(akswitch_upstream_errors_total{type=\"server_error\"}[$__rate_interval])",
           "legendFormat": "Server Error",
           "refId": "D"
         }
@@ -328,7 +328,7 @@
       },
       "targets": [
         {
-          "expr": "rate(alvus_healthcheck_duration_seconds_sum[$__rate_interval]) / rate(alvus_healthcheck_duration_seconds_count[$__rate_interval])",
+          "expr": "rate(akswitch_healthcheck_duration_seconds_sum[$__rate_interval]) / rate(akswitch_healthcheck_duration_seconds_count[$__rate_interval])",
           "legendFormat": "Average",
           "refId": "A"
         }
@@ -365,17 +365,17 @@
       },
       "targets": [
         {
-          "expr": "rate(alvus_requests_total{status=\"2xx\"}[$__rate_interval])",
+          "expr": "rate(akswitch_requests_total{status=\"2xx\"}[$__rate_interval])",
           "legendFormat": "2xx",
           "refId": "A"
         },
         {
-          "expr": "rate(alvus_requests_total{status=\"4xx\"}[$__rate_interval])",
+          "expr": "rate(akswitch_requests_total{status=\"4xx\"}[$__rate_interval])",
           "legendFormat": "4xx",
           "refId": "B"
         },
         {
-          "expr": "rate(alvus_requests_total{status=\"5xx\"}[$__rate_interval])",
+          "expr": "rate(akswitch_requests_total{status=\"5xx\"}[$__rate_interval])",
           "legendFormat": "5xx",
           "refId": "C"
         }

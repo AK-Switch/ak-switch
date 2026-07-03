@@ -11,10 +11,10 @@ import (
 	"sync"
 	"time"
 
-	"alvus/internal/config"
-	"alvus/internal/keypool"
-	"alvus/internal/logstore"
-	alvusmetrics "alvus/internal/metrics"
+	"akswitch/internal/config"
+	"akswitch/internal/keypool"
+	"akswitch/internal/logstore"
+	akswitchmetrics "akswitch/internal/metrics"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -37,7 +37,7 @@ type ProviderRouter struct {
 	providers       map[string]*ProviderState
 	logs            *logstore.LogStore
 	startTime       time.Time
-	metrics         *alvusmetrics.Metrics
+	metrics         *akswitchmetrics.Metrics
 	metricsRegistry *prometheus.Registry
 	dashboardHTML   string
 	stop            chan struct{}
@@ -48,7 +48,7 @@ type ProviderRouter struct {
 
 // NewProviderRouter creates a new ProviderRouter.
 func NewProviderRouter(dashboardHTML string) *ProviderRouter {
-	reg, m := alvusmetrics.NewRegistry()
+	reg, m := akswitchmetrics.NewRegistry()
 	return &ProviderRouter{
 		providers:       make(map[string]*ProviderState),
 		logs:            logstore.New(10000),
