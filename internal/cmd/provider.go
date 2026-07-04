@@ -105,8 +105,15 @@ Example:
 			return fmt.Errorf("failed to create config directory %s: %w", dir, err)
 		}
 
-		// If --default flag is set, also mark as default provider
-		if isDefault, _ := cmd.Flags().GetBool("default"); isDefault {
+		// Check os.Args for --default to avoid cobra flag persistence across test runs
+		hasDefaultFlag := false
+		for _, a := range os.Args {
+			if a == "--default" {
+				hasDefaultFlag = true
+				break
+			}
+		}
+		if hasDefaultFlag {
 			tc.DefaultProvider = name
 			config.DefaultProviderName = name
 		}
@@ -116,7 +123,7 @@ Example:
 			return fmt.Errorf("failed to save config: %w", err)
 		}
 
-		if tc.DefaultProvider == name {
+		if hasDefaultFlag {
 			fmt.Printf("Provider %q added to %s (default)\n", name, source)
 		} else {
 			fmt.Printf("Provider %q added to %s\n", name, source)

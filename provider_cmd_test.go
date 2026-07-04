@@ -200,6 +200,92 @@ t.Cleanup(func() { config.ConfigDir = "" })
 	}
 }
 
+// ── Test: provider add --default ─────────────────────────
+//
+// "akswitch provider add <name> --default" 应将 DefaultProvider 设为该 provider。
+func TestProviderAdd_DefaultFlag(t *testing.T) {
+	resetConfigEnv()
+	tmpDir := t.TempDir()
+	config.ConfigDir = tmpDir
+	t.Cleanup(func() { config.ConfigDir = "" })
+
+	xdgPath, err := config.XDGConfigPath()
+	if err != nil {
+		t.Fatalf("XDGConfigPath failed: %v", err)
+	}
+
+	runCommand(t, "akswitch", "provider", "add", "primary",
+		"--target", "https://primary.test/v1",
+		"--port", "9501",
+		"--default",
+	)
+
+	tc, err := config.LoadTomlConfig(xdgPath)
+	if err != nil {
+		t.Fatalf("LoadTomlConfig failed: %v", err)
+	}
+	if tc.DefaultProvider != "primary" {
+		t.Errorf("DefaultProvider = %q, want %q", tc.DefaultProvider, "primary")
+	}
+}
+
+// ── Test: provider default <name> ─────────────────────────
+//
+// "akswitch provider default <name>" 应正确设置 default_provider。
+func TestProviderDefault_SetsDefault(t *testing.T) {
+	resetConfigEnv()
+	tmpDir := t.TempDir()
+	config.ConfigDir = tmpDir
+	t.Cleanup(func() { config.ConfigDir = "" })
+
+	xdgPath, err := config.XDGConfigPath()
+	if err != nil {
+		t.Fatalf("XDGConfigPath failed: %v", err)
+	}
+
+	runCommand(t, "akswitch", "provider", "add", "alpha",
+		"--target", "https://alpha.test/v1",
+		"--port", "9501",
+	)
+	runCommand(t, "akswitch", "provider", "add", "beta",
+		"--target", "https://beta.test/v1",
+	)
+
+	runCommand(t, "akswitch", "provider", "default", "beta")
+
+	tc, err := config.LoadTomlConfig(xdgPath)
+	if err != nil {
+		t.Fatalf("LoadTomlConfig failed: %v", err)
+	}
+	if tc.DefaultProvider != "beta" {
+		t.Errorf("DefaultProvider = %q, want %q", tc.DefaultProvider, "beta")
+	}
+}
+
+// ── Test: provider default <name> 不存在 ──────────────────
+//
+// "akswitch provider default <name>" 对不存在的 provider 应报错。
+func TestProviderDefault_NotFound(t *testing.T) {
+	resetConfigEnv()
+	tmpDir := t.TempDir()
+	config.ConfigDir = tmpDir
+	t.Cleanup(func() { config.ConfigDir = "" })
+
+	xdgPath, err := config.XDGConfigPath()
+	if err != nil {
+		t.Fatalf("XDGConfigPath failed: %v", err)
+	}
+	runCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+
+	err = runCommand(t, "akswitch", "provider", "default", "nonexistent")
+	if err == nil {
+		t.Fatal("expected error for default with nonexistent provider, got nil")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("error message = %q, want it to contain 'not found'", err.Error())
+	}
+}
+
 // ── Helper ────────────────────────────────────────────
 
 // runCommand executes akswitch with the given arguments via cmd.Execute.
