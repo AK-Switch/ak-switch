@@ -13,6 +13,7 @@ import (
 // resetConfigEnv clears all config-related env vars to prevent interference.
 func resetConfigEnv() {
 	resetAllEnv()
+	config.DefaultProviderName = ""
 	for _, k := range []string{
 		"BACKOFF_CAP_SEC", "BACKOFF_MULTIPLIER", "CB_RESET_SEC",
 		"UPSTREAM_CB_THRESHOLD", "KEYS_FILE",
