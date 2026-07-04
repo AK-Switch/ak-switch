@@ -1,4 +1,4 @@
-// Package config provides centralized configuration management for AK Switch.
+﻿// Package config provides centralized configuration management for AK Switch.
 //
 // It reads from TOML configuration files, validates required fields,
 // and supports runtime diffing for hot-reload scenarios.
@@ -372,20 +372,22 @@ func SaveTomlConfig(tc *TomlConfig, path string) error {
 	return os.WriteFile(path, buf.Bytes(), 0644)
 }
 
-// XDGConfigPath 返回平台相关的 XDG 配置路径。
-// Windows: %APPDATA%/akswitch/config.toml
-// Linux/macOS: $XDG_CONFIG_HOME/akswitch/config.toml → ~/.config/akswitch/config.toml
-// $XDG_CONFIG_HOME 环境变量优先于平台默认值（在所有平台上均生效）。
+// XDGConfigPath 返回 ~/.akswitch/config.toml 配置路径。
+// 可通过 ConfigDir 变量（Go 层面）或 AKSWITCH_CONFIG_DIR 环境变量覆盖。
+var ConfigDir string
+
 func XDGConfigPath() (string, error) {
-	configDir := os.Getenv("XDG_CONFIG_HOME")
-	if configDir == "" {
-		var err error
-		configDir, err = os.UserConfigDir()
-		if err != nil {
-			return "", fmt.Errorf("获取用户配置目录失败: %w", err)
-		}
+	if ConfigDir != "" {
+		return filepath.Join(ConfigDir, "config.toml"), nil
 	}
-	return filepath.Join(configDir, "akswitch", "config.toml"), nil
+	if configDir := os.Getenv("AKSWITCH_CONFIG_DIR"); configDir != "" {
+		return filepath.Join(configDir, "config.toml"), nil
+	}
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("获取用户家目录失败: %w", err)
+	}
+	return filepath.Join(homeDir, ".akswitch", "config.toml"), nil
 }
 
 // DetectConfigSource 按优先级自动检测配置源。
