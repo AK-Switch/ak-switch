@@ -31,3 +31,17 @@
 ## 项目定位
 
 akswitch 只专注于单 provider 内的 API key 轮转，不重复造 ccswitch 的轮子。
+
+## 测试规范
+
+测试按速度分层，用 //go:build 标签区分：
+
+- `unit`: ≤1s，纯逻辑无 IO
+- `integration`: ≤10s，CLI 命令 + mock HTTP
+- `e2e`: ≤2m，子进程 + 端口绑定
+
+### 新增测试文件规则
+
+1. 先判断所属层级，加对应 `//go:build` 标签
+2. CLI 命令测试必须包含输出断言（`assertOutputContains` 或类似）
+3. 禁止无输出断言的 `runCommand` 模式（只测不崩不算测完）
