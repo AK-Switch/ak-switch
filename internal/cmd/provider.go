@@ -172,7 +172,11 @@ Example output:
 		fmt.Printf("  %-12s %-50s %s\n", "NAME", "TARGET", "PORT")
 		for _, n := range names {
 			p := tc.Provider[n]
-			fmt.Printf("  %-12s %-50s %d\n", n, p.Target, tc.Port)
+			defaultMark := ""
+			if n == tc.DefaultProvider {
+				defaultMark = "  (default)"
+			}
+			fmt.Printf("  %-12s %-50s %d%s\n", n, p.Target, tc.Port, defaultMark)
 		}
 
 		return nil
