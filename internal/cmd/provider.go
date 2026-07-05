@@ -216,6 +216,13 @@ Example:
 
 		delete(tc.Provider, name)
 
+		// If the removed provider was the default, clear it
+		if tc.DefaultProvider == name {
+			tc.DefaultProvider = ""
+			config.DefaultProviderName = ""
+			fmt.Printf("Default provider cleared (was %q)\n", name)
+		}
+
 		if err := config.SaveTomlConfig(tc, source); err != nil {
 			return fmt.Errorf("failed to save config: %w", err)
 		}
