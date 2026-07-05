@@ -15,15 +15,16 @@ var PidFileName = "akswitch.pid"
 var dashHTML string
 
 var rootCmd = &cobra.Command{
-	Use:   "akswitch",
-	Short: "API Key rotation proxy for AI providers",
+	Use:           "akswitch",
+	Short:         "API Key rotation proxy for AI providers",
+	SilenceUsage:  true,
 }
 
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print version information",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("akswitch version unknown")
+		fmt.Printf("akswitch version %s\n", rootCmd.Version)
 	},
 }
 
@@ -33,5 +34,6 @@ func Execute(dashboardHTML string) error {
 }
 
 func init() {
+	rootCmd.Version = "dev"
 	rootCmd.AddCommand(versionCmd)
 }
