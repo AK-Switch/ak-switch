@@ -53,6 +53,13 @@ func (p *KeyPool) Keys() []string {
 	return result
 }
 
+// Len returns the number of keys in the pool.
+func (p *KeyPool) Len() int {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return len(p.keys)
+}
+
 // Name returns the name of a key by index, or empty string if index is out of range.
 func (p *KeyPool) Name(idx int) string {
 	p.mu.RLock()
