@@ -20,7 +20,7 @@ func resetEnv() {
 		"KEY4", "KEY5", "KEYA", "KEYB",
 		"BACKOFF_CAP_SEC", "BACKOFF_MULTIPLIER", "CB_RESET_SEC",
 		"UPSTREAM_CB_THRESHOLD", "KEYS_FILE",
-		"HEALTH_CHECK_INTERVAL_SEC", "HEALTH_CHECK_PATH", "HEALTH_CHECK_TIMEOUT_SEC",
+		"HEALTH_CHECK_INTERVAL_SEC", "HEALTH_CHECK_PATH", "HEALTH_CHECK_TIMEOUT_SEC", "HTTP_TIMEOUT_SEC",
 		"KEYS_ENCRYPTION_KEY",
 	} {
 		os.Unsetenv(key)
@@ -167,6 +167,37 @@ func TestConfig_HealthCheckIntervalTooSmall(t *testing.T) {
 	cfg.HealthCheckIntervalSec = 4
 	if err := cfg.Validate(); err == nil {
 		t.Error("Validate() expected error for HealthCheckIntervalSec=4, got nil")
+	}
+}
+
+func TestConfig_HTTPTimeoutSec_Default(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.HTTPTimeoutSec != 30 {
+		t.Errorf("HTTPTimeoutSec default = %d, want 30", cfg.HTTPTimeoutSec)
+	}
+}
+
+func TestConfig_HTTPTimeoutSec_TooSmall(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Port = 8080
+	cfg.TargetBase = "https://example.com"
+	cfg.GenaiBase = "https://ai.example.com"
+	cfg.Keys = []string{"nvapi-key1"}
+	cfg.HTTPTimeoutSec = 0
+	if err := cfg.Validate(); err == nil {
+		t.Error("Validate() expected error for HTTPTimeoutSec=0, got nil")
+	}
+}
+
+func TestConfig_HTTPTimeoutSec_Valid(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Port = 8080
+	cfg.TargetBase = "https://example.com"
+	cfg.GenaiBase = "https://ai.example.com"
+	cfg.Keys = []string{"nvapi-key1"}
+	cfg.HTTPTimeoutSec = 15
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("Validate() unexpected error for HTTPTimeoutSec=15: %v", err)
 	}
 }
 
@@ -412,6 +443,7 @@ func TestTomlProviderConfig_AllFields(t *testing.T) {
 	cb_reset_sec = 60
 	upstream_cb_threshold = 10
 	health_check_interval_sec = 15
+	http_timeout_sec = 45
 		log_file = "/var/log/akswitch.log"
 		log_max_size = 200
 		log_max_age = 30
@@ -466,6 +498,9 @@ func TestTomlProviderConfig_AllFields(t *testing.T) {
 	}
 	if cfg.HealthCheckIntervalSec != 15 {
 		t.Errorf("HealthCheckIntervalSec = %d, want %d", cfg.HealthCheckIntervalSec, 15)
+	}
+	if cfg.HTTPTimeoutSec != 45 {
+		t.Errorf("HTTPTimeoutSec = %d, want %d", cfg.HTTPTimeoutSec, 45)
 	}
 	if cfg.LogFile != "/var/log/akswitch.log" {
 		t.Errorf("LogFile = %q, want %q", cfg.LogFile, "/var/log/akswitch.log")
@@ -565,6 +600,7 @@ func TestTomlProviderConfig_Roundtrip(t *testing.T) {
 	orig.CBResetSec = 60
 	orig.UpstreamCBThreshold = 10
 	orig.HealthCheckIntervalSec = 15
+	orig.HTTPTimeoutSec = 45
 	orig.LogFile = "/var/log/akswitch.log"
 	orig.LogMaxSize = 200
 	orig.LogMaxAge = 30
@@ -621,6 +657,9 @@ func TestTomlProviderConfig_Roundtrip(t *testing.T) {
 	}
 	if loaded.UpstreamCBThreshold != orig.UpstreamCBThreshold {
 		t.Errorf("UpstreamCBThreshold = %d, want %d", loaded.UpstreamCBThreshold, orig.UpstreamCBThreshold)
+	}
+	if loaded.HTTPTimeoutSec != orig.HTTPTimeoutSec {
+		t.Errorf("HTTPTimeoutSec = %d, want %d", loaded.HTTPTimeoutSec, orig.HTTPTimeoutSec)
 	}
 	if loaded.HealthCheckIntervalSec != orig.HealthCheckIntervalSec {
 		t.Errorf("HealthCheckIntervalSec = %d, want %d", loaded.HealthCheckIntervalSec, orig.HealthCheckIntervalSec)

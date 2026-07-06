@@ -65,7 +65,7 @@ func NewProxyEngine(cfg *config.Config, numKeys int) *ProxyEngine {
 
 	return &ProxyEngine{
 		client: &http.Client{
-			Timeout: 120 * time.Second,
+			Timeout: time.Duration(cfg.HTTPTimeoutSec) * time.Second,
 			Transport: &http.Transport{
 				MaxIdleConns:        100,
 				MaxIdleConnsPerHost: 10,
