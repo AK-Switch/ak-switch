@@ -48,6 +48,8 @@ type Config struct {
 	LogFile    string // 日志文件路径（空 = 不启用文件日志）
 	LogMaxSize int    // 日志文件轮转大小（MB，默认 100）
 	LogMaxAge  int    // 日志文件保留天数（默认 7）
+
+	HTTPTimeoutSec int // HTTP 客户端超时(秒)，默认 30
 }
 
 
@@ -84,6 +86,7 @@ func DefaultConfig() *Config {
 		KeysFile:            "keys.json",
 		LogMaxSize:          100,
 		LogMaxAge:           7,
+		HTTPTimeoutSec:      30,
 	}
 }
 
@@ -169,6 +172,7 @@ var configDiffFields = []fieldDef{
 	{"HEALTH_CHECK_INTERVAL_SEC", func(c, o *Config) bool { return c.HealthCheckIntervalSec == o.HealthCheckIntervalSec }, func(c *Config) string { return strconv.Itoa(c.HealthCheckIntervalSec) }},
 	{"HEALTH_CHECK_PATH", func(c, o *Config) bool { return c.HealthCheckPath == o.HealthCheckPath }, func(c *Config) string { return c.HealthCheckPath }},
 	{"HEALTH_CHECK_TIMEOUT_SEC", func(c, o *Config) bool { return c.HealthCheckTimeoutSec == o.HealthCheckTimeoutSec }, func(c *Config) string { return strconv.Itoa(c.HealthCheckTimeoutSec) }},
+		{"HTTP_TIMEOUT_SEC", func(c, o *Config) bool { return c.HTTPTimeoutSec == o.HTTPTimeoutSec }, func(c *Config) string { return strconv.Itoa(c.HTTPTimeoutSec) }},
 		{"LOG_FILE", func(c, o *Config) bool { return c.LogFile == o.LogFile }, func(c *Config) string { return c.LogFile }},
 		{"LOG_MAX_SIZE", func(c, o *Config) bool { return c.LogMaxSize == o.LogMaxSize }, func(c *Config) string { return strconv.Itoa(c.LogMaxSize) }},
 		{"LOG_MAX_AGE", func(c, o *Config) bool { return c.LogMaxAge == o.LogMaxAge }, func(c *Config) string { return strconv.Itoa(c.LogMaxAge) }},
@@ -550,6 +554,7 @@ func configToToml(cfg *Config) *TomlConfig {
 				CBResetSec:             cfg.CBResetSec,
 				UpstreamCBThreshold:    cfg.UpstreamCBThreshold,
 				HealthCheckIntervalSec: cfg.HealthCheckIntervalSec,
+				HTTPTimeoutSec:    cfg.HTTPTimeoutSec,
 			},
 		},
 	}
