@@ -45,8 +45,48 @@ func startServer(dashboardHTML string, providerFilter string, startAll bool) {
 		os.Exit(1)
 	}
 
-	// ── Default host ──────────────────────────────────
-	host := "127.0.0.1"
+	// ── Resolve providers, config, and selection strategy ──
+	router, providers, port, host, shouldStart := resolveProviders(dashboardHTML, providerFilter, startAll)
+
+	// ── Initialize each provider ─────────────────────
+	initProviders(router, providers, shouldStart, providerFilter)
+
+	// ── Initialize file logging (from first provider) ──
+	for _, cfg := range providers {
+		server.InitFileHandler(cfg.LogFile, cfg.LogMaxSize, cfg.LogMaxAge)
+		break
+	}
+
+	// ── Start server ─────────────────────────────────
+	started := len(router.ProviderNames())
+	if started == 0 {
+		slog.Error("no providers configured, exiting")
+		os.Exit(1)
+	}
+	if err := router.Start(host, port); err != nil {
+		slog.Error("failed to start server", "error", err)
+		os.Exit(1)
+	}
+
+	// ── Write PID file ────────────────────────────────
+	pidPath := writePIDFile()
+	defer func() {
+		if err := os.Remove(pidPath); err != nil && !os.IsNotExist(err) {
+			slog.Warn("failed to remove PID file", "error", err)
+		}
+	}()
+
+	// ── Background tasks ──────────────────────────────
+	router.StartBackgroundTasks()
+
+	// ── Wait for shutdown ─────────────────────────────
+	waitForShutdown(router)
+}
+
+// resolveProviders handles config detection, TOML loading, and the four-choice
+// provider selection strategy (--provider > --all > default_provider > first alphabetically).
+func resolveProviders(dashboardHTML string, providerFilter string, startAll bool) (router *server.ProviderRouter, providers map[string]*config.Config, port int, host string, shouldStart func(name string) bool) {
+	host = "127.0.0.1"
 
 	// ── Detect config source ──────────────────────────
 	xdgPath, err := config.XDGConfigPath()
@@ -56,7 +96,7 @@ func startServer(dashboardHTML string, providerFilter string, startAll bool) {
 	}
 
 	// ── Load providers from TOML ──────────────────────
-	providers, err := config.LoadAllTomlProviders(xdgPath)
+	providers, err = config.LoadAllTomlProviders(xdgPath)
 	if err != nil {
 		slog.Error("failed to load providers from TOML", "error", err)
 		os.Exit(1)
@@ -67,12 +107,10 @@ func startServer(dashboardHTML string, providerFilter string, startAll bool) {
 	}
 
 	// ── Create ProviderRouter ─────────────────────────
-	router := server.NewProviderRouter(dashboardHTML)
-
-	port := config.FindServerPort(xdgPath)
+	router = server.NewProviderRouter(dashboardHTML)
+	port = config.FindServerPort(xdgPath)
 
 	// 四选一：--provider > --all > default_provider > 第一个 provider（字母序）
-	var shouldStart func(name string) bool
 	switch {
 	case providerFilter != "":
 		shouldStart = func(name string) bool { return name == providerFilter }
@@ -86,7 +124,12 @@ func startServer(dashboardHTML string, providerFilter string, startAll bool) {
 		slog.Info("default_provider 未配置，默认使用第一个 provider", "provider", first)
 		shouldStart = func(name string) bool { return name == first }
 	}
+	return
+}
 
+// initProviders registers each selected provider into the router,
+// loading their API keys and applying log level configuration.
+func initProviders(router *server.ProviderRouter, providers map[string]*config.Config, shouldStart func(name string) bool, providerFilter string) {
 	for name, cfg := range providers {
 		if !shouldStart(name) {
 			slog.Debug("skipping provider", "name", name)
@@ -132,41 +175,24 @@ func startServer(dashboardHTML string, providerFilter string, startAll bool) {
 			slog.Warn("no provider matched --provider filter", "provider", providerFilter)
 		}
 	}
+}
 
-	// ── Initialize file logging (from first provider) ──
-	for _, cfg := range providers {
-		server.InitFileHandler(cfg.LogFile, cfg.LogMaxSize, cfg.LogMaxAge)
-		break
-	}
-	// ── Start server ──────────────────────────────────
-	started := len(router.ProviderNames())
-	if started == 0 {
-		slog.Error("no providers configured, exiting")
-		os.Exit(1)
-	}
-	if err := router.Start(host, port); err != nil {
-		slog.Error("failed to start server", "error", err)
-		os.Exit(1)
-	}
-
-	// ── Write PID file ─────────────────────────────────
+// writePIDFile writes the PID file and returns the path for deferred cleanup.
+func writePIDFile() string {
 	pidPath := pidFilePath()
 	if err := os.MkdirAll(filepath.Dir(pidPath), 0755); err != nil {
 		slog.Warn("failed to create PID file directory", "error", err)
 	}
-		pidData := []byte(fmt.Sprintf("%d\n", os.Getpid()))
+	pidData := []byte(fmt.Sprintf("%d\n", os.Getpid()))
 	if err := os.WriteFile(pidPath, pidData, 0644); err != nil {
 		slog.Warn("failed to write PID file", "error", err)
 	}
-	defer func() {
-		if err := os.Remove(pidPath); err != nil && !os.IsNotExist(err) {
-			slog.Warn("failed to remove PID file", "error", err)
-		}
-	}()
+	return pidPath
+}
 
-	// ── Background tasks ──────────────────────────────
-	router.StartBackgroundTasks()
-
+// waitForShutdown listens for OS signals, performs graceful shutdown,
+// and triggers a self-restart if the binary was updated.
+func waitForShutdown(router *server.ProviderRouter) {
 	// ── Signal handling ───────────────────────────────
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
