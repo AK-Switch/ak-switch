@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"akswitch/internal/circuitbreaker"
 	"akswitch/internal/utils"
 )
 
@@ -17,8 +18,7 @@ type KeyPool struct {
 	counter        uint64
 	keys           []string
 	names          []string
-	cooldowns      []time.Time
-	disabled       []bool
+	cbs            []*circuitbreaker.KeyCircuitBreaker
 	requestHistory [][]time.Time // timestamps of requests in the last 60s per key
 	lastUsed       []time.Time
 	mu             sync.RWMutex
@@ -33,12 +33,15 @@ func NewKeyPool(keys []string, names []string) *KeyPool {
 			n[i] = names[i]
 		}
 	}
+	cbs := make([]*circuitbreaker.KeyCircuitBreaker, len(keys))
+	for i := range keys {
+		cbs[i] = circuitbreaker.NewKeyCircuitBreaker(0, 0, 0)
+	}
 	return &KeyPool{
 		counter:        rand.Uint64(),
 		keys:           keys,
 		names:          n,
-		cooldowns:      make([]time.Time, len(keys)),
-		disabled:       make([]bool, len(keys)),
+		cbs:            cbs,
 		requestHistory: make([][]time.Time, len(keys)),
 		lastUsed:       make([]time.Time, len(keys)),
 	}
@@ -75,17 +78,18 @@ func (p *KeyPool) Name(idx int) string {
 func (p *KeyPool) TimeUntilAvailable() time.Duration {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	now := time.Now()
 	var soonest time.Duration = -1
-	for i, cd := range p.cooldowns {
-		if p.disabled[i] {
+	for _, cb := range p.cbs {
+		if cb.State() == circuitbreaker.StatePermanent {
 			continue
 		}
-		if now.After(cd) {
+		if cb.Allow() {
 			return 0
 		}
-		if wait := cd.Sub(now); soonest < 0 || wait < soonest {
-			soonest = wait
+		if rem := cb.CooldownRemaining(); rem > 0 {
+			if soonest < 0 || rem < soonest {
+				soonest = rem
+			}
 		}
 	}
 	return soonest
@@ -102,7 +106,7 @@ func (p *KeyPool) Next() (int, string, bool) {
 	start := int((atomic.AddUint64(&p.counter, 1) - 1) % uint64(n))
 	for i := 0; i < n; i++ {
 		idx := (start + i) % n
-		if !p.disabled[idx] && time.Now().After(p.cooldowns[idx]) {
+		if p.cbs[idx].Allow() {
 			return idx, p.keys[idx], true
 		}
 	}
@@ -142,9 +146,7 @@ func (p *KeyPool) Cooldown(idx int, d time.Duration) error {
 	if idx < 0 || idx >= len(p.keys) {
 		return fmt.Errorf("key index %d out of range (0-%d)", idx, len(p.keys)-1)
 	}
-	if until := time.Now().Add(d); p.cooldowns[idx].Before(until) {
-		p.cooldowns[idx] = until
-	}
+	p.cbs[idx].ForceCooldown(d)
 	name := ""
 	if idx >= 0 && idx < len(p.names) {
 		name = p.names[idx]
@@ -165,7 +167,7 @@ func (p *KeyPool) Disable(idx int) error {
 	if idx < 0 || idx >= len(p.keys) {
 		return fmt.Errorf("key index %d out of range (0-%d)", idx, len(p.keys)-1)
 	}
-	p.disabled[idx] = true
+	p.cbs[idx].RecordPerma("manual")
 	name := ""
 	if idx >= 0 && idx < len(p.names) {
 		name = p.names[idx]
@@ -185,8 +187,8 @@ func (p *KeyPool) Enable(idx int) error {
 	if idx < 0 || idx >= len(p.keys) {
 		return fmt.Errorf("key index %d out of range (0-%d)", idx, len(p.keys)-1)
 	}
-	p.disabled[idx] = false
-	p.cooldowns[idx] = time.Time{}
+					p.cbs[idx].Reset()
+		
 	name := ""
 	if idx >= 0 && idx < len(p.names) {
 		name = p.names[idx]
@@ -202,11 +204,60 @@ func (p *KeyPool) Enable(idx int) error {
 func (p *KeyPool) IsDisabled(idx int) bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	if idx < 0 || idx >= len(p.disabled) {
+	if idx < 0 || idx >= len(p.cbs) {
 		return false
 	}
-	return p.disabled[idx]
+	return p.cbs[idx].State() == circuitbreaker.StatePermanent
 }
+// ConfigureCBs replaces all per-key circuit breakers with new ones configured
+// with the given base cooldown, backoff cap, and multiplier.
+// Called by NewProxyEngine to synchronize breaker parameters with config.
+func (p *KeyPool) ConfigureCBs(base, backoffCap time.Duration, multiplier float64) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for i := range p.cbs {
+		p.cbs[i] = circuitbreaker.NewKeyCircuitBreaker(base, backoffCap, multiplier)
+	}
+}
+
+// CB returns the KeyCircuitBreaker for a given key index.
+// The returned breaker has its own mutex and is safe for concurrent use.
+func (p *KeyPool) CB(idx int) *circuitbreaker.KeyCircuitBreaker {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if idx < 0 || idx >= len(p.cbs) {
+		return nil
+	}
+	return p.cbs[idx]
+}
+
+// RecordFailure records a rate-limit (429) failure on a key and returns the cooldown duration.
+func (p *KeyPool) RecordFailure(idx int) time.Duration {
+	cb := p.CB(idx)
+	if cb == nil {
+		return 0
+	}
+	return cb.RecordFailure()
+}
+
+// RecordAuthFailure records an auth failure (401/403) and returns true if key should be permanently disabled.
+func (p *KeyPool) RecordAuthFailure(idx int) bool {
+	cb := p.CB(idx)
+	if cb == nil {
+		return false
+	}
+	return cb.RecordAuthFailure()
+}
+
+// RecordSuccess records a successful proxy response and resets the key's breaker state.
+func (p *KeyPool) RecordSuccess(idx int) {
+	cb := p.CB(idx)
+	if cb == nil {
+		return
+	}
+	cb.RecordSuccess()
+}
+
 
 // ActiveCount returns the number of non-disabled keys.
 func (p *KeyPool) ActiveCount() int {
@@ -214,7 +265,7 @@ func (p *KeyPool) ActiveCount() int {
 	defer p.mu.RUnlock()
 	n := 0
 	for i := range p.keys {
-		if !p.disabled[i] {
+		if p.cbs[i].State() != circuitbreaker.StatePermanent {
 			n++
 		}
 	}
@@ -226,8 +277,8 @@ func (p *KeyPool) DisabledCount() int {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	n := 0
-	for _, d := range p.disabled {
-		if d {
+	for _, cb := range p.cbs {
+		if cb.State() == circuitbreaker.StatePermanent {
 			n++
 		}
 	}
@@ -238,10 +289,10 @@ func (p *KeyPool) DisabledCount() int {
 func (p *KeyPool) CoolingCount() int {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	now := time.Now()
 	n := 0
 	for i := range p.keys {
-		if !p.disabled[i] && now.Before(p.cooldowns[i]) {
+		cb := p.cbs[i]
+		if cb.State() == circuitbreaker.StateOpen && !cb.Allow() {
 			n++
 		}
 	}
@@ -251,14 +302,19 @@ func (p *KeyPool) CoolingCount() int {
 // KeyStatusLabel returns a status string for a key (disabled, ready, or cooling).
 // Caller must hold at least RLock.
 func (p *KeyPool) KeyStatusLabel(i int, now time.Time) string {
-	cd := p.cooldowns[i]
-	switch {
-	case p.disabled[i]:
+	cb := p.cbs[i]
+	switch cb.State() {
+	case circuitbreaker.StatePermanent:
 		return "disabled"
-	case now.After(cd):
+	case circuitbreaker.StateClosed:
 		return "ready"
+	case circuitbreaker.StateOpen:
+		if cb.Allow() {
+			return "ready"
+		}
+		return fmt.Sprintf("cooling(%.0fs)", cb.CooldownRemaining().Seconds())
 	default:
-		return fmt.Sprintf("cooling(%.0fs)", cd.Sub(now).Seconds())
+		return "unknown"
 	}
 }
 
@@ -290,10 +346,10 @@ func (p *KeyPool) GetKeyDetails() []map[string]interface{} {
 			"index":               i,
 			"key":                 utils.MaskKey(p.keys[i]),
 			"name":                name,
-			"disabled":            p.disabled[i],
+			"disabled":            p.cbs[i].State() == circuitbreaker.StatePermanent,
 			"requests_per_minute": p.RequestsInLastMinute(i),
 			"last_used":           p.lastUsed[i].Format(time.RFC3339),
-			"cooldown_until":      p.cooldowns[i].Format(time.RFC3339),
+			"cooldown_until":      p.cbs[i].CooldownRemaining().String(),
 		}
 		keyDetail["status"] = p.KeyStatusLabel(i, now)
 		details[i] = keyDetail
@@ -316,8 +372,8 @@ func (p *KeyPool) AddKey(key string, name string) int {
 	defer p.mu.Unlock()
 	p.keys = append(p.keys, key)
 	p.names = append(p.names, name)
-	p.cooldowns = append(p.cooldowns, time.Time{})
-	p.disabled = append(p.disabled, false)
+				p.cbs = append(p.cbs, circuitbreaker.NewKeyCircuitBreaker(0, 0, 0))
+		
 	p.requestHistory = append(p.requestHistory, []time.Time{})
 	p.lastUsed = append(p.lastUsed, time.Time{})
 	idx := len(p.keys) - 1
@@ -342,8 +398,8 @@ func (p *KeyPool) RemoveKey(idx int) error {
 	}
 	p.keys = append(p.keys[:idx], p.keys[idx+1:]...)
 	p.names = append(p.names[:idx], p.names[idx+1:]...)
-	p.cooldowns = append(p.cooldowns[:idx], p.cooldowns[idx+1:]...)
-	p.disabled = append(p.disabled[:idx], p.disabled[idx+1:]...)
+				p.cbs = append(p.cbs[:idx], p.cbs[idx+1:]...)
+		
 	p.requestHistory = append(p.requestHistory[:idx], p.requestHistory[idx+1:]...)
 	p.lastUsed = append(p.lastUsed[:idx], p.lastUsed[idx+1:]...)
 	if name != "" {

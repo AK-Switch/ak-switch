@@ -42,7 +42,7 @@ type ProviderState struct {
 // NewProviderState creates a fully initialized ProviderState for a single provider.
 func NewProviderState(name string, cfg *config.Config, pool *keypool.KeyPool, dashboardHTML string, keysFile string) *ProviderState {
 	reg, m := akswitchmetrics.NewRegistry()
-	proxy := NewProxyEngine(cfg, len(pool.Keys()))
+	proxy := NewProxyEngine(cfg, pool)
 
 	return &ProviderState{
 		Name:            name,

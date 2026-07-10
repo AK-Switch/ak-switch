@@ -413,7 +413,6 @@ func (pr *ProviderRouter) enableKeyHandler(w http.ResponseWriter, r *http.Reques
 		respondJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 		return
 	}
-	ps.Proxy.keyCBs[idx].Reset()
 	ps.PersistKeys()
 	respondJSON(w, http.StatusOK, map[string]bool{"success": true})
 }

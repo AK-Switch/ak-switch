@@ -46,7 +46,6 @@ func (pr *ProviderRouter) executeProxy(w http.ResponseWriter, r *http.Request, p
 	cfg := ps.Config
 	pool := ps.Pool
 	client := ps.Proxy.client
-	keyCBs := ps.Proxy.keyCBs
 	upCB := ps.Proxy.upCB
 
 	start := time.Now()
@@ -104,12 +103,12 @@ func (pr *ProviderRouter) executeProxy(w http.ResponseWriter, r *http.Request, p
 		lastKey = key
 		lastIdx = idx
 
-		if !keyCBs[idx].Allow() {
-			remaining := keyCBs[idx].CooldownRemaining()
+		if !pool.CB(idx).Allow() {
+			remaining := pool.CB(idx).CooldownRemaining()
 			if remaining < 0 {
 				allPerma := true
-				for _, cb := range keyCBs {
-					if cb.State() != circuitbreaker.StatePermanent {
+				for i := range pool.Keys() {
+					if pool.CB(i).State() != circuitbreaker.StatePermanent {
 						allPerma = false
 						break
 					}
@@ -215,10 +214,9 @@ func (pr *ProviderRouter) executeProxy(w http.ResponseWriter, r *http.Request, p
 func (pr *ProviderRouter) handleRateLimited(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, cfg *config.Config, start time.Time, method, target string, bodyBytes []byte) bool {
 	defer resp.Body.Close()
 	pool := ps.Pool
-	keyCBs := ps.Proxy.keyCBs
 
 	body, _ := io.ReadAll(resp.Body)
-	cbCooldown := keyCBs[idx].RecordFailure()
+	cbCooldown := pool.RecordFailure(idx)
 	cooldown := cbCooldown
 	if ra := resp.Header.Get("Retry-After"); ra != "" {
 		if secs, err := strconv.Atoi(ra); err == nil {
@@ -229,10 +227,10 @@ func (pr *ProviderRouter) handleRateLimited(w http.ResponseWriter, ps *ProviderS
 		}
 	}
 	pool.Cooldown(idx, cooldown)
-	slog.Warn("key rate limited", "provider", ps.Name, "key_index", idx, "key_name", pool.Name(idx), "status", resp.StatusCode, "cb_state", fmt.Sprintf("%d", keyCBs[idx].State()), "cb_retry", keyCBs[idx].Attempt(), "body_preview", MaskSensitiveData(string(body), 1024))
+	slog.Warn("key rate limited", "provider", ps.Name, "key_index", idx, "key_name", pool.Name(idx), "status", resp.StatusCode, "cb_state", fmt.Sprintf("%d", pool.CB(idx).State()), "cb_retry", pool.CB(idx).Attempt(), "body_preview", MaskSensitiveData(string(body), 1024))
 	pr.metrics.UpstreamErrors.WithLabelValues("rate_limited").Inc()
 
-	if keyCBs[idx].State() == circuitbreaker.StatePermanent {
+	if pool.CB(idx).State() == circuitbreaker.StatePermanent {
 		slog.Warn("key quota exhausted, disabling permanently", "provider", ps.Name, "key_index", idx, "key_name", pool.Name(idx))
 		pool.Disable(idx)
 		if pool.ActiveCount() == 0 {
@@ -248,16 +246,15 @@ func (pr *ProviderRouter) handleRateLimited(w http.ResponseWriter, ps *ProviderS
 func (pr *ProviderRouter) handleAuthRejected(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, method, target string, bodyBytes []byte) bool {
 	defer resp.Body.Close()
 	pool := ps.Pool
-	keyCBs := ps.Proxy.keyCBs
 
 	body, _ := io.ReadAll(resp.Body)
 	pr.metrics.UpstreamErrors.WithLabelValues("auth_rejected").Inc()
-	if keyCBs[idx].RecordAuthFailure() {
+	if pool.RecordAuthFailure(idx) {
 		pool.Disable(idx)
-		keyCBs[idx].RecordPerma("auth_rejected")
+		pool.Disable(idx)
 		slog.Warn("key permanently disabled", "provider", ps.Name, "key_index", idx, "key_name", pool.Name(idx), "status", resp.StatusCode, "body_preview", MaskSensitiveData(string(body), 1024))
 	} else {
-		slog.Warn("key auth failure", "provider", ps.Name, "key_index", idx, "key_name", pool.Name(idx), "status", resp.StatusCode, "fail_count", keyCBs[idx].AuthFailCount())
+		slog.Warn("key auth failure", "provider", ps.Name, "key_index", idx, "key_name", pool.Name(idx), "status", resp.StatusCode, "fail_count", pool.CB(idx).AuthFailCount())
 	}
 	if pool.ActiveCount() == 0 {
 		writeProxyError(w, http.StatusServiceUnavailable, ErrorAllKeysInvalid, fmt.Sprintf("%s 所有 Key 已失效或吊销", ps.Name))
@@ -295,10 +292,9 @@ func (pr *ProviderRouter) handleNonRetryable(w http.ResponseWriter, ps *Provider
 // for SSE and chunked responses.
 func (pr *ProviderRouter) handleSuccess(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, method, target string, bodyBytes []byte, attempt int, key string) {
 	pool := ps.Pool
-	keyCBs := ps.Proxy.keyCBs
 	upCB := ps.Proxy.upCB
 
-	keyCBs[idx].RecordSuccess()
+	pool.RecordSuccess(idx)
 	upCB.RecordSuccess()
 
 	utils.CopyHeaders(w.Header(), resp.Header)
