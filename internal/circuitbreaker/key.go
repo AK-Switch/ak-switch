@@ -120,6 +120,22 @@ func (k *KeyCircuitBreaker) RecordPerma(reason string) {
 	k.trippedReason = reason
 }
 
+// ForceCooldown sets the key into StateOpen with a cooldown of the given duration.
+// No-op if the key is already permanently disabled.
+// If the key already has a longer cooldown, the existing cooldown is preserved.
+func (k *KeyCircuitBreaker) ForceCooldown(d time.Duration) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if k.state == StatePermanent {
+		return
+	}
+	until := time.Now().Add(d)
+	if until.After(k.cooldownUntil) {
+		k.cooldownUntil = until
+	}
+	k.state = StateOpen
+}
+
 // RecordSuccess resets the breaker to closed state and zeroes the attempt count.
 // No-op if the key is permanently disabled.
 func (k *KeyCircuitBreaker) RecordSuccess() {

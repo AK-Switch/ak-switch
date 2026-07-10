@@ -29,12 +29,11 @@ var fileHandlerWriter *lumberjack.Logger
 // ProxyEngine holds the HTTP client and circuit breakers for upstream proxy requests.
 type ProxyEngine struct {
 	client *http.Client
-	keyCBs []*circuitbreaker.KeyCircuitBreaker // per-key circuit breakers
 	upCB   *circuitbreaker.UpstreamCircuitBreaker
 }
 
 // NewProxyEngine creates a ProxyEngine from config and key count.
-func NewProxyEngine(cfg *config.Config, numKeys int) *ProxyEngine {
+func NewProxyEngine(cfg *config.Config, pool *keypool.KeyPool) *ProxyEngine {
 	backoffCapSec := cfg.BackoffCapSec
 	if backoffCapSec <= 0 {
 		backoffCapSec = 120
@@ -53,10 +52,7 @@ func NewProxyEngine(cfg *config.Config, numKeys int) *ProxyEngine {
 	}
 	base := time.Duration(cfg.CooldownSec) * time.Second
 	cap_ := time.Duration(backoffCapSec) * time.Second
-	keyCBs := make([]*circuitbreaker.KeyCircuitBreaker, numKeys)
-	for i := range keyCBs {
-		keyCBs[i] = circuitbreaker.NewKeyCircuitBreaker(base, cap_, backoffMult)
-	}
+	pool.ConfigureCBs(base, cap_, backoffMult)
 
 	upCB := circuitbreaker.NewUpstreamCircuitBreaker(
 		upstreamThreshold,
@@ -75,9 +71,7 @@ func NewProxyEngine(cfg *config.Config, numKeys int) *ProxyEngine {
 			CheckRedirect: func(*http.Request, []*http.Request) error {
 				return http.ErrUseLastResponse
 			},
-		},
-		keyCBs: keyCBs,
-		upCB:   upCB,
+		},		upCB:   upCB,
 	}
 }
 
@@ -105,7 +99,7 @@ func NewServerState(name string, cfg *config.Config, pool *keypool.KeyPool, dash
 	reg, m := akswitchmetrics.NewRegistry()
 
 	// Initialize ProxyEngine with HTTP client and circuit breakers
-	proxy := NewProxyEngine(cfg, len(pool.Keys()))
+	proxy := NewProxyEngine(cfg, pool)
 
 	s := &ServerState{
 		name:            name,
