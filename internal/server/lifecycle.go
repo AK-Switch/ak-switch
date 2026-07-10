@@ -28,7 +28,7 @@ func RefreshKeyPoolMetrics(metrics *akswitchmetrics.Metrics, pool *keypool.KeyPo
 
 // ActiveHealthCheck periodically probes the upstream endpoint and updates
 // the upstream circuit breaker state based on the response.
-func ActiveHealthCheck(cfg *config.Config, proxy *ProxyEngine, metrics *akswitchmetrics.Metrics, hcState *ServerState, stop <-chan struct{}) {
+func ActiveHealthCheck(cfg *config.Config, proxy *ProxyEngine, metrics *akswitchmetrics.Metrics, ps *ProviderState, stop <-chan struct{}) {
 	ticker := time.NewTicker(time.Duration(cfg.HealthCheckIntervalSec) * time.Second)
 	defer ticker.Stop()
 
@@ -54,14 +54,14 @@ func ActiveHealthCheck(cfg *config.Config, proxy *ProxyEngine, metrics *akswitch
 			if err == nil && resp.StatusCode < 500 {
 				resp.Body.Close()
 				upCB.RecordSuccess()
-				hcState.SetLastHealthCheck(true)
+				ps.SetLastHealthCheck(true)
 				metrics.HealthCheckProbes.WithLabelValues("ok").Inc()
 			} else {
 				if err == nil {
 					resp.Body.Close()
 				}
 				upCB.RecordFailure()
-				hcState.SetLastHealthCheck(false)
+				ps.SetLastHealthCheck(false)
 				metrics.HealthCheckProbes.WithLabelValues("fail").Inc()
 			}
 

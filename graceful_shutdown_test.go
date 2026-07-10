@@ -5,7 +5,6 @@ package main
 import (
 	"akswitch/internal/config"
 	"akswitch/internal/keypool"
-	"akswitch/internal/server"
 	"context"
 	"io"
 	"net"
@@ -113,9 +112,6 @@ func TestGracefulShutdown_BackgroundGoroutinesStop(t *testing.T) {
 		CooldownSec: 60,
 	}
 	pool := keypool.NewKeyPool([]string{"test-key"}, nil)
-	state := server.NewServerState("test", cfg, pool, "", "")
-	_ = state
-
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
