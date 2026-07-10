@@ -14,7 +14,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.26'
           cache: true
 
       - name: Unit tests
@@ -28,7 +28,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.26'
           cache: true
 
       - name: Vet
@@ -45,7 +45,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.26'
           cache: true
 
       - name: E2E tests
