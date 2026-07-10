@@ -49,14 +49,14 @@ func TestProviderAdd_CreatesProviderEntry(t *testing.T) {
 	if !ok {
 		t.Fatal("provider 'test-provider' not found in config after add")
 	}
-	if p.Target != "https://test.api.com/v1" {
-		t.Errorf("Target = %q, want %q", p.Target, "https://test.api.com/v1")
+	if p.TargetBase != "https://test.api.com/v1" {
+		t.Errorf("Target = %q, want %q", p.TargetBase, "https://test.api.com/v1")
 	}
 	if tc.Port != 9999 {
 		t.Errorf("Port = %d, want 9999", tc.Port)
 	}
-	if p.Genai != "https://test.api.com" {
-		t.Errorf("Genai = %q, want %q", p.Genai, "https://test.api.com")
+	if p.GenaiBase != "https://test.api.com" {
+		t.Errorf("Genai = %q, want %q", p.GenaiBase, "https://test.api.com")
 	}
 	if p.CooldownSec != 30 {
 		t.Errorf("CooldownSec = %d, want 30", p.CooldownSec)
