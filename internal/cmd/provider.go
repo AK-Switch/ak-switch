@@ -69,7 +69,7 @@ Example:
 				return fmt.Errorf("failed to load config: %w", err)
 			}
 			tc = &config.TomlConfig{
-				Provider: make(map[string]config.TomlProviderConfig),
+				Provider: make(map[string]*config.Config),
 			}
 		}
 
@@ -92,9 +92,9 @@ Example:
 		// we don't override tc.Port (first provider's port wins).
 
 		// Add new provider
-		tc.Provider[name] = config.TomlProviderConfig{
-			Target:      target,
-			Genai:       genai,
+		tc.Provider[name] = &config.Config{
+			TargetBase: target,
+			GenaiBase:  genai,
 			CooldownSec: cooldown,
 			MaxRetries:  maxRetries,
 		}
@@ -176,7 +176,7 @@ Example output:
 			if n == tc.DefaultProvider {
 				defaultMark = "  (default)"
 			}
-			fmt.Printf("  %-12s %-50s %d%s\n", n, p.Target, tc.Port, defaultMark)
+			fmt.Printf("  %-12s %-50s %d%s\n", n, p.TargetBase, tc.Port, defaultMark)
 		}
 
 		return nil
