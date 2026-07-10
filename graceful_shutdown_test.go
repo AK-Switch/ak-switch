@@ -3,9 +3,6 @@
 package main
 
 import (
-	"akswitch/internal/config"
-	"akswitch/internal/keypool"
-	"akswitch/internal/server"
 	"context"
 	"io"
 	"net"
@@ -104,17 +101,6 @@ func TestGracefulShutdown_RejectsNewConnections(t *testing.T) {
 func TestGracefulShutdown_BackgroundGoroutinesStop(t *testing.T) {
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
-
-	cfg := &config.Config{
-		TargetBase:  "http://127.0.0.1:19999",
-		GenaiBase:   "http://127.0.0.1:19999",
-		Port:        0,
-		MaxRetries:  3,
-		CooldownSec: 60,
-	}
-	pool := keypool.NewKeyPool([]string{"test-key"}, nil)
-	state := server.NewServerState("test", cfg, pool, "", "")
-	_ = state
 
 	wg.Add(1)
 	go func() {
