@@ -14,6 +14,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// KeyMutation represents the operation to perform on a key.
+type KeyMutation int
+
+const (
+	KeyEnable  KeyMutation = iota
+	KeyDisable
+	KeyRemove
+)
+
 // keysPath returns the keys file path for a given provider.
 // Directory: <XDG config dir>/keys/
 // File: <provider>.enc
@@ -39,6 +48,62 @@ func setupEncryption() {
 			keypool.SetEncryptionKey(key)
 		}
 	}
+}
+
+// updateKey performs a KeyMutation on a provider's key at the given index.
+// It handles the full load-validate-modify-save-reload cycle.
+func updateKey(provider string, idx int, op KeyMutation) error {
+	setupEncryption()
+
+	path, err := keysPath(provider)
+	if err != nil {
+		return err
+	}
+
+	store, err := keypool.LoadFullStore(path)
+	if err != nil {
+		return fmt.Errorf("failed to load keys for %q: %w", provider, err)
+	}
+	if store == nil {
+		return fmt.Errorf("no keys found for provider %q", provider)
+	}
+
+	if idx < 0 || idx >= len(store.Keys) {
+		return fmt.Errorf("index %d out of range: provider %q has %d keys (valid: 0-%d)",
+			idx, provider, len(store.Keys), len(store.Keys)-1)
+	}
+
+	// Capture entry for display before mutation
+	entry := store.Keys[idx]
+	desc := utils.MaskKey(entry.Key)
+	if entry.Name != "" {
+		desc += fmt.Sprintf(" (name: %s)", entry.Name)
+	}
+
+	switch op {
+	case KeyEnable:
+		store.Keys[idx].Disabled = false
+	case KeyDisable:
+		store.Keys[idx].Disabled = true
+	case KeyRemove:
+		store.Keys = append(store.Keys[:idx], store.Keys[idx+1:]...)
+	}
+
+	if err := keypool.SaveFullStore(path, store); err != nil {
+		return fmt.Errorf("failed to save keys for %q: %w", provider, err)
+	}
+
+	switch op {
+	case KeyEnable:
+		fmt.Printf("Enabled key [%d] %s for provider %q\n", idx, desc, provider)
+	case KeyDisable:
+		fmt.Printf("Disabled key [%d] %s for provider %q\n", idx, desc, provider)
+	case KeyRemove:
+		fmt.Printf("Removed key [%d] %s from provider %q (remaining: %d keys)\n", idx, desc, provider, len(store.Keys))
+	}
+
+	triggerReload()
+	return nil
 }
 
 func init() {
@@ -167,47 +232,11 @@ Example:
   akswitch key remove nvidia 0`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		provider := args[0]
 		idx, err := strconv.Atoi(args[1])
 		if err != nil {
 			return fmt.Errorf("invalid index %q: must be a non-negative integer", args[1])
 		}
-
-		setupEncryption()
-
-		path, err := keysPath(provider)
-		if err != nil {
-			return err
-		}
-
-		store, err := keypool.LoadFullStore(path)
-		if err != nil {
-			return fmt.Errorf("failed to load keys for %q: %w", provider, err)
-		}
-		if store == nil {
-			return fmt.Errorf("no keys found for provider %q", provider)
-		}
-
-		if idx < 0 || idx >= len(store.Keys) {
-			return fmt.Errorf("index %d out of range: provider %q has %d keys (valid: 0-%d)",
-				idx, provider, len(store.Keys), len(store.Keys)-1)
-		}
-
-		removed := store.Keys[idx]
-		store.Keys = append(store.Keys[:idx], store.Keys[idx+1:]...)
-
-		if err := keypool.SaveFullStore(path, store); err != nil {
-			return fmt.Errorf("failed to save keys for %q: %w", provider, err)
-		}
-
-		desc := utils.MaskKey(removed.Key)
-		if removed.Name != "" {
-			desc += fmt.Sprintf(" (name: %s)", removed.Name)
-		}
-		fmt.Printf("Removed key [%d] %s from provider %q (remaining: %d keys)\n",
-			idx, desc, provider, len(store.Keys))
-		triggerReload()
-		return nil
+		return updateKey(args[0], idx, KeyRemove)
 	},
 }
 
@@ -223,47 +252,14 @@ Example:
   akswitch key disable nvidia 1`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		provider := args[0]
 		idx, err := strconv.Atoi(args[1])
 		if err != nil {
 			return fmt.Errorf("invalid index %q: must be a non-negative integer", args[1])
 		}
-
-		setupEncryption()
-
-		path, err := keysPath(provider)
-		if err != nil {
-			return err
-		}
-
-		store, err := keypool.LoadFullStore(path)
-		if err != nil {
-			return fmt.Errorf("failed to load keys for %q: %w", provider, err)
-		}
-		if store == nil {
-			return fmt.Errorf("no keys found for provider %q", provider)
-		}
-
-		if idx < 0 || idx >= len(store.Keys) {
-			return fmt.Errorf("index %d out of range: provider %q has %d keys (valid: 0-%d)",
-				idx, provider, len(store.Keys), len(store.Keys)-1)
-		}
-
-		store.Keys[idx].Disabled = true
-
-		if err := keypool.SaveFullStore(path, store); err != nil {
-			return fmt.Errorf("failed to save keys for %q: %w", provider, err)
-		}
-
-		desc := utils.MaskKey(store.Keys[idx].Key)
-		if store.Keys[idx].Name != "" {
-			desc += fmt.Sprintf(" (name: %s)", store.Keys[idx].Name)
-		}
-		fmt.Printf("Disabled key [%d] %s for provider %q\n", idx, desc, provider)
-		triggerReload()
-		return nil
+		return updateKey(args[0], idx, KeyDisable)
 	},
 }
+
 var keyEnableCmd = &cobra.Command{
 	Use:   "enable <provider> <index>",
 	Short: "Enable an API key by index",
@@ -276,44 +272,10 @@ Example:
   akswitch key enable nvidia 1`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		provider := args[0]
 		idx, err := strconv.Atoi(args[1])
 		if err != nil {
 			return fmt.Errorf("invalid index %q: must be a non-negative integer", args[1])
 		}
-
-		setupEncryption()
-
-		path, err := keysPath(provider)
-		if err != nil {
-			return err
-		}
-
-		store, err := keypool.LoadFullStore(path)
-		if err != nil {
-			return fmt.Errorf("failed to load keys for %q: %w", provider, err)
-		}
-		if store == nil {
-			return fmt.Errorf("no keys found for provider %q", provider)
-		}
-
-		if idx < 0 || idx >= len(store.Keys) {
-			return fmt.Errorf("index %d out of range: provider %q has %d keys (valid: 0-%d)",
-				idx, provider, len(store.Keys), len(store.Keys)-1)
-		}
-
-		store.Keys[idx].Disabled = false
-
-		if err := keypool.SaveFullStore(path, store); err != nil {
-			return fmt.Errorf("failed to save keys for %q: %w", provider, err)
-		}
-
-		desc := utils.MaskKey(store.Keys[idx].Key)
-		if store.Keys[idx].Name != "" {
-			desc += fmt.Sprintf(" (name: %s)", store.Keys[idx].Name)
-		}
-		fmt.Printf("Enabled key [%d] %s for provider %q\n", idx, desc, provider)
-		triggerReload()
-		return nil
+		return updateKey(args[0], idx, KeyEnable)
 	},
 }
