@@ -5,16 +5,12 @@ import (
 	"akswitch/internal/circuitbreaker"
 	"akswitch/internal/config"
 	"akswitch/internal/keypool"
-	"akswitch/internal/logstore"
-	akswitchmetrics "akswitch/internal/metrics"
 	"log/slog"
 	"net/http"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
@@ -75,95 +71,7 @@ func NewProxyEngine(cfg *config.Config, pool *keypool.KeyPool) *ProxyEngine {
 	}
 }
 
-// ServerState holds per-provider runtime state: configuration, key pool, HTTP client,
-// metrics, circuit breakers, and the request multiplexer.
-type ServerState struct {
-	mu                  sync.RWMutex
-	name                string
-	cfg                 *config.Config
-	pool                *keypool.KeyPool
-	mux                 *http.ServeMux
-	proxy               *ProxyEngine
-	logs                *logstore.LogStore
-	startTime           time.Time
-	metrics             *akswitchmetrics.Metrics
-	metricsRegistry     *prometheus.Registry
-	lastHealthCheckTime time.Time
-	lastHealthCheckOK   bool
-	dashboardHTML       string
-	keysFile            string // path to keys.json for key persistence
-}
 
-// NewServerState creates a fully initialized ServerState for a single provider.
-func NewServerState(name string, cfg *config.Config, pool *keypool.KeyPool, dashboardHTML string, keysFile string) *ServerState {
-	reg, m := akswitchmetrics.NewRegistry()
-
-	// Initialize ProxyEngine with HTTP client and circuit breakers
-	proxy := NewProxyEngine(cfg, pool)
-
-	s := &ServerState{
-		name:            name,
-		cfg:             cfg,
-		pool:            pool,
-		mux:             http.NewServeMux(),
-		proxy:           proxy,
-		logs:            logstore.New(10000),
-		startTime:       time.Now(),
-		metrics:         m,
-		metricsRegistry: reg,
-		dashboardHTML:   dashboardHTML,
-		keysFile:        keysFile,
-	}
-	return s
-}
-
-// Handler returns the HTTP handler (mux) for use by http.Server or httptest.
-func (s *ServerState) Handler() http.Handler {
-	return s.mux
-}
-
-// LastHealthCheck returns the timestamp and result of the most recent active health check.
-func (s *ServerState) LastHealthCheck() (time.Time, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.lastHealthCheckTime, s.lastHealthCheckOK
-}
-
-// SetLastHealthCheck records the result of an active health check probe.
-func (s *ServerState) SetLastHealthCheck(ok bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.lastHealthCheckTime = time.Now()
-	s.lastHealthCheckOK = ok
-}
-
-// Metrics returns the prometheus metrics collector.
-func (s *ServerState) Metrics() *akswitchmetrics.Metrics {
-	return s.metrics
-}
-
-// PersistKeys saves the current key pool state to the keys file.
-// Called after key mutations through the management API.
-func (s *ServerState) PersistKeys() {
-	s.mu.RLock()
-	cfg := s.cfg
-	s.mu.RUnlock()
-	if cfg.KeysFile == "" {
-		return
-	}
-	keys := s.pool.Keys()
-	entries := make([]keypool.KeyEntry, len(keys))
-	for i := range keys {
-		entries[i] = keypool.KeyEntry{
-			Key:      keys[i],
-			Name:     s.pool.Name(i),
-			Disabled: s.pool.IsDisabled(i),
-		}
-	}
-	if err := keypool.SaveFullStore(cfg.KeysFile, &keypool.KeyStore{Keys: entries}); err != nil {
-		slog.Error("failed to persist keys", "path", cfg.KeysFile, "error", err)
-	}
-}
 
 // ApplyLogLevel sets the global slog handler's minimum level based on a string.
 // Supported values: "debug", "info", "warn", "error".
@@ -215,11 +123,16 @@ func InitFileHandler(logFile string, maxSizeMB, maxAgeDays int) {
 	fileHandlerWriter = lj
 
 	fileHandler := slog.NewTextHandler(lj, &slog.HandlerOptions{Level: &logLevel})
-	currentHandler := slog.Default().Handler()
+
+	// Use a direct stderr handler instead of slog.Default().Handler()
+	// to avoid a circular dependency in Go 1.24+:
+	// slog.Default().Handler() writes to log.Writer(), which calls
+	// slog.Default().Handler() again → deadlock.
+	stderrHandler := slog.NewTextHandler(os.Stderr, nil)
 
 	// Wrap both into a multiHandler
 	slog.SetDefault(slog.New(&multiHandler{
-		stderr: currentHandler,
+		stderr: stderrHandler,
 		file:   fileHandler,
 	}))
 	slog.Info("file logging initialized", "path", logFile, "maxSizeMB", maxSizeMB, "maxAgeDays", maxAgeDays)

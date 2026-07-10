@@ -26,7 +26,74 @@ type ProviderState struct {
 	Config *config.Config
 	Pool   *keypool.KeyPool
 	Proxy  *ProxyEngine
-	State  *ServerState
+
+	// Health check state (protected by healthMu)
+	healthMu            sync.RWMutex
+	lastHealthCheckTime time.Time
+	lastHealthCheckOK   bool
+
+	// Per-provider metrics and management state
+	metrics         *akswitchmetrics.Metrics
+	metricsRegistry *prometheus.Registry
+	dashboardHTML   string
+	keysFile        string
+}
+
+// NewProviderState creates a fully initialized ProviderState for a single provider.
+func NewProviderState(name string, cfg *config.Config, pool *keypool.KeyPool, dashboardHTML string, keysFile string) *ProviderState {
+	reg, m := akswitchmetrics.NewRegistry()
+	proxy := NewProxyEngine(cfg, pool)
+
+	return &ProviderState{
+		Name:            name,
+		Config:          cfg,
+		Pool:            pool,
+		Proxy:           proxy,
+		metrics:         m,
+		metricsRegistry: reg,
+		dashboardHTML:   dashboardHTML,
+		keysFile:        keysFile,
+	}
+}
+
+// LastHealthCheck returns the timestamp and result of the most recent active health check.
+func (ps *ProviderState) LastHealthCheck() (time.Time, bool) {
+	ps.healthMu.RLock()
+	defer ps.healthMu.RUnlock()
+	return ps.lastHealthCheckTime, ps.lastHealthCheckOK
+}
+
+// SetLastHealthCheck records the result of an active health check probe.
+func (ps *ProviderState) SetLastHealthCheck(ok bool) {
+	ps.healthMu.Lock()
+	defer ps.healthMu.Unlock()
+	ps.lastHealthCheckTime = time.Now()
+	ps.lastHealthCheckOK = ok
+}
+
+// Metrics returns the prometheus metrics collector.
+func (ps *ProviderState) Metrics() *akswitchmetrics.Metrics {
+	return ps.metrics
+}
+
+// PersistKeys saves the current key pool state to the keys file.
+// Called after key mutations through the management API.
+func (ps *ProviderState) PersistKeys() {
+	if ps.Config.KeysFile == "" {
+		return
+	}
+	keys := ps.Pool.Keys()
+	entries := make([]keypool.KeyEntry, len(keys))
+	for i := range keys {
+		entries[i] = keypool.KeyEntry{
+			Key:      keys[i],
+			Name:     ps.Pool.Name(i),
+			Disabled: ps.Pool.IsDisabled(i),
+		}
+	}
+	if err := keypool.SaveFullStore(ps.Config.KeysFile, &keypool.KeyStore{Keys: entries}); err != nil {
+		slog.Error("failed to persist keys", "path", ps.Config.KeysFile, "error", err)
+	}
 }
 
 // ProviderRouter manages a single-port HTTP server with path-based provider routing.
@@ -62,14 +129,7 @@ func NewProviderRouter(dashboardHTML string) *ProviderRouter {
 
 // AddProvider creates a new ProviderState with the given name, config, and key pool.
 func (pr *ProviderRouter) AddProvider(name string, cfg *config.Config, pool *keypool.KeyPool) error {
-	state := NewServerState(name, cfg, pool, pr.dashboardHTML, cfg.KeysFile)
-	ps := &ProviderState{
-		Name:   name,
-		Config: cfg,
-		Pool:   pool,
-		Proxy:  state.proxy,
-		State:  state,
-	}
+	ps := NewProviderState(name, cfg, pool, pr.dashboardHTML, cfg.KeysFile)
 	pr.mu.Lock()
 	pr.providers[name] = ps
 	pr.mu.Unlock()
@@ -193,13 +253,13 @@ func (pr *ProviderRouter) StartBackgroundTasks() {
 		pr.wg.Add(1)
 		go func() {
 			defer pr.wg.Done()
-			RefreshKeyPoolMetrics(p.State.Metrics(), p.Pool, pr.stop)
+			RefreshKeyPoolMetrics(p.Metrics(), p.Pool, pr.stop)
 		}()
 
 		pr.wg.Add(1)
 		go func() {
 			defer pr.wg.Done()
-			ActiveHealthCheck(p.Config, p.Proxy, p.State.Metrics(), p.State, pr.stop)
+			ActiveHealthCheck(p.Config, p.Proxy, p.Metrics(), p, pr.stop)
 		}()
 	}
 }

@@ -133,7 +133,7 @@ func (pr *ProviderRouter) keysHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		idx := pool.AddKey(body.Key, body.KeyName)
-		ps.State.PersistKeys()
+		ps.PersistKeys()
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"index": idx,
@@ -157,7 +157,7 @@ func (pr *ProviderRouter) keysHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		ps.State.PersistKeys()
+		ps.PersistKeys()
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"status": "removed"})
 
@@ -201,7 +201,7 @@ func (pr *ProviderRouter) healthHandler(w http.ResponseWriter, r *http.Request) 
 			cbState = "unknown"
 		}
 
-		lastCheckTime, lastCheckOK := ps.State.LastHealthCheck()
+		lastCheckTime, lastCheckOK := ps.LastHealthCheck()
 		var lastCheckISO string
 		if !lastCheckTime.IsZero() {
 			lastCheckISO = lastCheckTime.Format(time.RFC3339)
@@ -343,20 +343,11 @@ func (pr *ProviderRouter) reloadHandler(w http.ResponseWriter, r *http.Request) 
 			// Update existing provider
 			existing.Config = cfg
 			existing.Pool = keypool.NewKeyPool(cfg.Keys, cfg.KeyNames)
-			existing.State.cfg = cfg
-			existing.State.pool = existing.Pool
 			ApplyLogLevel(cfg.LogLevel)
 		} else {
 			// New provider — add it
 			pool := keypool.NewKeyPool(cfg.Keys, cfg.KeyNames)
-			state := NewServerState(name, cfg, pool, pr.dashboardHTML, cfg.KeysFile)
-			ps := &ProviderState{
-				Name:   name,
-				Config: cfg,
-				Pool:   pool,
-				Proxy:  state.proxy,
-				State:  state,
-			}
+			ps := NewProviderState(name, cfg, pool, pr.dashboardHTML, cfg.KeysFile)
 			ApplyLogLevel(cfg.LogLevel)
 			pr.providers[name] = ps
 		}
@@ -398,7 +389,7 @@ func (pr *ProviderRouter) disableKeyHandler(w http.ResponseWriter, r *http.Reque
 		respondJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 		return
 	}
-	ps.State.PersistKeys()
+	ps.PersistKeys()
 	respondJSON(w, http.StatusOK, map[string]bool{"success": true})
 }
 
@@ -422,7 +413,7 @@ func (pr *ProviderRouter) enableKeyHandler(w http.ResponseWriter, r *http.Reques
 		respondJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 		return
 	}
-		ps.State.PersistKeys()
+	ps.PersistKeys()
 	respondJSON(w, http.StatusOK, map[string]bool{"success": true})
 }
 
@@ -466,6 +457,6 @@ func (pr *ProviderRouter) deleteKeyHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	ps.Pool.RemoveKey(idx)
-	ps.State.PersistKeys()
+	ps.PersistKeys()
 	respondJSON(w, http.StatusOK, map[string]bool{"success": true})
 }
