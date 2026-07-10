@@ -11,36 +11,14 @@ import (
 
 // ---- TOML 配置支持 ----
 
-// TomlProviderConfig 对应 TOML 中单个 [provider.*] 的配置。
-type TomlProviderConfig struct {
-	Target                 string  `toml:"target"`
-	Genai                  string  `toml:"genai,omitempty"`
-	CooldownSec            int     `toml:"cooldown_sec,omitempty"`
-	MaxRetries             int     `toml:"max_retries,omitempty"`
-	DisableThinking        bool    `toml:"disable_thinking,omitempty"`
-	GenaiModel             string  `toml:"genai_model,omitempty"`
-	LogLevel               string  `toml:"log_level,omitempty"`
-	AdminToken             string  `toml:"admin_token,omitempty"`
-	KeysFile               string  `toml:"keys_file,omitempty"`
-	BackoffCapSec          int     `toml:"backoff_cap_sec,omitempty"`
-	BackoffMultiplier      float64 `toml:"backoff_multiplier,omitempty"`
-	CBResetSec             int     `toml:"cb_reset_sec,omitempty"`
-	UpstreamCBThreshold    int     `toml:"upstream_cb_threshold,omitempty"`
-	HealthCheckIntervalSec int     `toml:"health_check_interval_sec,omitempty"`
-	HTTPTimeoutSec          int     `toml:"http_timeout_sec,omitempty"`
-	LogFile    string `toml:"log_file,omitempty"`
-	LogMaxSize int    `toml:"log_max_size,omitempty"`
-	LogMaxAge  int    `toml:"log_max_age,omitempty"`
-}
-
 // TomlConfig 对应整个 config.toml 文件结构。
 type TomlConfig struct {
-	Port            int                            `toml:"port,omitempty"`
-	DefaultProvider string                         `toml:"default_provider,omitempty"`
-	LogFile    string                         `toml:"log_file,omitempty"`
-	LogMaxSize int                            `toml:"log_max_size,omitempty"`
-	LogMaxAge  int                            `toml:"log_max_age,omitempty"`
-	Provider   map[string]TomlProviderConfig `toml:"provider"`
+	Port            int                  `toml:"port,omitempty"`
+	DefaultProvider string               `toml:"default_provider,omitempty"`
+	LogFile         string               `toml:"log_file,omitempty"`
+	LogMaxSize      int                  `toml:"log_max_size,omitempty"`
+	LogMaxAge       int                  `toml:"log_max_age,omitempty"`
+	Provider        map[string]*Config `toml:"provider"`
 }
 
 // DefaultProviderName 保存从 TOML 配置中读取的默认 provider 名称。
@@ -77,17 +55,28 @@ func LoadToml(path string) (*Config, error) {
 		names = append(names, n)
 	}
 	sort.Strings(names)
-	p := tc.Provider[names[0]]
+	cfg := tc.Provider[names[0]]
+	if cfg == nil {
+		cfg = DefaultConfig()
+	} else {
+		mergeConfig(cfg)
+	}
+	// Port 来自顶层 TOML 配置
 	port := tc.Port
 	if port == 0 {
 		port = DefaultConfig().Port
 	}
-	return tomlToConfig(names[0], &p, port), nil
+	cfg.Port = port
+	return cfg, nil
 }
 
 // SaveToml 将 Config 写入 TOML 文件。覆盖已存在的文件。
 func SaveToml(cfg *Config, path string) error {
-	tc := configToToml(cfg)
+	tc := &TomlConfig{
+		Port:            cfg.Port,
+		DefaultProvider: DefaultProviderName,
+		Provider:        map[string]*Config{"default": cfg},
+	}
 	var buf bytes.Buffer
 	encoder := toml.NewEncoder(&buf)
 	if err := encoder.Encode(tc); err != nil {
@@ -108,7 +97,7 @@ func LoadTomlConfig(path string) (*TomlConfig, error) {
 		return nil, err
 	}
 	if tc.Provider == nil {
-		tc.Provider = make(map[string]TomlProviderConfig)
+		tc.Provider = make(map[string]*Config)
 	}
 	return &tc, nil
 }
@@ -121,93 +110,4 @@ func SaveTomlConfig(tc *TomlConfig, path string) error {
 		return fmt.Errorf("TOML 编码失败: %w", err)
 	}
 	return os.WriteFile(path, buf.Bytes(), 0644)
-}
-
-// tomlToConfig 将单 provider 的 TOML 配置转换为 *Config，未指定的字段使用默认值。
-func tomlToConfig(name string, tc *TomlProviderConfig, port int) *Config {
-	cfg := DefaultConfig()
-	cfg.TargetBase = tc.Target
-	cfg.GenaiBase = tc.Genai
-	if port > 0 {
-		cfg.Port = port
-	}
-	if tc.CooldownSec > 0 {
-		cfg.CooldownSec = tc.CooldownSec
-	}
-	if tc.MaxRetries > 0 {
-		cfg.MaxRetries = tc.MaxRetries
-	}
-	if tc.DisableThinking {
-		cfg.DisableThinking = true
-	}
-	if tc.GenaiModel != "" {
-		cfg.GenaiModel = tc.GenaiModel
-	}
-	if tc.LogLevel != "" {
-		cfg.LogLevel = tc.LogLevel
-	}
-	if tc.AdminToken != "" {
-		cfg.AdminToken = tc.AdminToken
-	}
-	if tc.KeysFile != "" {
-		cfg.KeysFile = tc.KeysFile
-	}
-	if tc.BackoffCapSec > 0 {
-		cfg.BackoffCapSec = tc.BackoffCapSec
-	}
-	if tc.BackoffMultiplier > 0 {
-		cfg.BackoffMultiplier = tc.BackoffMultiplier
-	}
-	if tc.CBResetSec > 0 {
-		cfg.CBResetSec = tc.CBResetSec
-	}
-	if tc.UpstreamCBThreshold > 0 {
-		cfg.UpstreamCBThreshold = tc.UpstreamCBThreshold
-	}
-	if tc.HealthCheckIntervalSec > 0 {
-		cfg.HealthCheckIntervalSec = tc.HealthCheckIntervalSec
-	}
-	if tc.HTTPTimeoutSec > 0 {
-		cfg.HTTPTimeoutSec = tc.HTTPTimeoutSec
-	}
-	if tc.LogFile != "" {
-		cfg.LogFile = tc.LogFile
-	}
-	if tc.LogMaxSize > 0 {
-		cfg.LogMaxSize = tc.LogMaxSize
-	}
-	if tc.LogMaxAge > 0 {
-		cfg.LogMaxAge = tc.LogMaxAge
-	}
-	return cfg
-}
-
-// configToToml 将 *Config 转换为 *TomlConfig（用于写入 TOML 文件）。
-func configToToml(cfg *Config) *TomlConfig {
-	return &TomlConfig{
-		Port:            cfg.Port,
-		DefaultProvider: DefaultProviderName,
-		LogFile:    cfg.LogFile,
-		LogMaxSize: cfg.LogMaxSize,
-		LogMaxAge:  cfg.LogMaxAge,
-		Provider: map[string]TomlProviderConfig{
-			"default": {
-				Target:                 cfg.TargetBase,
-				Genai:                  cfg.GenaiBase,
-				CooldownSec:            cfg.CooldownSec,
-				MaxRetries:             cfg.MaxRetries,
-				DisableThinking:        cfg.DisableThinking,
-				GenaiModel:             cfg.GenaiModel,
-				LogLevel:               cfg.LogLevel,
-				AdminToken:             cfg.AdminToken,
-				KeysFile:               cfg.KeysFile,
-				BackoffCapSec:          cfg.BackoffCapSec,
-				BackoffMultiplier:      cfg.BackoffMultiplier,
-				CBResetSec:             cfg.CBResetSec,
-				UpstreamCBThreshold:    cfg.UpstreamCBThreshold,
-				HealthCheckIntervalSec: cfg.HealthCheckIntervalSec,
-				HTTPTimeoutSec:    cfg.HTTPTimeoutSec,
-			},
-		},
-	}
 }

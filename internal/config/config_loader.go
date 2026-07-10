@@ -76,18 +76,23 @@ func LoadAllTomlProviders(path string) (map[string]*Config, error) {
 		port = DefaultConfig().Port
 	}
 	for name, p := range tc.Provider {
-		cfg := tomlToConfig(name, &p, port)
+		if p == nil {
+			p = DefaultConfig()
+		} else {
+			mergeConfig(p)
+			p.Port = port
+		}
 		// Top-level log fields override per-provider log fields
 		if tc.LogFile != "" {
-			cfg.LogFile = tc.LogFile
+			p.LogFile = tc.LogFile
 		}
 		if tc.LogMaxSize > 0 {
-			cfg.LogMaxSize = tc.LogMaxSize
+			p.LogMaxSize = tc.LogMaxSize
 		}
 		if tc.LogMaxAge > 0 {
-			cfg.LogMaxAge = tc.LogMaxAge
+			p.LogMaxAge = tc.LogMaxAge
 		}
-		result[name] = cfg
+		result[name] = p
 	}
 	return result, nil
 }

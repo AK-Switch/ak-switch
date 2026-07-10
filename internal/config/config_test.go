@@ -349,7 +349,7 @@ func TestSaveToml_LoadToml_Roundtrip(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	tomlPath := filepath.Join(tmpDir, "roundtrip.toml")
-	if err := SaveTomlConfig(configToToml(orig), tomlPath); err != nil {
+	if err := SaveToml(orig, tomlPath); err != nil {
 		t.Fatalf("SaveTomlConfig() error: %v", err)
 	}
 
@@ -596,7 +596,7 @@ func TestTomlProviderConfig_Roundtrip(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	tomlPath := filepath.Join(tmpDir, "roundtrip_ext.toml")
-	if err := SaveTomlConfig(configToToml(orig), tomlPath); err != nil {
+	if err := SaveToml(orig, tomlPath); err != nil {
 		t.Fatalf("SaveTomlConfig() error: %v", err)
 	}
 
