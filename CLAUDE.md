@@ -1,6 +1,6 @@
 ## 构建
 
-- `go install ./cmd/akswitch/` → 全局 `akswitch`（`%USERPROFILE%\go\bin\` 已在 PATH）
+- `go install ./cmd/akswitch/` → 全局 `akswitch`（`$(go env GOPATH)/bin` 已在 PATH）
 - 所有依赖装在项目级，**禁止污染全局**
 
 ## 工作流
