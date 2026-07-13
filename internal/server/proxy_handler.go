@@ -251,7 +251,6 @@ func (pr *ProviderRouter) handleAuthRejected(w http.ResponseWriter, ps *Provider
 	pr.metrics.UpstreamErrors.WithLabelValues("auth_rejected").Inc()
 	if pool.RecordAuthFailure(idx) {
 		pool.Disable(idx)
-		pool.Disable(idx)
 		slog.Warn("key permanently disabled", "provider", ps.Name, "key_index", idx, "key_name", pool.Name(idx), "status", resp.StatusCode, "body_preview", MaskSensitiveData(string(body), 1024))
 	} else {
 		slog.Warn("key auth failure", "provider", ps.Name, "key_index", idx, "key_name", pool.Name(idx), "status", resp.StatusCode, "fail_count", pool.CB(idx).AuthFailCount())
