@@ -12,6 +12,7 @@ var (
 	restartExePath string         // 当前二进制路径
 	restartSigCh   chan os.Signal // 指向 startServer 的信号通道
 	restartTicker  *time.Ticker   // 文件修改时间轮询
+	binaryUpdated  bool           // 由二进制更新检测 goroutine 设为 true，用于区分 Ctrl+C 和热更新
 )
 
 // SetupSelfRestart 启动二进制自监控 goroutine。
@@ -48,6 +49,7 @@ func SetupSelfRestart(exePath string, sigCh chan os.Signal) {
 				slog.Info("检测到二进制更新，正在热重启...")
 				// 先删除 PID 文件，让新进程能正常启动
 				_ = os.Remove(pidFilePath())
+				binaryUpdated = true
 				// 通知主 goroutine 执行优雅关闭
 				// 缓冲区大小为 1，不会阻塞
 				select {
@@ -64,6 +66,7 @@ func SetupSelfRestart(exePath string, sigCh chan os.Signal) {
 // ExecRestart 在 shutdown 完成后启动新进程。
 // 新进程会继承当前控制台，在同一个终端窗口中运行。
 func ExecRestart() {
+	binaryUpdated = false
 	if restartExePath == "" {
 		return
 	}
