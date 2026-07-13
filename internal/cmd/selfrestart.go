@@ -75,8 +75,20 @@ func ExecRestart() {
 		restartTicker = nil
 	}
 
-	slog.Info("正在启动新进程...")
-	cmd := exec.Command(restartExePath, "start")
+	// Re-resolve the executable path — it may have been replaced by go install
+	exePath := restartExePath
+	if _, err := os.Stat(exePath); os.IsNotExist(err) {
+		if resolved, err := os.Executable(); err == nil {
+			exePath = resolved
+		}
+		if _, err := os.Stat(exePath); os.IsNotExist(err) {
+			slog.Error("启动新进程失败: 可执行文件不存在，请先运行 go install", "path", exePath)
+			return
+		}
+	}
+
+	slog.Info("正在启动新进程...", "path", exePath)
+	cmd := exec.Command(exePath, "start")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
