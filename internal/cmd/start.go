@@ -215,8 +215,10 @@ func waitForShutdown(router *server.ProviderRouter) {
 	router.Stop()
 	slog.Info("server stopped gracefully")
 
-	// ── 自监控触发重启 ──────────────────────────────
-	ExecRestart()
+	// ── 自监控触发重启（仅二进制更新时执行）──────────
+	if binaryUpdated {
+		ExecRestart()
+	}
 }
 
 // loadKeysForProvider loads API keys for a provider from its keys file or env.
