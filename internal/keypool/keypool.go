@@ -216,7 +216,11 @@ func (p *KeyPool) ConfigureCBs(base, backoffCap time.Duration, multiplier float6
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for i := range p.cbs {
+		wasPermanent := p.cbs[i].State() == circuitbreaker.StatePermanent
 		p.cbs[i] = circuitbreaker.NewKeyCircuitBreaker(base, backoffCap, multiplier)
+		if wasPermanent {
+			p.cbs[i].RecordPerma("preserved")
+		}
 	}
 }
 
