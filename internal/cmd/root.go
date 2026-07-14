@@ -11,6 +11,7 @@ const (
 	adminPort = 8080
 )
 
+var Version = "dev"
 var dashHTML string
 
 var rootCmd = &cobra.Command{
@@ -44,6 +45,6 @@ func detectServerPort() int {
 }
 
 func init() {
-	rootCmd.Version = "dev"
+	rootCmd.Version = Version
 	rootCmd.AddCommand(versionCmd)
 }

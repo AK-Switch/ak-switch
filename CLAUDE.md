@@ -4,108 +4,112 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 构建
 
-```bash
-go install ./cmd/akswitch/     # 安装到 $(go env GOPATH)/bin
-go build -o akswitch.exe ./cmd/akswitch/  # 本地编译
-```
-
-## 架构概览
-
-### 两层熔断器
-
-```
-请求 → UpstreamCircuitBreaker (502/503/网络错误) → KeyPool (轮询) → KeyCircuitBreaker (429 退避/401 永久禁用) → 上游
-```
-
-- **UpstreamCircuitBreaker** — 跟踪上游 502/503 和网络错误，CLOSED → OPEN → HALF_OPEN 状态机，不影响 Key 健康度
-- **KeyCircuitBreaker** — 每个 Key 独立，跟踪 429（指数退避）和 401/403（永久禁用），CLOSED → OPEN → PERMA
-- **KeyPool** — 线程安全轮询，跳过冷却/禁用中的 Key，全冷却时等待最短可用时间 + jitter 避免 thundering herd
-
-### 包职责
-
-| 包 | 职责 |
-|---|---|
-| `internal/server` | HTTP 服务、路由、代理请求处理、管理 API、日志初始化 |
-| `internal/keypool` | Key 轮询、熔断器协调、加密存储 (AES-256-GCM) |
-| `internal/circuitbreaker` | Key 级和上游级熔断器状态机 |
-| `internal/config` | TOML 加载、验证、热重载 diff |
-| `internal/cmd` | Cobra CLI 命令：start, stop, status, provider, key, logs, config |
-| `internal/logstore` | 内存环形日志缓冲区（固定 10000 条） |
-| `internal/metrics` | Prometheus 指标注册 |
-| `internal/utils` | MaskKey、LogEntry、CopyHeaders 等工具 |
-
-### 路由（单端口 + 路径前缀）
-
-- `/health` — 健康检查
-- `/logs` — 内存日志快照
-- `/dashboard` — 内置 Web 面板
-- `/api/config` — 配置查看
-- `/api/keys` — Key CRUD
-- `/api/stats` — 统计
-- `/api/reload` — 配置热重载
-- `/metrics` — Prometheus
-- `/{provider}/...` — 代理请求（路径首段为 provider 名）
+- `go install ./cmd/akswitch/` -> 全局 `akswitch`（`$(go env GOPATH)/bin` 已在 PATH）
+- `make test-all` — 全量测试（unit -> integration -> e2e）
+- `make release VERSION=v0.x.x` — 打 tag 推送触发 CI Release
+- 所有依赖装在项目级，**禁止污染全局**
 
 ## 测试
 
-### 分层标签
+测试按速度分层，用 `//go:build` 标签区分：
 
-```bash
-go test -tags=unit -count=1 -short ./internal/...   # ≤1s，纯逻辑无 IO
-go test -tags=integration -count=1 -race ./          # ≤10s，CLI + mock HTTP
-go test -tags=e2e -count=1 -timeout=5m -race ./      # ≤2m，子进程 + 端口绑定
-make test-all                                         # 按 unit → integration → e2e 顺序全量
+| 层级 | 标签 | 上限 | 命令 |
+|------|------|------|------|
+| 单元 | `unit` | <=1s | `make test-unit` |
+| 集成 | `integration` | <=10s | `make test-integration` |
+| E2E | `e2e` | <=2m | `make test-e2e` |
+
+**新增测试文件规则：**
+1. 先判断所属层级，加对应 `//go:build` 标签
+2. CLI 命令测试必须包含输出断言（`assertOutputContains` 或类似）
+3. 禁止无输出断言的 `runCommand` 模式（只测不崩不算测完）
+4. **边界**：Key <=12 字符时 `MaskKey` 输出 `****`（已在 `utils_test.go` 覆盖）
+
+**测试策略：**
+- **主攻方向**：集成验收测试（mock upstream + 真实代理请求），如 `proxy_test.go`
+- **测试入口**：所有 CLI 可达路径用 `runCommand()` 或子进程模式（`testhelper.go`）
+- **标准**：before/after 对比，不测绝对值快照
+- **不写**：mock 掉一切只测 JSON 的 Handler 测试（如 `handlers_test.go`）
+
+## 发版
+
+**时机：** 一个完整的功能或修复 PR 合并到 main 后，觉得"值得用户更新了"就发。
+
+**版本号规则：**
+- `v0.x.0` — 新功能（minor）
+- `v0.x.1` — bug 修复（patch）
+- 当前最新：v0.3.0（旧测试 tag 已清理）
+
+**流程（二选一）：**
+- `make release VERSION=v0.4.0`（等价于 `git tag v0.4.0 && git push origin v0.4.0`）
+- 或从 GitHub Actions 页面手动触发 `Build & Release` workflow，填入版本号
+
+**两种触发方式均已配置：** 本地 git push 和 GitHub Actions `workflow_dispatch` 均有效。触发后自动构建 8 平台二进制 + SHA256SUMS + 创建 Release。
+
+## 架构
+
+```
+cmd/akswitch/main.go           # 入口，ldflags 注入 version
+internal/
+  cmd/                         # Cobra CLI 命令层
+    root.go                    #   根命令 + version 子命令
+    start.go                   #   start -> 解析配置 -> 初始化 provider -> 启动代理
+    config.go, provider.go,    #   config/provider/key 增删查改 CLI
+    key.go, status.go, ...
+    selfrestart.go             #   二进制自监控热重启（开发模式）
+  server/                      # HTTP 代理 + 管理 API
+    proxy.go                   #   反向代理 + key 轮转 + 重试
+    handlers.go                #   管理 API handler（config/key/log-level...）
+    admin.go                   #   admin token 鉴权
+    router.go                  #   ProviderRouter: 多 provider 各自独立端口
+    middleware.go              #   敏感 header 过滤、日志
+    crash.go                   #   panic 恢复
+  keypool/                     # API Key 池
+    keypool.go                 #   轮转策略（round-robin + cooldown + 禁用）
+    crypto.go                  #   AES-256-GCM 加密存储
+    store.go                   #   持久化（文件读写 + 加密）
+  circuitbreaker/              # 两层熔断器
+    key.go                     #   Key 级熔断（限流退避）
+    upstream.go                #   上游级熔断（502/503 -> open -> half-open -> close）
+  config/                      # TOML 配置加载
+    config_toml.go             #   TOML provider 定义
+    config_loader.go           #   多源合并（env + TOML）
+    config_diff.go             #   热重载 diff 脱敏输出
+  logstore/                    # 请求日志环形缓冲区
+  metrics/                     # Prometheus 指标导出
+  utils/                       # MaskKey 等工具函数
 ```
 
-### 测试原则
-
-- 主攻集成验收测试（mock upstream + 真实代理请求）
-- CLI 命令测试必须包含输出断言（`assertOutputContains` 或类似）
-- 禁止 mock 掉一切只测 JSON 的 Handler 测试
-- 边界：Key ≤12 字符时 `MaskKey` 输出 `****`
-
-## 运维排查
-
-### 日志文件
-
-- **主日志**: `C:/Users/86150/AppData/Roaming/akswitch/akswitch.log`（由 `~/.akswitch/config.toml` 的 `log_file` 配置）
-- **Crash 日志**: `~/.akswitch/crash.log`（panic 恢复时写入）
-- **配置**: `~/.akswitch/config.toml`
-- **日志轮转**: lumberjack，默认 100MB 轮转，保留 7 天
-
-### 日志格式 (slog 结构化)
-
-```
-time=... level=INFO|WARN|ERROR msg="proxy request|proxy success|key network error|key rate limited" ...
-```
-
-### 快速定位问题
-
-```bash
-grep "level=ERROR" <log_file>              # 启动失败、端口冲突、shutdown 超时
-grep "key rate limited" <log_file>         # 上游限流 429
-grep "key network error" <log_file>        # 网络连接问题
-grep "key permanently disabled" <log_file> # 401/403 永久禁用
-```
-
-## 项目定位
-
-akswitch 只专注于单 provider 内的 API key 轮转，不重复造 ccswitch 的轮子。ccswitch 负责 provider 级路由，akswitch 负责 provider 内 key 级轮转与限流处理。
+**关键模式：**
+- **ProviderRouter** — 单进程管理多个 provider，每个独立端口 + 独立 key pool
+- **两层熔断** — Key 级（429 退避）-> 上游级（502/503 熔断），key 级先触发，上游级兜底
+- **配置热重载** — 监听 `.env` 变更 -> 计算 diff -> 热更新 key pool，不停机
+- **自监控重启** — 开发模式下监控 binary 文件变更，检测到更新后优雅重启
 
 ## 工作流
 
 - main 分支受保护，禁止直接推送
-- 执行改动前创建功能分支（`feature/xxx` / `bugfix/xxx` / `docs/xxx`）
+- 执行改动前创建功能分支
 - 遵循 GitHub Flow + 原子 commit
 - 提交 PR 后在前台等 CI 绿
 
-### 提交前检查清单
+### 提交前检查清单（强制）
 
-1. 新增 CLI 命令/标志 → 对应 CLI 入口测试已写？
-2. `go test ./...` 全量通过？
-3. `go install` 后用真实二进制验证了行为？
-4. 在正确的分支？提交信息清晰？
+1. **[测试]** — 新增 CLI 命令/标志 -> 对应 CLI 入口测试已写？
+2. **[测试]** — `make test-all` 全量通过？
+3. **[手动验收]** — `go install` 后用真实二进制验证了行为？
+4. **[提交]** — 在正确的分支？提交信息清晰？
 
-### 提交后检查
+### 提交后检查（强制）
 
-5. 前台等到 CI 绿？
+5. **[CI]** — 前台等到 CI 绿？
+
+## 项目定位
+
+akswitch 只专注于单 provider 内的 API key 轮转，不重复造 ccswitch 的轮子。
+
+## Agent 工具
+
+- Issue tracker: `docs/agents/issue-tracker.md` — GitHub Issues，外部 PR 不参与 triage
+- Triage 标签: `docs/agents/triage-labels.md` — 五个标准角色，默认标签名
+- 领域文档: `docs/agents/domain.md` — 单上下文布局
