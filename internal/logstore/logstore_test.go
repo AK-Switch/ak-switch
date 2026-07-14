@@ -159,3 +159,64 @@ func TestKeyMaskedOnAppend(t *testing.T) {
 		t.Error("Key appears unmasked in Snapshot; expected masking on Append")
 	}
 }
+
+func TestSnapshotSince(t *testing.T) {
+	s := New(100)
+	entries := []utils.LogEntry{
+		{Timestamp: "2025-01-01T00:00:00Z", Key: "k1", KeyIndex: 1, Method: "GET", URL: "/", Status: 200, RequestBodySize: 0},
+		{Timestamp: "2025-01-01T00:00:01Z", Key: "k2", KeyIndex: 2, Method: "GET", URL: "/", Status: 200, RequestBodySize: 0},
+		{Timestamp: "2025-01-01T00:00:02Z", Key: "k3", KeyIndex: 3, Method: "GET", URL: "/", Status: 200, RequestBodySize: 0},
+		{Timestamp: "2025-01-01T00:00:03Z", Key: "k4", KeyIndex: 4, Method: "GET", URL: "/", Status: 200, RequestBodySize: 0},
+	}
+	for _, e := range entries {
+		s.Append(e)
+	}
+
+	t.Run("since_before_first", func(t *testing.T) {
+		snap := s.SnapshotSince("2024-12-31T23:59:59Z")
+		if len(snap) != 4 {
+			t.Fatalf("expected 4 entries, got %d", len(snap))
+		}
+	})
+
+	t.Run("since_middle", func(t *testing.T) {
+		snap := s.SnapshotSince("2025-01-01T00:00:01Z")
+		if len(snap) != 3 {
+			t.Fatalf("expected 3 entries (idx 1,2,3), got %d", len(snap))
+		}
+		if snap[0].KeyIndex != 2 {
+			t.Errorf("first entry KeyIndex = %d, want 2", snap[0].KeyIndex)
+		}
+	})
+
+	t.Run("since_after_last", func(t *testing.T) {
+		snap := s.SnapshotSince("2025-01-01T00:00:04Z")
+		if len(snap) != 0 {
+			t.Fatalf("expected 0 entries, got %d", len(snap))
+		}
+	})
+
+	t.Run("since_exact_match", func(t *testing.T) {
+		snap := s.SnapshotSince("2025-01-01T00:00:02Z")
+		if len(snap) != 2 {
+			t.Fatalf("expected 2 entries (idx 3,4), got %d", len(snap))
+		}
+		if snap[0].KeyIndex != 3 {
+			t.Errorf("first entry KeyIndex = %d, want 3", snap[0].KeyIndex)
+		}
+	})
+
+	t.Run("since_empty_fallback", func(t *testing.T) {
+		snap := s.SnapshotSince("")
+		if len(snap) != 4 {
+			t.Fatalf("expected 4 entries on empty since, got %d", len(snap))
+		}
+	})
+
+	t.Run("since_invalid_fallback", func(t *testing.T) {
+		snap := s.SnapshotSince("not-a-timestamp")
+		if len(snap) != 4 {
+			t.Fatalf("expected 4 entries on invalid since, got %d", len(snap))
+		}
+	})
+}

@@ -13,10 +13,12 @@ import (
 
 func init() {
 	logsCmd.Flags().IntVar(&logsLast, "last", 0, "Show only the last N entries (0 = all)")
+	logsCmd.Flags().StringVar(&logsSince, "since", "", "Show entries after this timestamp (RFC3339, e.g. 2026-07-14T00:00:00Z)")
 	rootCmd.AddCommand(logsCmd)
 }
 
 var logsLast int
+var logsSince string
 
 var logsCmd = &cobra.Command{
 	Use:   "logs",
@@ -30,6 +32,9 @@ var logsCmd = &cobra.Command{
 		port := detectServerPort()
 
 		logURL := fmt.Sprintf("http://127.0.0.1:%d/logs", port)
+		if logsSince != "" {
+			logURL += "?since=" + logsSince
+		}
 		resp, err := client.Get(logURL)
 		if err != nil {
 			return fmt.Errorf("server not reachable at %s: %w", logURL, err)
