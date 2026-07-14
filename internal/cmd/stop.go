@@ -46,12 +46,22 @@ var stopCmd = &cobra.Command{
 			return fmt.Errorf("failed to find process: %w", err)
 		}
 
-		if err := proc.Signal(os.Interrupt); err != nil {
-			// On Windows, os.Interrupt might not work for non-child processes
-			fmt.Println("PID signal failed. Try:")
-			fmt.Println("  - Windows: taskkill /F /PID", pid)
-			fmt.Println("  - Linux/macOS: kill", pid)
-			return fmt.Errorf("failed to send interrupt: %w", err)
+		if runtime.GOOS == "windows" {
+			// Windows: taskkill 发送 CTRL_CLOSE_EVENT，Go 运行时处理为 os.Exit(0)
+			// 相比 proc.Signal(os.Interrupt)（只对子进程有效）更可靠
+			cmd := exec.Command("taskkill", "/PID", strconv.Itoa(pid))
+			if err := cmd.Run(); err != nil {
+				fmt.Println("Failed to stop akswitch. Try:")
+				fmt.Println("  taskkill /F /PID", pid)
+				return fmt.Errorf("taskkill failed: %w", err)
+			}
+		} else {
+			// Unix: send os.Interrupt for graceful shutdown
+			if err := proc.Signal(os.Interrupt); err != nil {
+				fmt.Println("PID signal failed. Try:")
+				fmt.Println("  kill", pid)
+				return fmt.Errorf("failed to send interrupt: %w", err)
+			}
 		}
 
 		// Poll for process exit with timeout instead of blocking on proc.Wait().
