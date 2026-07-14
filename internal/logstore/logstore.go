@@ -2,6 +2,7 @@ package logstore
 
 import (
 	"sync"
+	"time"
 
 	"akswitch/internal/utils"
 )
@@ -46,6 +47,37 @@ func (ls *LogStore) Snapshot() []utils.LogEntry {
 	defer ls.mu.Unlock()
 	result := make([]utils.LogEntry, len(ls.logs))
 	copy(result, ls.logs)
+	return result
+}
+
+// SnapshotSince returns a deep copy of entries whose timestamp >= since.
+// since is parsed as RFC3339. If since is empty or unparseable, returns all entries.
+func (ls *LogStore) SnapshotSince(since string) []utils.LogEntry {
+	sinceTime, err := time.Parse(time.RFC3339, since)
+	if err != nil {
+		return ls.Snapshot()
+	}
+
+	ls.mu.Lock()
+	defer ls.mu.Unlock()
+
+	// Binary search: find first entry with timestamp >= sinceTime
+	// entries are stored in insertion order, timestamps are monotonic.
+	cut := len(ls.logs)
+	lo, hi := 0, len(ls.logs)
+	for lo < hi {
+		mid := int(uint(lo+hi) >> 1)
+		t, err := time.Parse(time.RFC3339, ls.logs[mid].Timestamp)
+		if err != nil || !t.Before(sinceTime) {
+			hi = mid
+		} else {
+			lo = mid + 1
+		}
+	}
+	cut = lo
+
+	result := make([]utils.LogEntry, len(ls.logs)-cut)
+	copy(result, ls.logs[cut:])
 	return result
 }
 

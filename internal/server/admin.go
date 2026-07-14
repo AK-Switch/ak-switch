@@ -239,6 +239,12 @@ func (pr *ProviderRouter) healthHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func (pr *ProviderRouter) logsHandler(w http.ResponseWriter, r *http.Request) {
+	since := r.URL.Query().Get("since")
+	if since != "" {
+		entries := pr.logs.SnapshotSince(since)
+		respondJSON(w, http.StatusOK, entries)
+		return
+	}
 	entries := pr.logs.Snapshot()
 	respondJSON(w, http.StatusOK, entries)
 }
