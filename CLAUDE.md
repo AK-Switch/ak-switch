@@ -31,6 +31,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **标准**：before/after 对比，不测绝对值快照
 - **不写**：mock 掉一切只测 JSON 的 Handler 测试（如 `handlers_test.go`）
 
+## 发版
+
+**时机：** 一个完整的功能或修复 PR 合并到 main 后，觉得"值得用户更新了"就发。
+
+**版本号规则：**
+- `v0.x.0` — 新功能（minor）
+- `v0.x.1` — bug 修复（patch）
+- 当前最新：v0.3.0（旧测试 tag 已清理）
+
+**流程（二选一）：**
+- `make release VERSION=v0.4.0`（等价于 `git tag v0.4.0 && git push origin v0.4.0`）
+- 或从 GitHub Actions 页面手动触发 `Build & Release` workflow，填入版本号
+
+**两种触发方式均已配置：** 本地 git push 和 GitHub Actions `workflow_dispatch` 均有效。触发后自动构建 8 平台二进制 + SHA256SUMS + 创建 Release。
+
 ## 架构
 
 ```

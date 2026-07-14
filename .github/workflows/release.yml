@@ -1,5 +1,11 @@
 name: Build & Release
 on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. v0.4.0)'
+        required: true
+        type: string
   push:
     tags:
       - "v*"
@@ -44,7 +50,8 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          go build -ldflags="-s -w -X akswitch/internal/cmd.Version=${{ github.ref_name }}" -o akswitch-${{ matrix.suffix }} ./cmd/akswitch/
+          VERSION="${{ github.event.inputs.version || github.ref_name }}"
+          go build -ldflags="-s -w -X akswitch/internal/cmd.Version=$VERSION" -o akswitch-${{ matrix.suffix }} ./cmd/akswitch/
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
