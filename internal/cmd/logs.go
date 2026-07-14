@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -33,7 +34,7 @@ var logsCmd = &cobra.Command{
 
 		logURL := fmt.Sprintf("http://127.0.0.1:%d/logs", port)
 		if logsSince != "" {
-			logURL += "?since=" + logsSince
+			logURL += "?" + url.Values{"since": {logsSince}}.Encode()
 		}
 		resp, err := client.Get(logURL)
 		if err != nil {
