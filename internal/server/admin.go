@@ -340,9 +340,26 @@ func (pr *ProviderRouter) reloadHandler(w http.ResponseWriter, r *http.Request) 
 		}
 
 		if existing, ok := pr.providers[name]; ok {
-			// Update existing provider
+			// Update existing provider — preserve disabled state across reload
+			oldPool := existing.Pool
+			var disabledNames []string
+			for i := 0; i < oldPool.Len(); i++ {
+				if oldPool.IsDisabled(i) {
+					disabledNames = append(disabledNames, oldPool.Name(i))
+				}
+			}
+
 			existing.Config = cfg
 			existing.Pool = keypool.NewKeyPool(cfg.Keys, cfg.KeyNames)
+
+			for _, name := range disabledNames {
+				for i := 0; i < existing.Pool.Len(); i++ {
+					if existing.Pool.Name(i) == name {
+						_ = existing.Pool.Disable(i)
+						break
+					}
+				}
+			}
 			ApplyLogLevel(cfg.LogLevel)
 		} else {
 			// New provider — add it
