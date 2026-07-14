@@ -3,11 +3,14 @@
 package cmd
 
 import (
+	"bytes"
+	"io"
 	"os"
-	"path/filepath"
+	"strings"
 	"testing"
 
 	"akswitch/internal/config"
+	"path/filepath"
 )
 
 func TestDetectServerPort_Default(t *testing.T) {
@@ -44,5 +47,45 @@ genai = "http://example.com"
 	port := detectServerPort()
 	if port != 9090 {
 		t.Errorf("detectServerPort() = %d, want 9090", port)
+	}
+}
+
+func TestVersionCommand(t *testing.T) {
+	// Verify default version variable
+	if Version != "dev" {
+		t.Errorf("Version = %q, want %q", Version, "dev")
+	}
+	if rootCmd.Version != "dev" {
+		t.Errorf("rootCmd.Version = %q, want %q", rootCmd.Version, "dev")
+	}
+
+	// Test version command output by capturing stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldStdout := os.Stdout
+	os.Stdout = w
+
+	rootCmd.SetArgs([]string{"version"})
+	if err := rootCmd.Execute(); err != nil {
+		w.Close()
+		os.Stdout = oldStdout
+		t.Fatal(err)
+	}
+
+	w.Close()
+	os.Stdout = oldStdout
+
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, r); err != nil {
+		t.Fatal(err)
+	}
+	r.Close()
+
+	output := strings.TrimSpace(buf.String())
+	expected := "akswitch version dev"
+	if output != expected {
+		t.Errorf("version output = %q, want %q", output, expected)
 	}
 }
