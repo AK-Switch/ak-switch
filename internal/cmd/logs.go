@@ -15,11 +15,13 @@ import (
 func init() {
 	logsCmd.Flags().IntVar(&logsLast, "last", 0, "Show only the last N entries (0 = all)")
 	logsCmd.Flags().StringVar(&logsSince, "since", "", "Show entries after this timestamp (RFC3339, e.g. 2026-07-14T00:00:00Z)")
+	logsCmd.Flags().BoolVar(&logsVerbose, "verbose", false, "Show full request details (method, URL, body size)")
 	rootCmd.AddCommand(logsCmd)
 }
 
 var logsLast int
 var logsSince string
+var logsVerbose bool
 
 var logsCmd = &cobra.Command{
 	Use:   "logs",
@@ -67,39 +69,7 @@ var logsCmd = &cobra.Command{
 			if !ok {
 				continue
 			}
-			method := getStrField(entryMap, "method", "?")
-			path := getStrField(entryMap, "url", "?")
-			status := getStrField(entryMap, "status", "?")
-			ts := getStrField(entryMap, "timestamp", "?")
-			if t, err := time.Parse(time.RFC3339, ts); err == nil {
-				ts = t.Format("15:04:05.000")
-			}
-
-			provider := getStrField(entryMap, "provider", "")
-			duration := getStrField(entryMap, "duration_ms", "")
-			retry := getStrField(entryMap, "retry", "")
-			keyName := getStrField(entryMap, "key_name", "")
-
-			var extras []string
-			if retry != "" && retry != "0" { extras = append(extras, "retry "+retry) }
-			if duration != "" {
-				extras = append(extras, duration+"ms")
-			}
-			if keyName != "" {
-				extras = append(extras, "key: "+keyName)
-			}
-
-			prefix := fmt.Sprintf("  [%s]", ts)
-			if provider != "" {
-				prefix += " " + provider
-			}
-
-			extraStr := ""
-			if len(extras) > 0 {
-				extraStr = " (" + strings.Join(extras, ", ") + ")"
-			}
-
-			fmt.Printf("%s %s %s -> %s%s\n", prefix, method, path, status, extraStr)
+			fmt.Println(formatLogLine(entryMap, logsVerbose))
 		}
 
 		return nil
@@ -116,4 +86,62 @@ func getStrField(m map[string]interface{}, key, fallback string) string {
 		}
 	}
 	return fallback
+}
+
+func formatLogLine(entry map[string]interface{}, verbose bool) string {
+	method := getStrField(entry, "method", "?")
+	path := getStrField(entry, "url", "?")
+	status := getStrField(entry, "status", "?")
+	ts := getStrField(entry, "timestamp", "?")
+	if t, err := time.Parse(time.RFC3339, ts); err == nil {
+		ts = t.Format("15:04:05.000")
+	}
+
+	provider := getStrField(entry, "provider", "")
+	duration := getStrField(entry, "duration_ms", "")
+	retry := getStrField(entry, "retry", "")
+	keyName := getStrField(entry, "key_name", "")
+
+	prefix := fmt.Sprintf("  [%s]", ts)
+
+	if verbose {
+		// Full debugging view: [ts] provider METHOD url -> status (retry N, durationMsms, key: name)
+		if provider != "" {
+			prefix += " " + provider
+		}
+		var extras []string
+		if retry != "" && retry != "0" {
+			extras = append(extras, "retry "+retry)
+		}
+		if duration != "" {
+			extras = append(extras, duration+"ms")
+		}
+		if keyName != "" {
+			extras = append(extras, "key: "+keyName)
+		}
+		extraStr := ""
+		if len(extras) > 0 {
+			extraStr = " (" + strings.Join(extras, ", ") + ")"
+		}
+		return fmt.Sprintf("%s %s %s -> %s%s", prefix, method, path, status, extraStr)
+	}
+
+	// Default user-friendly view: [HH:MM:SS.mmm] status (provider, key: name, durationMsms[, retry N])
+	var extras []string
+	if provider != "" {
+		extras = append(extras, provider)
+	}
+	if keyName != "" {
+		extras = append(extras, "key: "+keyName)
+	}
+	if duration != "" {
+		extras = append(extras, duration+"ms")
+	}
+	if retry != "" && retry != "0" {
+		extras = append(extras, "retry "+retry)
+	}
+	if len(extras) > 0 {
+		return fmt.Sprintf("%s %s (%s)", prefix, status, strings.Join(extras, ", "))
+	}
+	return fmt.Sprintf("%s %s", prefix, status)
 }
