@@ -105,6 +105,19 @@ internal/
 5. **[CI]** — 前台等到 CI 绿？
 6. **[二进制更新]** — PR 合并后 `go install ./cmd/akswitch/` 更新本地二进制
 
+## 日志分析
+
+**禁止全量扫描。** 用增量 checkpoint 模式：
+
+1. 读上次分析的 checkpoint（在 `memory/log-analysis-jul-2026.md` 或分析报告的 `last_analyzed_at`）
+2. `akswitch logs --since=<checkpoint>` 只拉新日志
+3. 分析完成后，更新 checkpoint 到最新日志时间戳
+4. 将发现追加到上次报告，不重写全量
+
+- `/logs` API 支持 `?since=RFC3339`，CLI 透传 `--since`
+- 首次分析不需要 `--since`（= 全量，建立基线）
+- 先看 `/metrics` 聚合数据再扫日志，减少 80% 的手动扫日志需求
+
 ## 项目定位
 
 akswitch 只专注于单 provider 内的 API key 轮转，不重复造 ccswitch 的轮子。
