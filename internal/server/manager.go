@@ -32,27 +32,22 @@ type ProviderState struct {
 	lastHealthCheckTime time.Time
 	lastHealthCheckOK   bool
 
-	// Per-provider metrics and management state
-	metrics         *akswitchmetrics.Metrics
-	metricsRegistry *prometheus.Registry
-	dashboardHTML   string
-	keysFile        string
+	// Per-provider management state
+	dashboardHTML string
+	keysFile      string
 }
 
 // NewProviderState creates a fully initialized ProviderState for a single provider.
 func NewProviderState(name string, cfg *config.Config, pool *keypool.KeyPool, dashboardHTML string, keysFile string) *ProviderState {
-	reg, m := akswitchmetrics.NewRegistry()
 	proxy := NewProxyEngine(cfg, pool)
 
 	return &ProviderState{
-		Name:            name,
-		Config:          cfg,
-		Pool:            pool,
-		Proxy:           proxy,
-		metrics:         m,
-		metricsRegistry: reg,
-		dashboardHTML:   dashboardHTML,
-		keysFile:        keysFile,
+		Name:          name,
+		Config:        cfg,
+		Pool:          pool,
+		Proxy:         proxy,
+		dashboardHTML: dashboardHTML,
+		keysFile:      keysFile,
 	}
 }
 
@@ -69,11 +64,6 @@ func (ps *ProviderState) SetLastHealthCheck(ok bool) {
 	defer ps.healthMu.Unlock()
 	ps.lastHealthCheckTime = time.Now()
 	ps.lastHealthCheckOK = ok
-}
-
-// Metrics returns the prometheus metrics collector.
-func (ps *ProviderState) Metrics() *akswitchmetrics.Metrics {
-	return ps.metrics
 }
 
 // PersistKeys saves the current key pool state to the keys file.
@@ -242,6 +232,11 @@ func (pr *ProviderRouter) Provider(name string) *ProviderState {
 	return pr.providers[name]
 }
 
+// Metrics returns the router-level Prometheus metrics collector.
+func (pr *ProviderRouter) Metrics() *akswitchmetrics.Metrics {
+	return pr.metrics
+}
+
 // StartBackgroundTasks launches background goroutines (metrics refresh, active health check)
 // for each registered provider.
 func (pr *ProviderRouter) StartBackgroundTasks() {
@@ -253,13 +248,13 @@ func (pr *ProviderRouter) StartBackgroundTasks() {
 		pr.wg.Add(1)
 		go func() {
 			defer pr.wg.Done()
-			RefreshKeyPoolMetrics(p.Metrics(), p.Pool, pr.stop)
+			RefreshKeyPoolMetrics(pr.metrics, p.Pool, p.Name, pr.stop)
 		}()
 
 		pr.wg.Add(1)
 		go func() {
 			defer pr.wg.Done()
-			ActiveHealthCheck(p.Config, p.Proxy, p.Metrics(), p, pr.stop)
+			ActiveHealthCheck(p.Config, p.Proxy, pr.metrics, p, pr.stop)
 		}()
 	}
 }

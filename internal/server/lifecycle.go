@@ -12,7 +12,7 @@ import (
 )
 
 // RefreshKeyPoolMetrics periodically updates the keypool gauge metrics.
-func RefreshKeyPoolMetrics(metrics *akswitchmetrics.Metrics, pool *keypool.KeyPool, stop <-chan struct{}) {
+func RefreshKeyPoolMetrics(metrics *akswitchmetrics.Metrics, pool *keypool.KeyPool, providerName string, stop <-chan struct{}) {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
@@ -21,7 +21,7 @@ func RefreshKeyPoolMetrics(metrics *akswitchmetrics.Metrics, pool *keypool.KeyPo
 		case <-stop:
 			return
 		case <-ticker.C:
-			metrics.RefreshKeyPoolGauge(pool)
+			metrics.RefreshKeyPoolGauge(pool, providerName)
 		}
 	}
 }
@@ -49,23 +49,23 @@ func ActiveHealthCheck(cfg *config.Config, proxy *ProxyEngine, metrics *akswitch
 			dur := time.Since(start)
 
 			// Update duration histogram
-			metrics.HealthCheckDuration.Observe(dur.Seconds())
+			metrics.HealthCheckDuration.WithLabelValues(ps.Name).Observe(dur.Seconds())
 
 			if err == nil && resp.StatusCode < 500 {
 				resp.Body.Close()
 				upCB.RecordSuccess()
 				ps.SetLastHealthCheck(true)
-				metrics.HealthCheckProbes.WithLabelValues("ok").Inc()
+				metrics.HealthCheckProbes.WithLabelValues(ps.Name, "ok").Inc()
 			} else {
 				if err == nil {
 					resp.Body.Close()
 				}
 				upCB.RecordFailure()
 				ps.SetLastHealthCheck(false)
-				metrics.HealthCheckProbes.WithLabelValues("fail").Inc()
+				metrics.HealthCheckProbes.WithLabelValues(ps.Name, "fail").Inc()
 			}
 
-			metrics.UpstreamCBState.Set(float64(upCB.State()))
+			metrics.UpstreamCBState.WithLabelValues(ps.Name).Set(float64(upCB.State()))
 		}
 	}
 }
