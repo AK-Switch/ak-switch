@@ -23,13 +23,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 1. 先判断所属层级，加对应 `//go:build` 标签
 2. CLI 命令测试必须包含输出断言（`assertOutputContains` 或类似）
 3. 禁止无输出断言的 `runCommand` 模式（只测不崩不算测完）
-4. **边界**：Key <=12 字符时 `MaskKey` 输出 `****`（已在 `utils_test.go` 覆盖）
+4. **每个 `init()` 中注册的标志，必须在对应 `*_cmd_test.go` 中有 `Lookup` 测试**（如 `TestXxxCmd_HasYyyFlag`），与标志代码在**同一个 PR** 中加入
+5. **边界**：Key <=12 字符时 `MaskKey` 输出 `****`（已在 `utils_test.go` 覆盖）
 
 **测试策略：**
 - **主攻方向**：集成验收测试（mock upstream + 真实代理请求），如 `proxy_test.go`
 - **测试入口**：所有 CLI 可达路径用 `runCommand()` 或子进程模式（`testhelper.go`）
 - **标准**：before/after 对比，不测绝对值快照
 - **不写**：mock 掉一切只测 JSON 的 Handler 测试（如 `handlers_test.go`）
+- **日志格式测试**：`formatLogLine` 纯函数可在 `unit` 层测试（`log_format_test.go`），无需 HTTP 服务器
 
 ## 发版
 
@@ -54,6 +56,7 @@ internal/
   cmd/                         # Cobra CLI 命令层
     root.go                    #   根命令 + version 子命令
     start.go                   #   start -> 解析配置 -> 初始化 provider -> 启动代理
+    logs.go                    #   logs 命令（formatLogLine 纯函数，--verbose 标志）
     config.go, provider.go,    #   config/provider/key 增删查改 CLI
     key.go, status.go, ...
     selfrestart.go             #   二进制自监控热重启（开发模式）
@@ -63,6 +66,7 @@ internal/
     admin.go                   #   admin token 鉴权
     router.go                  #   ProviderRouter: 多 provider 各自独立端口
     middleware.go              #   敏感 header 过滤、日志
+    colorhandler.go            #   slog.ColorHandler（ANSI 彩色 + compact 模式）
     crash.go                   #   panic 恢复
   keypool/                     # API Key 池
     keypool.go                 #   轮转策略（round-robin + cooldown + 禁用）
@@ -85,6 +89,42 @@ internal/
 - **两层熔断** — Key 级（429 退避）-> 上游级（502/503 熔断），key 级先触发，上游级兜底
 - **配置热重载** — 监听 `.env` 变更 -> 计算 diff -> 热更新 key pool，不停机
 - **自监控重启** — 开发模式下监控 binary 文件变更，检测到更新后优雅重启
+- **双日志通道** — stdout（slog + ColorHandler，运维实时）与 `/logs` API（环形缓冲区，`akswitch logs` 回顾）解耦，互不影响
+
+### 双数据通道
+
+| 通道 | 端点 | 用途 | 适合回答 |
+|------|------|------|----------|
+| Prometheus 指标 | `GET /metrics` | 聚合趋势 + 告警 | "多少？"、"趋势？" |
+| 请求日志 | `GET /logs` | 单请求详情 | "为什么？"、"哪个 key？" |
+
+**所有指标统一注册在 router 级 registry（`pr.metricsRegistry`），通过 `GET /metrics` 暴露。** 每个 provider 的 `NewProviderState` 不再创建独立 registry——历史教训，勿重蹈。
+
+可用指标一览：
+
+| 指标名 | 类型 | labels | 说明 |
+|--------|------|--------|------|
+| `akswitch_requests_total` | Counter | `method, status, key_index` | 代理请求计数 |
+| `akswitch_request_duration_seconds` | Histogram | `method, status` | 请求延迟分布 |
+| `akswitch_keypool_keys` | Gauge | `provider, state` | Key 池状态（active/cooling/disabled） |
+| `akswitch_upstream_errors_total` | Counter | `type` | 上游错误（network/rate_limited/auth_rejected/server_error） |
+| `akswitch_upstream_cb_state` | Gauge | `provider` | 上游熔断器（0=CLOSED/1=OPEN/2=HALF_OPEN） |
+| `akswitch_healthcheck_probes_total` | Counter | `provider, status` | 健康检查探针（ok/fail） |
+| `akswitch_healthcheck_duration_seconds` | Histogram | `provider` | 健康检查延迟 |
+
+**添加新指标的步骤：**
+1. 在 `internal/metrics/metrics.go` 的 `Metrics` 结构体加字段
+2. 在 `NewRegistry()` 中用 `factory.New*Vec()` 注册（带 label 定义）
+3. 在代码中通过 `pr.metrics.YourMetric` 写入——**不要创建新 registry**
+
+### CLI 标志速查
+
+| 命令 | 标志 | 说明 |
+|------|------|------|
+| `akswitch start` | `--log-format=compact` | stdout 精简模式（默认 `default`） |
+| `akswitch logs` | `--verbose` | 显示完整 method/URL（默认隐藏） |
+| `akswitch logs` | `--since=RFC3339` | 只显示此时间后的条目 |
+| `akswitch logs` | `--last=N` | 只显示最后 N 条 |
 
 ## 工作流
 
@@ -115,6 +155,7 @@ internal/
 4. 将发现追加到上次报告，不重写全量
 
 - `/logs` API 支持 `?since=RFC3339`，CLI 透传 `--since`
+- `akswitch logs --verbose` 显示完整 method/URL（默认精简 status + key + duration）
 - 首次分析不需要 `--since`（= 全量，建立基线）
 - 先看 `/metrics` 聚合数据再扫日志，减少 80% 的手动扫日志需求
 

@@ -13,9 +13,9 @@ type Metrics struct {
 	KeyPoolKeys     *prometheus.GaugeVec
 	UpstreamErrors  *prometheus.CounterVec
 
-	UpstreamCBState     prometheus.Gauge       // akswitch_upstream_cb_state (0=CLOSED, 1=OPEN, 2=HALF_OPEN)
-	HealthCheckProbes   *prometheus.CounterVec // akswitch_healthcheck_probes_total, labels: {"status":"ok"|"fail"}
-	HealthCheckDuration prometheus.Histogram   // akswitch_healthcheck_duration_seconds
+	UpstreamCBState     *prometheus.GaugeVec   // akswitch_upstream_cb_state, labels: {"provider"} (0=CLOSED, 1=OPEN, 2=HALF_OPEN)
+	HealthCheckProbes   *prometheus.CounterVec // akswitch_healthcheck_probes_total, labels: {"provider","status":"ok"|"fail"}
+	HealthCheckDuration *prometheus.HistogramVec // akswitch_healthcheck_duration_seconds, labels: {"provider"}
 }
 
 // NewRegistry creates a non-global Prometheus registry and registers all application metrics.
@@ -44,9 +44,9 @@ func NewRegistry() (*prometheus.Registry, *Metrics) {
 		KeyPoolKeys: factory.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Name: "akswitch_keypool_keys",
-				Help: "Current number of keys by state (active, cooling, disabled).",
+				Help: "Current number of keys by provider and state (active, cooling, disabled).",
 			},
-			[]string{"state"},
+			[]string{"provider", "state"},
 		),
 		UpstreamErrors: factory.NewCounterVec(
 			prometheus.CounterOpts{
@@ -55,28 +55,30 @@ func NewRegistry() (*prometheus.Registry, *Metrics) {
 			},
 			[]string{"type"},
 		),
-		UpstreamCBState: factory.NewGauge(
+		UpstreamCBState: factory.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Namespace: "akswitch",
 				Name:      "upstream_cb_state",
-				Help:      "Upstream circuit breaker state: 0=CLOSED, 1=OPEN, 2=HALF_OPEN",
+				Help:      "Upstream circuit breaker state per provider: 0=CLOSED, 1=OPEN, 2=HALF_OPEN",
 			},
+			[]string{"provider"},
 		),
 		HealthCheckProbes: factory.NewCounterVec(
 			prometheus.CounterOpts{
 				Namespace: "akswitch",
 				Name:      "healthcheck_probes_total",
-				Help:      "Count of health check probes by status",
+				Help:      "Count of health check probes by provider and status",
 			},
-			[]string{"status"},
+			[]string{"provider", "status"},
 		),
-		HealthCheckDuration: factory.NewHistogram(
+		HealthCheckDuration: factory.NewHistogramVec(
 			prometheus.HistogramOpts{
 				Namespace: "akswitch",
 				Name:      "healthcheck_duration_seconds",
-				Help:      "Duration of health check probes",
+				Help:      "Duration of health check probes per provider",
 				Buckets:   []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10, 15, 30, 60, 120},
 			},
+			[]string{"provider"},
 		),
 	}
 
@@ -89,10 +91,10 @@ func NewRegistry() (*prometheus.Registry, *Metrics) {
 
 // RefreshKeyPoolGauge updates the KeyPoolKeys gauge from the pool's current state.
 // Call this periodically (e.g. every 10 seconds).
-func (m *Metrics) RefreshKeyPoolGauge(pool *keypool.KeyPool) {
-	m.KeyPoolKeys.WithLabelValues("active").Set(float64(pool.ActiveCount()))
-	m.KeyPoolKeys.WithLabelValues("cooling").Set(float64(pool.CoolingCount()))
-	m.KeyPoolKeys.WithLabelValues("disabled").Set(float64(pool.DisabledCount()))
+func (m *Metrics) RefreshKeyPoolGauge(pool *keypool.KeyPool, providerName string) {
+	m.KeyPoolKeys.WithLabelValues(providerName, "active").Set(float64(pool.ActiveCount()))
+	m.KeyPoolKeys.WithLabelValues(providerName, "cooling").Set(float64(pool.CoolingCount()))
+	m.KeyPoolKeys.WithLabelValues(providerName, "disabled").Set(float64(pool.DisabledCount()))
 }
 
 // StatusLabel converts an HTTP status code to a Prometheus-compatible status class label.
