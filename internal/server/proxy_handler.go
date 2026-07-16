@@ -5,6 +5,7 @@ import (
 	"akswitch/internal/config"
 	akswitchmetrics "akswitch/internal/metrics"
 	"akswitch/internal/utils"
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -15,6 +16,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	tiktoken "github.com/pkoukk/tiktoken-go"
 )
 
 // ── Proxy Handler ──────────────────────────────────────
@@ -305,7 +308,7 @@ func (pr *ProviderRouter) handleSuccess(w http.ResponseWriter, ps *ProviderState
 
 	contentType := resp.Header.Get("Content-Type")
 	if strings.Contains(contentType, "text/event-stream") {
-		streamResponse(w, resp)
+		inputTokens, outputTokens = streamSSEAndEstimateTokens(w, resp, bodyBytes)
 	} else {
 		// Non-streaming: read body to extract token usage, then write to client
 		body, err := io.ReadAll(resp.Body)
@@ -387,6 +390,78 @@ func streamResponse(w http.ResponseWriter, resp *http.Response) {
 	} else {
 		io.Copy(w, resp.Body)
 	}
+}
+
+// streamSSEAndEstimateTokens streams SSE events to the client while accumulating
+// content_block_delta text for token estimation. After the stream ends, it uses
+// tiktoken to estimate input and output tokens from the accumulated text.
+func streamSSEAndEstimateTokens(w http.ResponseWriter, resp *http.Response, bodyBytes []byte) (int, int) {
+	defer resp.Body.Close()
+
+	var outputBuf strings.Builder
+
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+
+	f, canFlush := w.(http.Flusher)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		// Write to client immediately
+		if _, err := w.Write([]byte(line + "\n")); err != nil {
+			break
+		}
+
+		// Parse data: lines for content_block_delta events
+		if strings.HasPrefix(line, "data: ") {
+			var sseData struct {
+				Type  string `json:"type"`
+				Delta *struct {
+					Text string `json:"text"`
+				} `json:"delta,omitempty"`
+			}
+			if err := json.Unmarshal([]byte(line[6:]), &sseData); err == nil {
+				if sseData.Type == "content_block_delta" && sseData.Delta != nil {
+					outputBuf.WriteString(sseData.Delta.Text)
+				}
+			}
+		}
+
+		if canFlush {
+			f.Flush()
+		}
+	}
+
+	// Estimate output tokens from accumulated text
+	var outputTokens int
+	if outputBuf.Len() > 0 {
+		if tke, err := tiktoken.GetEncoding("cl100k_base"); err == nil {
+			outputTokens = len(tke.Encode(outputBuf.String(), nil, nil))
+		}
+	}
+
+	// Estimate input tokens from request body
+	var inputTokens int
+	if len(bodyBytes) > 0 {
+		// Try to extract and concatenate message content for token counting
+		var reqBody struct {
+			Messages []struct {
+				Content string `json:"content"`
+			} `json:"messages"`
+		}
+		if err := json.Unmarshal(bodyBytes, &reqBody); err == nil && len(reqBody.Messages) > 0 {
+			var inputBuf strings.Builder
+			for _, msg := range reqBody.Messages {
+				inputBuf.WriteString(msg.Content)
+			}
+			if tke, err := tiktoken.GetEncoding("cl100k_base"); err == nil {
+				inputTokens = len(tke.Encode(inputBuf.String(), nil, nil))
+			}
+		}
+	}
+
+	return inputTokens, outputTokens
 }
 
 // ── Extracted Utilities ───────────────────────────────
