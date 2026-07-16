@@ -90,6 +90,32 @@ internal/
 - **自监控重启** — 开发模式下监控 binary 文件变更，检测到更新后优雅重启
 - **双日志通道** — stdout（slog + ColorHandler，运维实时）与 `/logs` API（环形缓冲区，`akswitch logs` 回顾）解耦，互不影响
 
+### 双数据通道
+
+| 通道 | 端点 | 用途 | 适合回答 |
+|------|------|------|----------|
+| Prometheus 指标 | `GET /metrics` | 聚合趋势 + 告警 | "多少？"、"趋势？" |
+| 请求日志 | `GET /logs` | 单请求详情 | "为什么？"、"哪个 key？" |
+
+**所有指标统一注册在 router 级 registry（`pr.metricsRegistry`），通过 `GET /metrics` 暴露。** 每个 provider 的 `NewProviderState` 不再创建独立 registry——历史教训，勿重蹈。
+
+可用指标一览：
+
+| 指标名 | 类型 | labels | 说明 |
+|--------|------|--------|------|
+| `akswitch_requests_total` | Counter | `method, status, key_index` | 代理请求计数 |
+| `akswitch_request_duration_seconds` | Histogram | `method, status` | 请求延迟分布 |
+| `akswitch_keypool_keys` | Gauge | `provider, state` | Key 池状态（active/cooling/disabled） |
+| `akswitch_upstream_errors_total` | Counter | `type` | 上游错误（network/rate_limited/auth_rejected/server_error） |
+| `akswitch_upstream_cb_state` | Gauge | `provider` | 上游熔断器（0=CLOSED/1=OPEN/2=HALF_OPEN） |
+| `akswitch_healthcheck_probes_total` | Counter | `provider, status` | 健康检查探针（ok/fail） |
+| `akswitch_healthcheck_duration_seconds` | Histogram | `provider` | 健康检查延迟 |
+
+**添加新指标的步骤：**
+1. 在 `internal/metrics/metrics.go` 的 `Metrics` 结构体加字段
+2. 在 `NewRegistry()` 中用 `factory.New*Vec()` 注册（带 label 定义）
+3. 在代码中通过 `pr.metrics.YourMetric` 写入——**不要创建新 registry**
+
 ### CLI 标志速查
 
 | 命令 | 标志 | 说明 |
