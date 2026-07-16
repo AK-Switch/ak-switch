@@ -15,6 +15,7 @@ import (
 	"akswitch/internal/keypool"
 	"akswitch/internal/logstore"
 	akswitchmetrics "akswitch/internal/metrics"
+	"akswitch/internal/tracker"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -101,6 +102,7 @@ type ProviderRouter struct {
 	wg              sync.WaitGroup
 	mux             *http.ServeMux // cached mux for Handler()
 	muxOnce         sync.Once
+	Calibrator      *tracker.Calibrator // token estimation calibrator
 }
 
 // NewProviderRouter creates a new ProviderRouter.
@@ -114,6 +116,7 @@ func NewProviderRouter(dashboardHTML string) *ProviderRouter {
 		metricsRegistry: reg,
 		dashboardHTML:   dashboardHTML,
 		stop:            make(chan struct{}),
+		Calibrator:      tracker.New(),
 	}
 }
 
