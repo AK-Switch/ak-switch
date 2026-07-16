@@ -55,6 +55,7 @@ func TestDisableKey(t *testing.T) {
 		if idx == 1 {
 			t.Errorf("Next() returned disabled index 1 on iteration %d", i)
 		}
+		p.Release(idx)
 	}
 }
 
@@ -215,7 +216,10 @@ func BenchmarkKeyPoolNext(b *testing.B) {
 		b.Run(fmt.Sprintf("keys-%d", n), func(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				p.Next()
+				idx, _, ok := p.Next()
+				if ok {
+					p.Release(idx)
+				}
 			}
 		})
 	}

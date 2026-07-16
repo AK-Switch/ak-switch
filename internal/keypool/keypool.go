@@ -21,6 +21,7 @@ type KeyPool struct {
 	cbs            []*circuitbreaker.KeyCircuitBreaker
 	requestHistory [][]time.Time // timestamps of requests in the last 60s per key
 	lastUsed       []time.Time
+	inUse          []bool // tracks keys currently reserved by a goroutine (prevents concurrent selection)
 	mu             sync.RWMutex
 }
 
@@ -44,6 +45,7 @@ func NewKeyPool(keys []string, names []string) *KeyPool {
 		cbs:            cbs,
 		requestHistory: make([][]time.Time, len(keys)),
 		lastUsed:       make([]time.Time, len(keys)),
+		inUse:          make([]bool, len(keys)),
 	}
 }
 
@@ -95,7 +97,9 @@ func (p *KeyPool) TimeUntilAvailable() time.Duration {
 	return soonest
 }
 
-// Next returns the next available key in round-robin order. Returns index, key, and ok=false if none available.
+// Next returns the next available and unreserved key in round-robin order.
+// Returns index, key, and ok=false if none available.
+// The selected key is marked as in-use; caller must call Release(idx) when done.
 func (p *KeyPool) Next() (int, string, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -106,7 +110,8 @@ func (p *KeyPool) Next() (int, string, bool) {
 	start := int((atomic.AddUint64(&p.counter, 1) - 1) % uint64(n))
 	for i := 0; i < n; i++ {
 		idx := (start + i) % n
-		if p.cbs[idx].Allow() {
+		if p.cbs[idx].Allow() && !p.inUse[idx] {
+			p.inUse[idx] = true
 			return idx, p.keys[idx], true
 		}
 	}
@@ -262,6 +267,17 @@ func (p *KeyPool) RecordSuccess(idx int) {
 	cb.RecordSuccess()
 }
 
+// Release marks a key as no longer in use, allowing other goroutines to select it.
+// Call this after the upstream request using this key completes (success or failure).
+// Safe to call with an out-of-range index (no-op).
+func (p *KeyPool) Release(idx int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if idx >= 0 && idx < len(p.inUse) {
+		p.inUse[idx] = false
+	}
+}
+
 
 // ActiveCount returns the number of non-disabled keys.
 func (p *KeyPool) ActiveCount() int {
@@ -380,6 +396,7 @@ func (p *KeyPool) AddKey(key string, name string) int {
 		
 	p.requestHistory = append(p.requestHistory, []time.Time{})
 	p.lastUsed = append(p.lastUsed, time.Time{})
+	p.inUse = append(p.inUse, false)
 	idx := len(p.keys) - 1
 	if name != "" {
 		slog.Info("key added to pool", "key_index", idx, "key_name", name)
@@ -406,6 +423,7 @@ func (p *KeyPool) RemoveKey(idx int) error {
 		
 	p.requestHistory = append(p.requestHistory[:idx], p.requestHistory[idx+1:]...)
 	p.lastUsed = append(p.lastUsed[:idx], p.lastUsed[idx+1:]...)
+	p.inUse = append(p.inUse[:idx], p.inUse[idx+1:]...)
 	if name != "" {
 		slog.Info("key removed from pool", "key_index", idx, "key_name", name)
 	} else {
