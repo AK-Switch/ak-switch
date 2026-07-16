@@ -140,9 +140,9 @@ internal/
 4. 完成，不等 CI，不合并
 
 **Merger（合并）**
-- 仓库已启用 Merge Queue + Auto-merge
-- PR 进入 Merge Queue 后自动排队 → CI 测试合并后状态 → 全绿自动合并
-- 如需手动操作：`gh pr merge <number> --auto --merge`
+- 仓库已启用 Auto-merge（自动合并）
+- 操作：`gh pr merge <number> --auto --merge`
+- 设完后 CI 绿了自动合并，不等
 
 ### 提交前检查清单（强制）
 
