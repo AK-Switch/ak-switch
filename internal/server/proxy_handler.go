@@ -6,6 +6,7 @@ import (
 	akswitchmetrics "akswitch/internal/metrics"
 	"akswitch/internal/utils"
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -290,7 +291,8 @@ func (pr *ProviderRouter) handleNonRetryable(w http.ResponseWriter, ps *Provider
 }
 
 // handleSuccess processes a successful 2xx/3xx response, including streaming
-// for SSE and chunked responses.
+// for SSE and chunked responses. For non-streaming responses, it extracts
+// token usage from the response body and records it in the log entry.
 func (pr *ProviderRouter) handleSuccess(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, method, target string, bodyBytes []byte, attempt int, key string) {
 	pool := ps.Pool
 	upCB := ps.Proxy.upCB
@@ -301,11 +303,27 @@ func (pr *ProviderRouter) handleSuccess(w http.ResponseWriter, ps *ProviderState
 	utils.CopyHeaders(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
 
-	streamResponse(w, resp)
+	var inputTokens, outputTokens int
+
+	contentType := resp.Header.Get("Content-Type")
+	if strings.Contains(contentType, "text/event-stream") {
+		streamResponse(w, resp)
+	} else {
+		// Non-streaming: read body to extract token usage, then write to client
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err == nil {
+			inputTokens, outputTokens = extractTokenUsage(body)
+			w.Write(body)
+		}
+	}
 
 	pool.IncrementRequestCount(idx)
-	pr.logs.Append(buildLogEntry(ps, key, idx, method, target, resp.StatusCode, len(bodyBytes), start, attempt))
-	slog.Info("proxy success", "provider", ps.Name, "method", method, "url", target, "status", resp.StatusCode, "key_index", idx, "key_name", pool.Name(idx), "retry", attempt)
+	entry := buildLogEntry(ps, key, idx, method, target, resp.StatusCode, len(bodyBytes), start, attempt)
+	entry.InputTokens = inputTokens
+	entry.OutputTokens = outputTokens
+	pr.logs.Append(entry)
+	slog.Info("proxy success", "provider", ps.Name, "method", method, "url", target, "status", resp.StatusCode, "key_index", idx, "key_name", pool.Name(idx), "retry", attempt, "input_tokens", inputTokens, "output_tokens", outputTokens)
 	slog.Debug("proxy response debug", "status", resp.StatusCode, "duration_ms", time.Since(start).Seconds()*1000, "retries", attempt+1)
 	pr.recordProxyMetrics(method, akswitchmetrics.StatusLabel(resp.StatusCode), fmt.Sprintf("%d", idx), start)
 }
@@ -327,6 +345,21 @@ func buildLogEntry(ps *ProviderState, key string, idx int, method, target string
 		Retries:         attempt,
 		Provider:        ps.Name,
 	}
+}
+
+// extractTokenUsage attempts to parse input_tokens and output_tokens from
+// a JSON response body (Anthropic-style usage block). Returns 0, 0 on failure.
+func extractTokenUsage(body []byte) (inputTokens, outputTokens int) {
+	var result struct {
+		Usage struct {
+			InputTokens  int `json:"input_tokens"`
+			OutputTokens int `json:"output_tokens"`
+		} `json:"usage"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return 0, 0
+	}
+	return result.Usage.InputTokens, result.Usage.OutputTokens
 }
 
 // recordProxyMetrics records request total count and duration metrics.
