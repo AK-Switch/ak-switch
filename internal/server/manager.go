@@ -106,7 +106,7 @@ type ProviderRouter struct {
 // NewProviderRouter creates a new ProviderRouter.
 func NewProviderRouter(dashboardHTML string) *ProviderRouter {
 	reg, m := akswitchmetrics.NewRegistry()
-	return &ProviderRouter{
+	pr := &ProviderRouter{
 		providers:       make(map[string]*ProviderState),
 		logs:            logstore.New(10000),
 		startTime:       time.Now(),
@@ -115,6 +115,14 @@ func NewProviderRouter(dashboardHTML string) *ProviderRouter {
 		dashboardHTML:   dashboardHTML,
 		stop:            make(chan struct{}),
 	}
+	pr.logs.OnAppend = func(prevLen, newLen, maxLen int) {
+		pr.metrics.LogStoreEntries.Inc()
+		if dropped := (prevLen + 1) - newLen; dropped > 0 {
+			pr.metrics.LogStoreDropped.Add(float64(dropped))
+		}
+		pr.metrics.LogStoreFillRatio.Set(float64(newLen) / float64(maxLen))
+	}
+	return pr
 }
 
 // AddProvider creates a new ProviderState with the given name, config, and key pool.

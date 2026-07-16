@@ -326,6 +326,12 @@ func (pr *ProviderRouter) handleSuccess(w http.ResponseWriter, ps *ProviderState
 	entry.InputTokens = inputTokens
 	entry.OutputTokens = outputTokens
 	pr.logs.Append(entry)
+	if inputTokens > 0 {
+		pr.metrics.TokenUsage.WithLabelValues(ps.Name, "input").Add(float64(inputTokens))
+	}
+	if outputTokens > 0 {
+		pr.metrics.TokenUsage.WithLabelValues(ps.Name, "output").Add(float64(outputTokens))
+	}
 	slog.Info("proxy success", "provider", ps.Name, "method", method, "url", target, "status", resp.StatusCode, "key_index", idx, "key_name", pool.Name(idx), "retry", attempt, "input_tokens", inputTokens, "output_tokens", outputTokens)
 	slog.Debug("proxy response debug", "status", resp.StatusCode, "duration_ms", time.Since(start).Seconds()*1000, "retries", attempt+1)
 	pr.recordProxyMetrics(method, akswitchmetrics.StatusLabel(resp.StatusCode), fmt.Sprintf("%d", idx), start)
