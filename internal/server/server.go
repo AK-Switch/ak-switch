@@ -77,7 +77,7 @@ func NewProxyEngine(cfg *config.Config, pool *keypool.KeyPool) *ProxyEngine {
 // Supported values: "debug", "info", "warn", "error".
 // Unknown or empty values default to slog.LevelInfo.
 // Updates both the stderr handler and the active file handler (if any).
-func ApplyLogLevel(level string) {
+func ApplyLogLevel(level string, compact bool) {
 	var lvl slog.Level
 	switch strings.ToLower(level) {
 	case "debug":
@@ -93,7 +93,7 @@ func ApplyLogLevel(level string) {
 	}
 	logLevel.Set(lvl)
 
-	stderrHandler := newHandler(os.Stderr, &logLevel)
+	stderrHandler := newHandler(os.Stderr, &logLevel, compact)
 	if fileHandlerWriter != nil {
 		fileHandler := slog.NewTextHandler(fileHandlerWriter, &slog.HandlerOptions{Level: &logLevel})
 		slog.SetDefault(slog.New(&multiHandler{stderr: stderrHandler, file: fileHandler}))

@@ -15,7 +15,7 @@ var _ slog.Handler = (*ColorHandler)(nil)
 
 func TestNewHandler_NonTTY_ReturnsTextHandler(t *testing.T) {
 	var buf bytes.Buffer
-	h := newHandler(&buf, slog.LevelInfo)
+	h := newHandler(&buf, slog.LevelInfo, false)
 	if _, ok := h.(*slog.TextHandler); !ok {
 		t.Errorf("expected *slog.TextHandler, got %T", h)
 	}
@@ -39,7 +39,7 @@ func TestColorHandler_OutputContainsANSICodes(t *testing.T) {
 
 func TestNewHandler_NOCOLOR_ReturnsTextHandler(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
-	h := newHandler(os.Stderr, slog.LevelInfo)
+	h := newHandler(os.Stderr, slog.LevelInfo, false)
 	if _, ok := h.(*slog.TextHandler); !ok {
 		t.Errorf("expected *slog.TextHandler, got %T", h)
 	}
