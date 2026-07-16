@@ -27,7 +27,7 @@ func TestApplyLogLevel_ValidLevels(t *testing.T) {
 
 	for _, tc := range levels {
 		t.Run(tc.input, func(t *testing.T) {
-			ApplyLogLevel(tc.input)
+			ApplyLogLevel(tc.input, false)
 			// Verify the level is set correctly by checking Enabled()
 			if !slog.Default().Enabled(nil, tc.want) {
 				t.Errorf("ApplyLogLevel(%q): expected level %v to be enabled", tc.input, tc.want)
@@ -37,7 +37,7 @@ func TestApplyLogLevel_ValidLevels(t *testing.T) {
 }
 
 func TestApplyLogLevel_InvalidLevelFallsBackToInfo(t *testing.T) {
-	ApplyLogLevel("verbose")
+	ApplyLogLevel("verbose", false)
 
 	if !slog.Default().Enabled(nil, slog.LevelInfo) {
 		t.Error("ApplyLogLevel(\"verbose\"): expected Info to be enabled")
@@ -48,7 +48,7 @@ func TestApplyLogLevel_InvalidLevelFallsBackToInfo(t *testing.T) {
 }
 
 func TestApplyLogLevel_EmptyLevelFallsBackToInfo(t *testing.T) {
-	ApplyLogLevel("")
+	ApplyLogLevel("", false)
 
 	if !slog.Default().Enabled(nil, slog.LevelInfo) {
 		t.Error("ApplyLogLevel(\"\"): expected Info to be enabled")

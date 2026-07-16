@@ -105,6 +105,7 @@ func (pr *ProviderRouter) executeProxy(w http.ResponseWriter, r *http.Request, p
 		lastIdx = idx
 
 		if !pool.CB(idx).Allow() {
+			pool.Release(idx) // release since we're skipping this key
 			remaining := pool.CB(idx).CooldownRemaining()
 			if remaining < 0 {
 				allPerma := true
@@ -137,6 +138,7 @@ func (pr *ProviderRouter) executeProxy(w http.ResponseWriter, r *http.Request, p
 		req.Header.Set("Authorization", "Bearer "+key)
 
 		resp, err := client.Do(req)
+		pool.Release(idx) // done with the key, allow other goroutines to select it
 		if err != nil {
 			switch categorizeError(0, err) {
 			case CatClientAbort:
