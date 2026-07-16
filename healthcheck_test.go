@@ -136,7 +136,7 @@ func TestActiveHealthCheck_ProbeSuccess(t *testing.T) {
 	// - Set last health check result
 	// - Increment the health check probes counter
 	pr.Provider("test").SetLastHealthCheck(true)
-	pr.Provider("test").Metrics().HealthCheckProbes.WithLabelValues("ok").Inc()
+	pr.Metrics().HealthCheckProbes.WithLabelValues("test", "ok").Inc()
 
 	// THEN: /health reflects a healthy upstream
 	health := getHealth(t, srv.URL)
@@ -188,7 +188,7 @@ func TestActiveHealthCheck_ProbeFailure(t *testing.T) {
 
 	// Simulate what ActiveHealthCheck does on a failed probe
 	pr.Provider("test").SetLastHealthCheck(false)
-	pr.Provider("test").Metrics().HealthCheckProbes.WithLabelValues("fail").Inc()
+	pr.Metrics().HealthCheckProbes.WithLabelValues("test", "fail").Inc()
 
 	// THEN: CB should be open — /health shows "open"
 	health := getHealth(t, srv.URL)
@@ -274,7 +274,7 @@ func TestActiveHealthCheck_Recovery(t *testing.T) {
 
 	// Simulate health check success after recovery
 	pr.Provider("test").SetLastHealthCheck(true)
-	pr.Provider("test").Metrics().HealthCheckProbes.WithLabelValues("ok").Inc()
+	pr.Metrics().HealthCheckProbes.WithLabelValues("test", "ok").Inc()
 
 	// THEN: CB is closed again
 	health = getHealth(t, srv.URL)
@@ -407,9 +407,9 @@ func TestActiveHealthCheck_ConfigDriven(t *testing.T) {
 	}
 
 	// Verify health check metrics are accessible
-	pr.Provider("test").Metrics().HealthCheckProbes.WithLabelValues("ok")
-	pr.Provider("test").Metrics().HealthCheckProbes.WithLabelValues("fail")
-	_ = pr.Provider("test").Metrics().HealthCheckDuration
+	pr.Metrics().HealthCheckProbes.WithLabelValues("test", "ok")
+	pr.Metrics().HealthCheckProbes.WithLabelValues("test", "fail")
+	_ = pr.Metrics().HealthCheckDuration
 
 	// Custom health check path is set in config
 	// (the actual path is used by ActiveHealthCheck goroutine, not tested here)
