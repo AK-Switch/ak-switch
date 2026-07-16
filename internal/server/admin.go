@@ -37,7 +37,7 @@ func (pr *ProviderRouter) logLevelHandler(w http.ResponseWriter, r *http.Request
 	body.Level = strings.TrimSpace(strings.ToLower(body.Level))
 	switch body.Level {
 	case "debug", "info", "warn", "error":
-		ApplyLogLevel(body.Level)
+		ApplyLogLevel(body.Level, false)
 		respondJSON(w, http.StatusOK, map[string]string{"level": body.Level})
 	default:
 		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid log level, use: debug, info, warn, error"})
@@ -366,12 +366,12 @@ func (pr *ProviderRouter) reloadHandler(w http.ResponseWriter, r *http.Request) 
 					}
 				}
 			}
-			ApplyLogLevel(cfg.LogLevel)
+			ApplyLogLevel(cfg.LogLevel, false)
 		} else {
 			// New provider — add it
 			pool := keypool.NewKeyPool(cfg.Keys, cfg.KeyNames)
 			ps := NewProviderState(name, cfg, pool, pr.dashboardHTML, cfg.KeysFile)
-			ApplyLogLevel(cfg.LogLevel)
+			ApplyLogLevel(cfg.LogLevel, false)
 			pr.providers[name] = ps
 		}
 	}

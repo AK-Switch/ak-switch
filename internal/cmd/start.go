@@ -30,11 +30,13 @@ var startCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		providerFilter, _ := cmd.Flags().GetString("provider")
 		startAll, _ := cmd.Flags().GetBool("all")
-		startServer(dashHTML, providerFilter, startAll)
+		logFormat, _ := cmd.Flags().GetString("log-format")
+			startServer(dashHTML, providerFilter, startAll, logFormat)
 	},
 }
 
-func startServer(dashboardHTML string, providerFilter string, startAll bool) {
+func startServer(dashboardHTML string, providerFilter string, startAll bool, logFormat string) {
+	logCompact := logFormat == "compact"
 	// ── Crash recovery ─────────────────────────────
 	defer server.CrashRecover("startServer")
 
@@ -55,7 +57,7 @@ func startServer(dashboardHTML string, providerFilter string, startAll bool) {
 	}
 
 	// ── Initialize each provider ─────────────────────
-	initProviders(router, providers, shouldStart, providerFilter)
+	initProviders(router, providers, shouldStart, providerFilter, logCompact)
 
 	// ── Start server ─────────────────────────────────
 	started := len(router.ProviderNames())
@@ -129,14 +131,14 @@ func resolveProviders(dashboardHTML string, providerFilter string, startAll bool
 
 // initProviders registers each selected provider into the router,
 // loading their API keys and applying log level configuration.
-func initProviders(router *server.ProviderRouter, providers map[string]*config.Config, shouldStart func(name string) bool, providerFilter string) {
+func initProviders(router *server.ProviderRouter, providers map[string]*config.Config, shouldStart func(name string) bool, providerFilter string, logCompact bool) {
 	for name, cfg := range providers {
 		if !shouldStart(name) {
 			slog.Debug("skipping provider", "name", name)
 			continue
 		}
 
-		server.ApplyLogLevel(cfg.LogLevel)
+		server.ApplyLogLevel(cfg.LogLevel, logCompact)
 
 		// Load API keys from encrypted store or env
 		keys, keyNames := loadKeysForProvider(name, cfg)

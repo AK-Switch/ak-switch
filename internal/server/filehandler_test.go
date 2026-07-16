@@ -46,17 +46,17 @@ func TestInitFileHandler_EmptyPath(t *testing.T) {
 func TestInitFileHandler_LevelSync(t *testing.T) {
 	logLevel.Set(slog.LevelInfo)
 
-	ApplyLogLevel("debug")
+	ApplyLogLevel("debug", false)
 	if logLevel.Level() != slog.LevelDebug {
 		t.Errorf("logLevel = %v, want %v", logLevel.Level(), slog.LevelDebug)
 	}
 
-	ApplyLogLevel("error")
+	ApplyLogLevel("error", false)
 	if logLevel.Level() != slog.LevelError {
 		t.Errorf("logLevel = %v, want %v", logLevel.Level(), slog.LevelError)
 	}
 
-	ApplyLogLevel("invalid")
+	ApplyLogLevel("invalid", false)
 	if logLevel.Level() != slog.LevelInfo {
 		t.Errorf("logLevel = %v, want %v", logLevel.Level(), slog.LevelInfo)
 	}
