@@ -108,14 +108,34 @@ func (p *KeyPool) Next() (int, string, bool) {
 		return -1, "", false
 	}
 	start := int((atomic.AddUint64(&p.counter, 1) - 1) % uint64(n))
+	// Collect all available candidates
+	var candidates []int
 	for i := 0; i < n; i++ {
 		idx := (start + i) % n
 		if p.cbs[idx].Allow() && !p.inUse[idx] {
-			p.inUse[idx] = true
-			return idx, p.keys[idx], true
+			candidates = append(candidates, idx)
 		}
 	}
-	return -1, "", false
+	if len(candidates) == 0 {
+		return -1, "", false
+	}
+	if len(candidates) == 1 {
+		best := candidates[0]
+		p.inUse[best] = true
+		return best, p.keys[best], true
+	}
+	// Pick the candidate with the lowest RPM
+	bestIdx := candidates[0]
+	bestRPM := p.RequestsInLastMinute(bestIdx)
+	for _, idx := range candidates[1:] {
+		rpm := p.RequestsInLastMinute(idx)
+		if rpm < bestRPM {
+			bestRPM = rpm
+			bestIdx = idx
+		}
+	}
+	p.inUse[bestIdx] = true
+	return bestIdx, p.keys[bestIdx], true
 }
 
 // RequestsInLastMinute returns the number of requests made by a key in the last 60 seconds.

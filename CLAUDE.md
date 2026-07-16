@@ -23,7 +23,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 1. 先判断所属层级，加对应 `//go:build` 标签
 2. CLI 命令测试必须包含输出断言（`assertOutputContains` 或类似）
 3. 禁止无输出断言的 `runCommand` 模式（只测不崩不算测完）
-4. **边界**：Key <=12 字符时 `MaskKey` 输出 `****`（已在 `utils_test.go` 覆盖）
+4. **每个 `init()` 中注册的标志，必须在对应 `*_cmd_test.go` 中有 `Lookup` 测试**（如 `TestXxxCmd_HasYyyFlag`），与标志代码在**同一个 PR** 中加入
+5. **边界**：Key <=12 字符时 `MaskKey` 输出 `****`（已在 `utils_test.go` 覆盖）
 
 **测试策略：**
 - **主攻方向**：集成验收测试（mock upstream + 真实代理请求），如 `proxy_test.go`
@@ -146,6 +147,20 @@ internal/
 
 ### 提交前检查清单（强制）
 
+### 提交前检查清单（强制）
+
+1. **[测试]** — 新增 CLI 命令/标志 -> 对应 CLI 入口测试已写？标志注册测试（`Lookup`）在同一个 PR？
+2. **[测试]** — `make test-all` 全量通过？
+3. **[手动验收]** — `go install` 编译安装后，按改动类型运行对应验证：
+
+   | 改动类型 | 验证命令 |
+   |---------|---------|
+   | 新增/修改 CLI 标志 | `akswitch <cmd> --help \| grep <flag>` 确认标志可见 |
+   | 新增/修改 CLI 命令 | `akswitch <cmd> --help` 确认子命令存在 |
+   | 修改日志格式 | `akswitch logs --verbose` 或 `akswitch start --log-format=compact` 确认输出格式 |
+   | 逻辑修复 | 用真实场景（启动代理、发送请求）确认修复生效 |
+
+4. **[提交]** — 在正确的分支？提交信息清晰？
 ## 日志分析
 
 **禁止全量扫描。** 用增量 checkpoint 模式：

@@ -17,6 +17,8 @@ type LogEntry struct {
 	DurationMs      int64  `json:"duration_ms"`
 	Retries         int    `json:"retry"`
 	Provider        string `json:"provider,omitempty"`
+	InputTokens     int    `json:"input_tokens,omitempty"`
+	OutputTokens    int    `json:"output_tokens,omitempty"`
 }
 
 func MaskKey(key string) string {
