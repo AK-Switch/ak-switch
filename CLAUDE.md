@@ -30,6 +30,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **测试入口**：所有 CLI 可达路径用 `runCommand()` 或子进程模式（`testhelper.go`）
 - **标准**：before/after 对比，不测绝对值快照
 - **不写**：mock 掉一切只测 JSON 的 Handler 测试（如 `handlers_test.go`）
+- **日志格式测试**：`formatLogLine` 纯函数可在 `unit` 层测试（`log_format_test.go`），无需 HTTP 服务器
 
 ## 发版
 
@@ -54,6 +55,7 @@ internal/
   cmd/                         # Cobra CLI 命令层
     root.go                    #   根命令 + version 子命令
     start.go                   #   start -> 解析配置 -> 初始化 provider -> 启动代理
+    logs.go                    #   logs 命令（formatLogLine 纯函数，--verbose 标志）
     config.go, provider.go,    #   config/provider/key 增删查改 CLI
     key.go, status.go, ...
     selfrestart.go             #   二进制自监控热重启（开发模式）
@@ -63,6 +65,7 @@ internal/
     admin.go                   #   admin token 鉴权
     router.go                  #   ProviderRouter: 多 provider 各自独立端口
     middleware.go              #   敏感 header 过滤、日志
+    colorhandler.go            #   slog.ColorHandler（ANSI 彩色 + compact 模式）
     crash.go                   #   panic 恢复
   keypool/                     # API Key 池
     keypool.go                 #   轮转策略（round-robin + cooldown + 禁用）
@@ -85,6 +88,16 @@ internal/
 - **两层熔断** — Key 级（429 退避）-> 上游级（502/503 熔断），key 级先触发，上游级兜底
 - **配置热重载** — 监听 `.env` 变更 -> 计算 diff -> 热更新 key pool，不停机
 - **自监控重启** — 开发模式下监控 binary 文件变更，检测到更新后优雅重启
+- **双日志通道** — stdout（slog + ColorHandler，运维实时）与 `/logs` API（环形缓冲区，`akswitch logs` 回顾）解耦，互不影响
+
+### CLI 标志速查
+
+| 命令 | 标志 | 说明 |
+|------|------|------|
+| `akswitch start` | `--log-format=compact` | stdout 精简模式（默认 `default`） |
+| `akswitch logs` | `--verbose` | 显示完整 method/URL（默认隐藏） |
+| `akswitch logs` | `--since=RFC3339` | 只显示此时间后的条目 |
+| `akswitch logs` | `--last=N` | 只显示最后 N 条 |
 
 ## 工作流
 
@@ -115,6 +128,7 @@ internal/
 4. 将发现追加到上次报告，不重写全量
 
 - `/logs` API 支持 `?since=RFC3339`，CLI 透传 `--since`
+- `akswitch logs --verbose` 显示完整 method/URL（默认精简 status + key + duration）
 - 首次分析不需要 `--since`（= 全量，建立基线）
 - 先看 `/metrics` 聚合数据再扫日志，减少 80% 的手动扫日志需求
 
