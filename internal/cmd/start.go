@@ -89,8 +89,6 @@ func startServer(dashboardHTML string, providerFilter string, startAll bool, log
 // resolveProviders handles config detection, TOML loading, and the four-choice
 // provider selection strategy (--provider > --all > default_provider > first alphabetically).
 func resolveProviders(dashboardHTML string, providerFilter string, startAll bool) (router *server.ProviderRouter, providers map[string]*config.Config, port int, host string, shouldStart func(name string) bool) {
-	host = "127.0.0.1"
-
 	// ── Detect config source ──────────────────────────
 	xdgPath, err := config.XDGConfigPath()
 	if err != nil {
@@ -112,6 +110,7 @@ func resolveProviders(dashboardHTML string, providerFilter string, startAll bool
 	// ── Create ProviderRouter ─────────────────────────
 	router = server.NewProviderRouter(dashboardHTML)
 	port = config.FindServerPort(xdgPath)
+	host = config.FindServerHost(xdgPath)
 
 	// 四选一：--provider > --all > default_provider > 第一个 provider（字母序）
 	switch {
@@ -150,9 +149,6 @@ func initProviders(router *server.ProviderRouter, providers map[string]*config.C
 		if err := cfg.Validate(); err != nil {
 			slog.Error("invalid provider config", "provider", name, "error", err)
 			continue
-		}
-		if len(keys) > 0 {
-			keypool.SetEncryptionKey(cfg.EncryptionKey)
 		}
 		pool := keypool.NewKeyPool(keys, keyNames)
 		if err := router.AddProvider(name, cfg, pool); err != nil {

@@ -9,6 +9,7 @@ import (
 
 const (
 	adminPort = 8080
+	adminHost = "127.0.0.1"
 )
 
 var Version = "dev"
@@ -42,6 +43,17 @@ func detectServerPort() int {
 		}
 	}
 	return adminPort
+}
+
+// detectServerHost returns the server host from the config file,
+// falling back to the default admin host if detection fails.
+func detectServerHost() string {
+	if xdgPath, err := config.XDGConfigPath(); err == nil {
+		if h := config.FindServerHost(xdgPath); h != "" {
+			return h
+		}
+	}
+	return adminHost
 }
 
 func init() {

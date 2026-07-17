@@ -15,6 +15,7 @@ import (
 // to ensure required fields are present.
 type Config struct {
 	Port            int      `toml:"port,omitempty"`            // HTTP listen port (default 8080)
+	Host            string   `toml:"host,omitempty"`            // HTTP listen address (default "127.0.0.1")
 	TargetBase      string   `toml:"target"`                    // Upstream target base URL (required)
 	GenaiBase       string   `toml:"genai,omitempty"`           // Generative AI base URL (required)
 	AdminToken      string   `toml:"admin_token,omitempty"`     // Optional admin authentication token
@@ -27,7 +28,6 @@ type Config struct {
 	Keys            []string `toml:"-"`                         // API keys (at least one required)
 	KeyNames        []string `toml:"-"`                         // Corresponding key names (empty string if unnamed), same length as Keys
 	KeysFile        string   `toml:"keys_file,omitempty"`       // JSON file path for key persistence (default "keys.json")
-	EncryptionKey   []byte   `json:"-" toml:"-"`                // AES-256 key for keys.json encryption (32 bytes, hex-encoded via KEYS_ENCRYPTION_KEY)
 
 	BackoffCapSec       int     `toml:"backoff_cap_sec,omitempty"`       // Key 退避上限(秒)，达到此值自动禁用 (default 120)
 	BackoffMultiplier   float64 `toml:"backoff_multiplier,omitempty"`    // 指数退避倍数 (default 2)
@@ -62,6 +62,7 @@ type ConfigChange struct {
 func DefaultConfig() *Config {
 	return &Config{
 		Port:                8080,
+		Host:                "127.0.0.1",
 		MaxRetries:          2,
 		LogLevel:            "info",
 		CooldownSec:         15,
@@ -115,9 +116,6 @@ func (c *Config) Validate() error {
 	if c.HealthCheckTimeoutSec < 1 {
 		return &ConfigError{Category: "config", Message: fmt.Sprintf("配置错误: HEALTH_CHECK_TIMEOUT_SEC=%d 不能小于 1", c.HealthCheckTimeoutSec)}
 	}
-	if len(c.EncryptionKey) > 0 && len(c.EncryptionKey) != 32 {
-		return &ConfigError{Category: "config", Message: "配置错误: KEYS_ENCRYPTION_KEY 必须正好是 32 字节（64 个十六进制字符）"}
-	}
 	return nil
 }
 
@@ -132,7 +130,6 @@ func (c *Config) Sanitized() *Config {
 	}
 	s.KeyNames = make([]string, len(c.KeyNames))
 	copy(s.KeyNames, c.KeyNames)
-	s.EncryptionKey = nil // excluded from sanitized output
 	return &s
 }
 
@@ -145,6 +142,9 @@ func mergeConfig(cfg *Config) {
 	}
 	if cfg.CooldownSec == 0 {
 		cfg.CooldownSec = def.CooldownSec
+	}
+	if cfg.Host == "" {
+		cfg.Host = def.Host
 	}
 	if cfg.MaxRetries == 0 {
 		cfg.MaxRetries = def.MaxRetries
