@@ -87,8 +87,7 @@ internal/
     manager.go                 #   InstanceManager（旧多端口模式，已废弃但保留）
   keypool/                     # API Key 池
     keypool.go                 #   轮转策略（round-robin + cooldown + 禁用）
-    crypto.go                  #   AES-256-GCM 加密存储
-    store.go                   #   持久化（文件读写 + 加密）
+        store.go                   #   持久化（keyring + JSON 文件读写）
   circuitbreaker/              # 两层熔断器
     key.go                     #   Key 级熔断（限流退避）
     upstream.go                #   上游级熔断（502/503 -> open -> half-open -> close）

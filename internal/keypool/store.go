@@ -58,7 +58,7 @@ func SaveKeysToFile(path string, keys []string, names []string) error {
 
 // LoadFullStore loads the complete KeyStore from file (including disabled state).
 // Returns nil store with nil error if the file does not exist.
-// If encryption is enabled (via SetEncryptionKey), Key fields are automatically decrypted.
+// LoadFullStore loads the complete KeyStore from file (including disabled state).
 func LoadFullStore(path string) (*KeyStore, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -75,39 +75,12 @@ func LoadFullStore(path string) (*KeyStore, error) {
 		store.Keys = []KeyEntry{}
 	}
 
-	// Decrypt keys if encryption is enabled
-	if EncryptionKeySet() {
-		for i := range store.Keys {
-			decrypted, err := Decrypt(store.Keys[i].Key)
-			if err != nil {
-				return nil, fmt.Errorf("decrypt key %d: %w", i, err)
-			}
-			store.Keys[i].Key = string(decrypted)
-		}
-	}
-
 	return &store, nil
 }
 
 // SaveFullStore writes the complete KeyStore to file.
-// If encryption is enabled (via SetEncryptionKey), Key fields are automatically encrypted.
+// SaveFullStore writes the complete KeyStore to file.
 func SaveFullStore(path string, store *KeyStore) error {
-	// Encrypt keys if encryption is enabled (work on a copy to avoid mutating the caller's store)
-	if EncryptionKeySet() {
-		encrypted := make([]KeyEntry, len(store.Keys))
-		for i, entry := range store.Keys {
-			enc, err := Encrypt([]byte(entry.Key))
-			if err != nil {
-				return fmt.Errorf("encrypt key %d: %w", i, err)
-			}
-			encrypted[i] = KeyEntry{
-				Key:      enc,
-				Name:     entry.Name,
-				Disabled: entry.Disabled,
-			}
-		}
-		store = &KeyStore{Keys: encrypted}
-	}
 
 	data, err := json.MarshalIndent(store, "", "  ")
 	if err != nil {
