@@ -150,9 +150,6 @@ func initProviders(router *server.ProviderRouter, providers map[string]*config.C
 			slog.Error("invalid provider config", "provider", name, "error", err)
 			continue
 		}
-		if len(keys) > 0 {
-			keypool.SetEncryptionKey(cfg.EncryptionKey)
-		}
 		pool := keypool.NewKeyPool(keys, keyNames)
 		if err := router.AddProvider(name, cfg, pool); err != nil {
 			slog.Error("failed to add provider", "provider", name, "error", err)

@@ -13,7 +13,6 @@ import (
 )
 
 func TestLoadKeysFromFile_NotEmpty(t *testing.T) {
-	SetEncryptionKey(nil)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "keys.json")
 
@@ -77,7 +76,6 @@ func TestLoadKeysFromFile_Malformed(t *testing.T) {
 }
 
 func TestSaveThenLoad(t *testing.T) {
-	SetEncryptionKey(nil)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "keys.json")
 
@@ -107,7 +105,6 @@ func TestSaveThenLoad(t *testing.T) {
 }
 
 func TestSaveThenLoad_NamesShorterThanKeys(t *testing.T) {
-	SetEncryptionKey(nil)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "keys.json")
 
@@ -135,7 +132,6 @@ func TestSaveThenLoad_NamesShorterThanKeys(t *testing.T) {
 }
 
 func TestSaveFullStore_AndLoadFullStore(t *testing.T) {
-	SetEncryptionKey(nil)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "keys.json")
 
@@ -183,7 +179,6 @@ func TestLoadFullStore_NotExist(t *testing.T) {
 }
 
 func TestSaveFullStore_IndentedFormat(t *testing.T) {
-	SetEncryptionKey(nil)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "keys.json")
 
@@ -217,7 +212,6 @@ func TestSaveFullStore_IndentedFormat(t *testing.T) {
 }
 
 func TestLoadKeysFromFile_EmptyKeyList(t *testing.T) {
-	SetEncryptionKey(nil)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "empty.json")
 
@@ -237,112 +231,8 @@ func TestLoadKeysFromFile_EmptyKeyList(t *testing.T) {
 	}
 }
 
-// ── Encryption integration tests ──────────────────────────────
-
-func testEncryptKey() []byte {
-	k := make([]byte, 32)
-	for i := range k {
-		k[i] = 'K'
-	}
-	return k
-}
-
-func TestSaveLoad_Encrypted_PlaintextNotInFile(t *testing.T) {
-	// Set encryption key
-	SetEncryptionKey(testEncryptKey())
-	defer SetEncryptionKey(nil)
-
-	dir := t.TempDir()
-	path := filepath.Join(dir, "keys.json")
-
-	store := &KeyStore{
-		Keys: []KeyEntry{
-			{Key: "nvapi-secret-key-1", Name: "prod"},
-			{Key: "nvapi-secret-key-2", Name: "staging"},
-		},
-	}
-
-	if err := SaveFullStore(path, store); err != nil {
-		t.Fatalf("SaveFullStore: %v", err)
-	}
-
-	// Read raw file — keys should not be plaintext
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("ReadFile: %v", err)
-	}
-	content := string(data)
-
-	if strings.Contains(content, "nvapi-secret-key-1") {
-		t.Error("plaintext key found in encrypted file")
-	}
-	if strings.Contains(content, "nvapi-secret-key-2") {
-		t.Error("plaintext key found in encrypted file")
-	}
-}
-
-func TestSaveLoad_Encrypted_RoundTrip(t *testing.T) {
-	SetEncryptionKey(testEncryptKey())
-	defer SetEncryptionKey(nil)
-
-	dir := t.TempDir()
-	path := filepath.Join(dir, "keys.json")
-
-	original := &KeyStore{
-		Keys: []KeyEntry{
-			{Key: "nvapi-secret-key-1", Name: "prod", Disabled: false},
-			{Key: "nvapi-secret-key-2", Name: "", Disabled: true},
-		},
-	}
-
-	if err := SaveFullStore(path, original); err != nil {
-		t.Fatalf("SaveFullStore: %v", err)
-	}
-
-	loaded, err := LoadFullStore(path)
-	if err != nil {
-		t.Fatalf("LoadFullStore: %v", err)
-	}
-
-	if len(loaded.Keys) != 2 {
-		t.Fatalf("got %d entries, want 2", len(loaded.Keys))
-	}
-	if loaded.Keys[0].Key != "nvapi-secret-key-1" || loaded.Keys[0].Name != "prod" || loaded.Keys[0].Disabled {
-		t.Errorf("entry 0 mismatch: %+v", loaded.Keys[0])
-	}
-	if loaded.Keys[1].Key != "nvapi-secret-key-2" || loaded.Keys[1].Name != "" || !loaded.Keys[1].Disabled {
-		t.Errorf("entry 1 mismatch: %+v", loaded.Keys[1])
-	}
-}
-
-func TestSaveLoad_Encrypted_WrongKey(t *testing.T) {
-	// Save with key K
-	SetEncryptionKey(testEncryptKey())
-	dir := t.TempDir()
-	path := filepath.Join(dir, "keys.json")
-
-	store := &KeyStore{Keys: []KeyEntry{{Key: "my-secret-key"}}}
-	if err := SaveFullStore(path, store); err != nil {
-		t.Fatalf("SaveFullStore: %v", err)
-	}
-
-	// Load with a different key
-	wrongKey := make([]byte, 32)
-	for i := range wrongKey {
-		wrongKey[i] = 'X'
-	}
-	SetEncryptionKey(wrongKey)
-	defer SetEncryptionKey(nil)
-
-	_, err := LoadFullStore(path)
-	if err == nil {
-		t.Error("LoadFullStore with wrong key: expected error, got nil")
-	}
-}
-
 func TestSaveLoad_NoEncryption_PreservesPlaintext(t *testing.T) {
 	// Ensure no encryption key is set
-	SetEncryptionKey(nil)
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "keys.json")
@@ -376,39 +266,9 @@ func TestSaveLoad_NoEncryption_PreservesPlaintext(t *testing.T) {
 	}
 }
 
-func TestSaveLoad_Encrypted_TamperedFile(t *testing.T) {
-	SetEncryptionKey(testEncryptKey())
-	defer SetEncryptionKey(nil)
-
-	dir := t.TempDir()
-	path := filepath.Join(dir, "keys.json")
-
-	store := &KeyStore{Keys: []KeyEntry{{Key: "original-key"}}}
-	if err := SaveFullStore(path, store); err != nil {
-		t.Fatalf("SaveFullStore: %v", err)
-	}
-
-	// Read, tamper, write back
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("ReadFile: %v", err)
-	}
-	// Flip a byte in the first key field (roughly)
-	if len(data) > 50 {
-		data[40] ^= 0xFF
-		os.WriteFile(path, data, 0644)
-	}
-
-	_, err = LoadFullStore(path)
-	if err == nil {
-		t.Error("LoadFullStore with tampered data: expected error, got nil")
-	}
-}
-
 // ── LoadKeysFromStore tests ─────────────────────────────────────
 
 func TestLoadKeysFromStore_CustomFile(t *testing.T) {
-	SetEncryptionKey(nil)
 
 	dir := t.TempDir()
 	config.ConfigDir = dir
@@ -447,7 +307,6 @@ func TestLoadKeysFromStore_CustomFile(t *testing.T) {
 }
 
 func TestLoadKeysFromStore_CustomFileNotExist(t *testing.T) {
-	SetEncryptionKey(nil)
 
 	dir := t.TempDir()
 	config.ConfigDir = dir
@@ -467,7 +326,6 @@ func TestLoadKeysFromStore_CustomFileNotExist(t *testing.T) {
 }
 
 func TestLoadKeysFromStore_NoSource(t *testing.T) {
-	SetEncryptionKey(nil)
 
 	dir := t.TempDir()
 	config.ConfigDir = dir
