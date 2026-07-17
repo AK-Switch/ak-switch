@@ -121,7 +121,7 @@ internal/
 
 | 命令 | 标志 | 说明 |
 |------|------|------|
-| `akswitch start` | `--log-format=compact` | stdout 精简模式（默认 `default`） |
+| `akswitch start` | `--log-format=default` | stdout 标准模式（默认 `compact`） |
 | `akswitch logs` | `--verbose` | 显示完整 method/URL（默认隐藏） |
 | `akswitch logs` | `--since=RFC3339` | 只显示此时间后的条目 |
 | `akswitch logs` | `--last=N` | 只显示最后 N 条 |
@@ -157,7 +157,7 @@ internal/
    |---------|---------|
    | 新增/修改 CLI 标志 | `akswitch <cmd> --help \| grep <flag>` 确认标志可见 |
    | 新增/修改 CLI 命令 | `akswitch <cmd> --help` 确认子命令存在 |
-   | 修改日志格式 | `akswitch logs --verbose` 或 `akswitch start --log-format=compact` 确认输出格式 |
+   | 修改日志格式 | `akswitch start --help | grep log-format` 确认默认值，或 `akswitch start --log-format=default` 切回标准模式 |
    | 逻辑修复 | 用真实场景（启动代理、发送请求）确认修复生效 |
 
 4. **[提交]** — 在正确的分支？提交信息清晰？
