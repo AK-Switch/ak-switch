@@ -173,27 +173,68 @@ func (h *ColorHandler) handleCompact(ctx context.Context, r slog.Record) error {
 
 	case "proxy success":
 		var status int
-		var provider, keyName string
+		var provider, method, url, keyName string
 		var retry int
+		var durationMs, ttfbMs, reqBodySize, respBodySize int64
+		var inputTokens, outputTokens int64
 		r.Attrs(func(a slog.Attr) bool {
 			switch a.Key {
 			case "status":
 				status = int(attrInt64(a))
 			case "provider":
 				provider = fmt.Sprintf("%v", a.Value.Any())
+			case "method":
+				method = fmt.Sprintf("%v", a.Value.Any())
+			case "url":
+				url = fmt.Sprintf("%v", a.Value.Any())
 			case "key_name":
 				keyName = fmt.Sprintf("%v", a.Value.Any())
 			case "retry":
 				retry = int(attrInt64(a))
+			case "duration_ms":
+				durationMs = attrInt64(a)
+			case "ttfb_ms":
+				ttfbMs = attrInt64(a)
+			case "request_body_size":
+				reqBodySize = attrInt64(a)
+			case "response_body_size":
+				respBodySize = attrInt64(a)
+			case "input_tokens":
+				inputTokens = attrInt64(a)
+			case "output_tokens":
+				outputTokens = attrInt64(a)
 			}
 			return true
 		})
+
+		url = compactURL(url)
 		keyPart := fmt.Sprintf("key: %s", keyName)
 		if retry > 0 {
 			keyPart = fmt.Sprintf("%s, retry %d", keyPart, retry)
 		}
-		line := fmt.Sprintf("%s %s%d%s %s (%s)%s\n",
-			bracketTS, colorGreen, status, colorReset, provider, keyPart, colorReset)
+
+		// Build timing bracket parts
+		var timingParts []string
+		timingParts = append(timingParts, fmt.Sprintf("ttfb=%s", formatDurationCompact(ttfbMs)))
+		timingParts = append(timingParts, fmt.Sprintf("total=%s", formatDurationCompact(durationMs)))
+
+		// Body size info
+		reqSizeStr := formatSizeCompact(reqBodySize)
+		if respBodySize > 0 {
+			respSizeStr := formatSizeCompact(respBodySize)
+			timingParts = append(timingParts, fmt.Sprintf("%s→%s", reqSizeStr, respSizeStr))
+		} else {
+			timingParts = append(timingParts, reqSizeStr)
+		}
+
+		// Token info
+		if inputTokens > 0 || outputTokens > 0 {
+			timingParts = append(timingParts, fmt.Sprintf("tok=%d+%d", inputTokens, outputTokens))
+		}
+
+		timingStr := strings.Join(timingParts, " ")
+		line := fmt.Sprintf("%s %s%d%s %s %s %s (%s) [%s]%s\n",
+			bracketTS, colorGreen, status, colorReset, provider, method, url, keyPart, timingStr, colorReset)
 		fmt.Fprint(h.writer, line)
 		return nil
 
@@ -221,7 +262,6 @@ func (h *ColorHandler) handleCompact(ctx context.Context, r slog.Record) error {
 		return h.inner.Handle(ctx, r)
 	}
 }
-
 // compactURL strips scheme and host from a URL, keeping only the path.
 func compactURL(rawURL string) string {
 	if idx := strings.Index(rawURL, "://"); idx >= 0 {
@@ -244,6 +284,15 @@ func formatSizeCompact(bytes int64) string {
 	default:
 		return "0KB"
 	}
+}
+
+// formatDurationCompact formats a duration in milliseconds for compact display.
+// >= 1000ms → "X.Xs" (one decimal), < 1000ms → "Xms" (integer).
+func formatDurationCompact(ms int64) string {
+	if ms >= 1000 {
+		return fmt.Sprintf("%.1fs", float64(ms)/1000)
+	}
+	return fmt.Sprintf("%dms", ms)
 }
 
 // attrInt64 extracts an int64 value from a slog.Attr, supporting int, int64, and float64.

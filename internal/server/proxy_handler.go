@@ -5,6 +5,7 @@ import (
 	"akswitch/internal/config"
 	akswitchmetrics "akswitch/internal/metrics"
 	"akswitch/internal/utils"
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -15,6 +16,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	tiktoken "github.com/pkoukk/tiktoken-go"
 )
 
 // ── Proxy Handler ──────────────────────────────────────
@@ -61,8 +64,6 @@ func (pr *ProviderRouter) executeProxy(w http.ResponseWriter, r *http.Request, p
 
 	// Build target URL
 	target := buildTargetURL(cfg, r.URL.Path, r.URL.RawQuery)
-
-	slog.Info("proxy request", "provider", ps.Name, "method", r.Method, "url", target, "body_size", len(bodyBytes))
 
 	if auth := r.Header.Get("Authorization"); auth != "" {
 		maskedAuth := auth
@@ -138,6 +139,7 @@ func (pr *ProviderRouter) executeProxy(w http.ResponseWriter, r *http.Request, p
 		req.Header.Set("Authorization", "Bearer "+key)
 
 		resp, err := client.Do(req)
+		ttfb := time.Since(start)
 		pool.Release(idx) // done with the key, allow other goroutines to select it
 		if err != nil {
 			switch categorizeError(0, err) {
@@ -155,36 +157,36 @@ func (pr *ProviderRouter) executeProxy(w http.ResponseWriter, r *http.Request, p
 		// ── Response status dispatch ──
 		switch {
 		case resp.StatusCode == http.StatusTooManyRequests:
-			pr.logs.Append(buildLogEntry(ps, key, idx, r.Method, target, resp.StatusCode, len(bodyBytes), start, attempt))
+			pr.logs.Append(buildLogEntry(ps, key, idx, r.Method, target, resp.StatusCode, len(bodyBytes), start, attempt, ttfb.Milliseconds()))
 			if pr.handleRateLimited(w, ps, idx, resp, cfg, start, r.Method, target, bodyBytes) {
 				return
 			}
 			continue
 
 		case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
-			pr.logs.Append(buildLogEntry(ps, key, idx, r.Method, target, resp.StatusCode, len(bodyBytes), start, attempt))
+			pr.logs.Append(buildLogEntry(ps, key, idx, r.Method, target, resp.StatusCode, len(bodyBytes), start, attempt, ttfb.Milliseconds()))
 			if pr.handleAuthRejected(w, ps, idx, resp, start, r.Method, target, bodyBytes) {
 				return
 			}
 			continue
 
 		case resp.StatusCode == http.StatusBadGateway || resp.StatusCode == http.StatusServiceUnavailable:
-			pr.logs.Append(buildLogEntry(ps, key, idx, r.Method, target, resp.StatusCode, len(bodyBytes), start, attempt))
+			pr.logs.Append(buildLogEntry(ps, key, idx, r.Method, target, resp.StatusCode, len(bodyBytes), start, attempt, ttfb.Milliseconds()))
 			pr.handleServerError(ps, idx, resp, attempt)
 			continue
 
 		case resp.StatusCode >= 400 && resp.StatusCode < 500 || categorizeError(resp.StatusCode, nil) == CatNonRetryable:
-			pr.handleNonRetryable(w, ps, idx, resp, start, r.Method, target, bodyBytes, attempt, key)
+			pr.handleNonRetryable(w, ps, idx, resp, start, r.Method, target, bodyBytes, attempt, key, ttfb)
 			return
 
 		case resp.StatusCode >= 500:
-			pr.logs.Append(buildLogEntry(ps, key, idx, r.Method, target, resp.StatusCode, len(bodyBytes), start, attempt))
+			pr.logs.Append(buildLogEntry(ps, key, idx, r.Method, target, resp.StatusCode, len(bodyBytes), start, attempt, ttfb.Milliseconds()))
 			pr.handleServerError(ps, idx, resp, attempt)
 			continue
 
 		default:
 			// 2xx/3xx — success
-			pr.handleSuccess(w, ps, idx, resp, start, r.Method, target, bodyBytes, attempt, key)
+			pr.handleSuccess(w, ps, idx, resp, start, r.Method, target, bodyBytes, attempt, key, ttfb)
 			return
 		}
 	}
@@ -204,6 +206,7 @@ func (pr *ProviderRouter) executeProxy(w http.ResponseWriter, r *http.Request, p
 		Retries:         cfg.MaxRetries,
 		Provider:        ps.Name,
 	})
+	pr.metrics.RetryCount.WithLabelValues(ps.Name).Add(float64(cfg.MaxRetries))
 	slog.Debug("proxy response debug", "status", 503, "duration_ms", time.Since(start).Seconds()*1000, "retries", cfg.MaxRetries)
 	pr.recordProxyMetrics(r.Method, "5xx", "", start)
 }
@@ -278,22 +281,25 @@ func (pr *ProviderRouter) handleServerError(ps *ProviderState, idx int, resp *ht
 
 // handleNonRetryable copies a non-retryable 4xx response through to the client
 // without further retry attempts.
-func (pr *ProviderRouter) handleNonRetryable(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, method, target string, bodyBytes []byte, attempt int, key string) {
+func (pr *ProviderRouter) handleNonRetryable(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, method, target string, bodyBytes []byte, attempt int, key string, ttfb time.Duration) {
 	defer resp.Body.Close()
 	utils.CopyHeaders(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
 	io.Copy(w, resp.Body)
 
-	pr.logs.Append(buildLogEntry(ps, key, idx, method, target, resp.StatusCode, len(bodyBytes), start, attempt))
+	pr.logs.Append(buildLogEntry(ps, key, idx, method, target, resp.StatusCode, len(bodyBytes), start, attempt, ttfb.Milliseconds()))
 	slog.Warn("non-retryable client error", "provider", ps.Name, "method", method, "url", target, "status", resp.StatusCode)
 	slog.Debug("proxy response debug", "status", resp.StatusCode, "duration_ms", time.Since(start).Seconds()*1000, "retries", attempt+1)
 	pr.recordProxyMetrics(method, "4xx", fmt.Sprintf("%d", idx), start)
+	if attempt > 0 {
+		pr.metrics.RetryCount.WithLabelValues(ps.Name).Add(float64(attempt))
+	}
 }
 
 // handleSuccess processes a successful 2xx/3xx response, including streaming
 // for SSE and chunked responses. For non-streaming responses, it extracts
 // token usage from the response body and records it in the log entry.
-func (pr *ProviderRouter) handleSuccess(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, method, target string, bodyBytes []byte, attempt int, key string) {
+func (pr *ProviderRouter) handleSuccess(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, method, target string, bodyBytes []byte, attempt int, key string, ttfb time.Duration) {
 	pool := ps.Pool
 	upCB := ps.Proxy.upCB
 
@@ -304,10 +310,11 @@ func (pr *ProviderRouter) handleSuccess(w http.ResponseWriter, ps *ProviderState
 	w.WriteHeader(resp.StatusCode)
 
 	var inputTokens, outputTokens int
+	var respBodySize int64
 
 	contentType := resp.Header.Get("Content-Type")
 	if strings.Contains(contentType, "text/event-stream") {
-		streamResponse(w, resp)
+		inputTokens, outputTokens, respBodySize = streamSSEAndEstimateTokens(w, resp, bodyBytes)
 	} else {
 		// Non-streaming: read body to extract token usage, then write to client
 		body, err := io.ReadAll(resp.Body)
@@ -315,15 +322,40 @@ func (pr *ProviderRouter) handleSuccess(w http.ResponseWriter, ps *ProviderState
 		if err == nil {
 			inputTokens, outputTokens = extractTokenUsage(body)
 			w.Write(body)
+			respBodySize = int64(len(body))
 		}
 	}
 
 	pool.IncrementRequestCount(idx)
-	entry := buildLogEntry(ps, key, idx, method, target, resp.StatusCode, len(bodyBytes), start, attempt)
+	entry := buildLogEntry(ps, key, idx, method, target, resp.StatusCode, len(bodyBytes), start, attempt, ttfb.Milliseconds())
 	entry.InputTokens = inputTokens
 	entry.OutputTokens = outputTokens
 	pr.logs.Append(entry)
-	slog.Info("proxy success", "provider", ps.Name, "method", method, "url", target, "status", resp.StatusCode, "key_index", idx, "key_name", pool.Name(idx), "retry", attempt, "input_tokens", inputTokens, "output_tokens", outputTokens)
+	if inputTokens > 0 {
+		pr.metrics.TokenUsage.WithLabelValues(ps.Name, "input").Add(float64(inputTokens))
+	}
+	if outputTokens > 0 {
+		pr.metrics.TokenUsage.WithLabelValues(ps.Name, "output").Add(float64(outputTokens))
+	}
+	if attempt > 0 {
+		pr.metrics.RetryCount.WithLabelValues(ps.Name).Add(float64(attempt))
+	}
+	durationMs := time.Since(start).Milliseconds()
+	slog.Info("proxy success",
+		"provider", ps.Name,
+		"method", method,
+		"url", target,
+		"status", resp.StatusCode,
+		"key_index", idx,
+		"key_name", pool.Name(idx),
+		"retry", attempt,
+		"input_tokens", inputTokens,
+		"output_tokens", outputTokens,
+		"duration_ms", durationMs,
+		"ttfb_ms", ttfb.Milliseconds(),
+		"request_body_size", len(bodyBytes),
+		"response_body_size", respBodySize,
+	)
 	slog.Debug("proxy response debug", "status", resp.StatusCode, "duration_ms", time.Since(start).Seconds()*1000, "retries", attempt+1)
 	pr.recordProxyMetrics(method, akswitchmetrics.StatusLabel(resp.StatusCode), fmt.Sprintf("%d", idx), start)
 }
@@ -331,7 +363,7 @@ func (pr *ProviderRouter) handleSuccess(w http.ResponseWriter, ps *ProviderState
 // ── Proxy Helpers ──────────────────────────────────────
 
 // buildLogEntry creates a structured LogEntry for proxy request logging.
-func buildLogEntry(ps *ProviderState, key string, idx int, method, target string, status int, bodySize int, start time.Time, attempt int) utils.LogEntry {
+func buildLogEntry(ps *ProviderState, key string, idx int, method, target string, status int, bodySize int, start time.Time, attempt int, ttfbMs int64) utils.LogEntry {
 	return utils.LogEntry{
 		Timestamp:       time.Now().Format(time.RFC3339),
 		Key:             key,
@@ -342,6 +374,7 @@ func buildLogEntry(ps *ProviderState, key string, idx int, method, target string
 		Status:          status,
 		RequestBodySize: bodySize,
 		DurationMs:      time.Since(start).Milliseconds(),
+		TtfbMs:          ttfbMs,
 		Retries:         attempt,
 		Provider:        ps.Name,
 	}
@@ -389,6 +422,79 @@ func streamResponse(w http.ResponseWriter, resp *http.Response) {
 	} else {
 		io.Copy(w, resp.Body)
 	}
+}
+
+// streamSSEAndEstimateTokens streams SSE events to the client while accumulating
+// content_block_delta text for token estimation. After the stream ends, it uses
+// tiktoken to estimate input and output tokens from the accumulated text.
+func streamSSEAndEstimateTokens(w http.ResponseWriter, resp *http.Response, bodyBytes []byte) (int, int, int64) {
+	defer resp.Body.Close()
+
+	var outputBuf strings.Builder
+	var respBodySize int64
+
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+
+	f, canFlush := w.(http.Flusher)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		// Write to client immediately
+		if _, err := w.Write([]byte(line + "\n")); err != nil {
+			break
+		}
+
+		// Parse data: lines for content_block_delta events
+		if strings.HasPrefix(line, "data: ") {
+			var sseData struct {
+				Type  string `json:"type"`
+				Delta *struct {
+					Text string `json:"text"`
+				} `json:"delta,omitempty"`
+			}
+			if err := json.Unmarshal([]byte(line[6:]), &sseData); err == nil {
+				if sseData.Type == "content_block_delta" && sseData.Delta != nil {
+					outputBuf.WriteString(sseData.Delta.Text)
+				}
+			}
+		}
+
+		if canFlush {
+			f.Flush()
+		}
+	}
+
+	// Estimate output tokens from accumulated text
+	var outputTokens int
+	if outputBuf.Len() > 0 {
+		if tke, err := tiktoken.GetEncoding("cl100k_base"); err == nil {
+			outputTokens = len(tke.Encode(outputBuf.String(), nil, nil))
+		}
+	}
+
+	// Estimate input tokens from request body
+	var inputTokens int
+	if len(bodyBytes) > 0 {
+		// Try to extract and concatenate message content for token counting
+		var reqBody struct {
+			Messages []struct {
+				Content string `json:"content"`
+			} `json:"messages"`
+		}
+		if err := json.Unmarshal(bodyBytes, &reqBody); err == nil && len(reqBody.Messages) > 0 {
+			var inputBuf strings.Builder
+			for _, msg := range reqBody.Messages {
+				inputBuf.WriteString(msg.Content)
+			}
+			if tke, err := tiktoken.GetEncoding("cl100k_base"); err == nil {
+				inputTokens = len(tke.Encode(inputBuf.String(), nil, nil))
+			}
+		}
+	}
+
+	return inputTokens, outputTokens, respBodySize
 }
 
 // ── Extracted Utilities ───────────────────────────────

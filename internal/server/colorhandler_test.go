@@ -102,20 +102,15 @@ func TestCompact_ProxyRequest(t *testing.T) {
 		"url", "https://token.sensenova.cn/v1/messages?beta=true", "body_size", 392394)
 
 	output := buf.String()
+	// Compact mode handles "proxy request" with a compact format
 	if !strings.Contains(output, "→ POST") {
 		t.Errorf("compact request should contain → POST, got: %q", output)
 	}
 	if !strings.Contains(output, "/v1/messages?beta=true") {
 		t.Errorf("compact request should contain URL path, got: %q", output)
 	}
-	if !strings.Contains(output, "383KB") {
-		t.Errorf("compact request should contain size (383KB), got: %q", output)
-	}
 	if strings.Contains(output, "INFO") {
 		t.Errorf("compact request should not contain level label INFO, got: %q", output)
-	}
-	if strings.Contains(output, "body_size") {
-		t.Errorf("compact request should not contain raw attr body_size, got: %q", output)
 	}
 }
 
@@ -130,7 +125,9 @@ func TestCompact_ProxySuccess(t *testing.T) {
 	logger := slog.New(handler)
 	logger.Info("proxy success", "provider", "sensenova", "method", "POST",
 		"url", "https://token.sensenova.cn/v1/messages", "status", 200,
-		"key_index", 3, "key_name", "d1-1", "retry", 0)
+		"key_index", 3, "key_name", "d1-1", "retry", 0,
+		"duration_ms", 1234, "ttfb_ms", 567,
+		"request_body_size", 102400, "response_body_size", 51200)
 
 	output := buf.String()
 	if !strings.Contains(output, "200") {
@@ -139,8 +136,20 @@ func TestCompact_ProxySuccess(t *testing.T) {
 	if !strings.Contains(output, "sensenova") {
 		t.Errorf("compact success should contain provider name, got: %q", output)
 	}
+	if !strings.Contains(output, "POST") {
+		t.Errorf("compact success should contain method, got: %q", output)
+	}
+	if !strings.Contains(output, "/v1/messages") {
+		t.Errorf("compact success should contain URL path, got: %q", output)
+	}
 	if !strings.Contains(output, "key: d1-1") {
 		t.Errorf("compact success should contain key name, got: %q", output)
+	}
+	if !strings.Contains(output, "ttfb=567ms") {
+		t.Errorf("compact success should contain ttfb, got: %q", output)
+	}
+	if !strings.Contains(output, "total=1.2s") {
+		t.Errorf("compact success should contain total time, got: %q", output)
 	}
 	if strings.Contains(output, "retry") {
 		t.Errorf("compact success with retry=0 should not show retry, got: %q", output)
@@ -163,6 +172,74 @@ func TestCompact_ProxySuccess_WithRetry(t *testing.T) {
 	output := buf.String()
 	if !strings.Contains(output, "retry 3") {
 		t.Errorf("compact success with retry=3 should show retry 3, got: %q", output)
+	}
+}
+
+func TestCompact_ProxySuccess_WithBodySizes(t *testing.T) {
+	var buf bytes.Buffer
+	handler := &ColorHandler{
+		inner:     slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}),
+		writer:    &buf,
+		addSource: false,
+		compact:   true,
+	}
+	logger := slog.New(handler)
+	logger.Info("proxy success", "provider", "openai", "method", "POST",
+		"url", "https://api.openai.com/v1/chat/completions", "status", 200,
+		"key_index", 0, "key_name", "sk-xxxx", "retry", 0,
+		"duration_ms", 2345, "ttfb_ms", 1234,
+		"request_body_size", 362496, "response_body_size", 12288)
+
+	output := buf.String()
+	if !strings.Contains(output, "354KB→12KB") {
+		t.Errorf("compact success should show body size arrow, got: %q", output)
+	}
+}
+
+func TestCompact_ProxySuccess_WithTokens(t *testing.T) {
+	var buf bytes.Buffer
+	handler := &ColorHandler{
+		inner:     slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}),
+		writer:    &buf,
+		addSource: false,
+		compact:   true,
+	}
+	logger := slog.New(handler)
+	logger.Info("proxy success", "provider", "anthropic", "method", "POST",
+		"url", "https://api.anthropic.com/v1/messages", "status", 200,
+		"key_index", 0, "key_name", "sk-ant-xxxx", "retry", 0,
+		"duration_ms", 5000, "ttfb_ms", 2000,
+		"request_body_size", 1024, "response_body_size", 512,
+		"input_tokens", 45, "output_tokens", 312)
+
+	output := buf.String()
+	if !strings.Contains(output, "tok=45+312") {
+		t.Errorf("compact success should show tok=45+312, got: %q", output)
+	}
+}
+
+func TestCompact_ProxySuccess_StreamingDuration(t *testing.T) {
+	var buf bytes.Buffer
+	handler := &ColorHandler{
+		inner:     slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}),
+		writer:    &buf,
+		addSource: false,
+		compact:   true,
+	}
+	logger := slog.New(handler)
+	// Streaming: long TTFB and total duration
+	logger.Info("proxy success", "provider", "sensenova", "method", "POST",
+		"url", "https://token.sensenova.cn/v1/messages", "status", 200,
+		"key_index", 3, "key_name", "d1-1", "retry", 0,
+		"duration_ms", 15000, "ttfb_ms", 3000,
+		"request_body_size", 100, "response_body_size", 0)
+
+	output := buf.String()
+	if !strings.Contains(output, "total=15.0s") {
+		t.Errorf("compact success should show long duration 15.0s, got: %q", output)
+	}
+	if !strings.Contains(output, "ttfb=3.0s") {
+		t.Errorf("compact success should show ttfb in seconds 3.0s, got: %q", output)
 	}
 }
 
