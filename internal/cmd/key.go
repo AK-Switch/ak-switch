@@ -1,13 +1,10 @@
 package cmd
 
 import (
-	"encoding/hex"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 
-	"akswitch/internal/config"
 	"akswitch/internal/keypool"
 	"akswitch/internal/utils"
 
@@ -23,38 +20,9 @@ const (
 	KeyRemove
 )
 
-// keysPath returns the keys file path for a given provider.
-// Directory: <XDG config dir>/keys/
-// File: <provider>.enc
-func keysPath(provider string) (string, error) {
-	xdgPath, err := config.XDGConfigPath()
-	if err != nil {
-		return "", fmt.Errorf("failed to determine XDG config path: %w", err)
-	}
-	keysDir := filepath.Join(filepath.Dir(xdgPath), "keys")
-	if err := os.MkdirAll(keysDir, 0700); err != nil {
-		return "", fmt.Errorf("failed to create keys directory %s: %w", keysDir, err)
-	}
-	return filepath.Join(keysDir, provider+".enc"), nil
-}
-
-// setupEncryption reads KEYS_ENCRYPTION_KEY from the environment and sets the
-// package-level encryption key in the keypool package.
-func setupEncryption() {
-	encKeyHex := os.Getenv("KEYS_ENCRYPTION_KEY")
-	if encKeyHex != "" {
-		key, err := hex.DecodeString(encKeyHex)
-		if err == nil {
-			keypool.SetEncryptionKey(key)
-		}
-	}
-}
-
 // updateKey performs a KeyMutation on a provider's key at the given index.
 // It handles the full load-validate-modify-save-reload cycle.
 func updateKey(provider string, idx int, op KeyMutation) error {
-	setupEncryption()
-
 	store, err := keypool.LoadKeys(provider)
 	if err != nil {
 		return fmt.Errorf("failed to load keys for %q: %w", provider, err)
@@ -138,8 +106,6 @@ Example:
 		apiKey := args[1]
 		name, _ := cmd.Flags().GetString("name")
 
-		setupEncryption()
-
 		insecure, _ := cmd.Flags().GetBool("insecure-storage")
 		if insecure {
 			fmt.Fprintln(os.Stderr, "WARNING: API keys will be stored in plaintext (not encrypted).")
@@ -190,8 +156,6 @@ Example output:
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		provider := args[0]
-
-		setupEncryption()
 
 		store, err := keypool.LoadKeys(provider)
 		if err != nil {

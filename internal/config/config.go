@@ -28,7 +28,6 @@ type Config struct {
 	Keys            []string `toml:"-"`                         // API keys (at least one required)
 	KeyNames        []string `toml:"-"`                         // Corresponding key names (empty string if unnamed), same length as Keys
 	KeysFile        string   `toml:"keys_file,omitempty"`       // JSON file path for key persistence (default "keys.json")
-	EncryptionKey   []byte   `json:"-" toml:"-"`                // AES-256 key for keys.json encryption (32 bytes, hex-encoded via KEYS_ENCRYPTION_KEY)
 
 	BackoffCapSec       int     `toml:"backoff_cap_sec,omitempty"`       // Key 退避上限(秒)，达到此值自动禁用 (default 120)
 	BackoffMultiplier   float64 `toml:"backoff_multiplier,omitempty"`    // 指数退避倍数 (default 2)
@@ -117,9 +116,6 @@ func (c *Config) Validate() error {
 	if c.HealthCheckTimeoutSec < 1 {
 		return &ConfigError{Category: "config", Message: fmt.Sprintf("配置错误: HEALTH_CHECK_TIMEOUT_SEC=%d 不能小于 1", c.HealthCheckTimeoutSec)}
 	}
-	if len(c.EncryptionKey) > 0 && len(c.EncryptionKey) != 32 {
-		return &ConfigError{Category: "config", Message: "配置错误: KEYS_ENCRYPTION_KEY 必须正好是 32 字节（64 个十六进制字符）"}
-	}
 	return nil
 }
 
@@ -134,7 +130,6 @@ func (c *Config) Sanitized() *Config {
 	}
 	s.KeyNames = make([]string, len(c.KeyNames))
 	copy(s.KeyNames, c.KeyNames)
-	s.EncryptionKey = nil // excluded from sanitized output
 	return &s
 }
 

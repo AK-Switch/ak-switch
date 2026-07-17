@@ -102,9 +102,8 @@ akswitch key disable <provider> <index>                # 禁用 Key
 akswitch key enable <provider> <index>                 # 启用 Key
 ```
 
-- Key 以 AES-256-GCM 加密存储在 `keys/<provider>.enc`
-- 环境变量 `KEYS_ENCRYPTION_KEY` 设置加密密钥（32 字节 hex 字符串）
-- 未设置加密密钥时以 base64 明文存储
+- Key 存储在系统 keyring 中，回退到 JSON 文件
+- 可用 `--insecure-storage` 标志以明文存储（CI/一次性环境）
 
 示例：
 
