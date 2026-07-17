@@ -9,9 +9,10 @@ import (
 
 // LogStore is a thread-safe, fixed-size log store for API usage logs.
 type LogStore struct {
-	mu     sync.Mutex
-	logs   []utils.LogEntry
-	maxLen int
+	mu       sync.Mutex
+	logs     []utils.LogEntry
+	maxLen   int
+	OnAppend func(prevLen, newLen, maxLen int) // optional callback, called under lock
 }
 
 // New creates a LogStore with the given max size.
@@ -28,9 +29,15 @@ func (ls *LogStore) Append(entry utils.LogEntry) {
 	entry.Key = utils.MaskKey(entry.Key)
 	ls.mu.Lock()
 	defer ls.mu.Unlock()
+	prevLen := len(ls.logs)
 	ls.logs = append(ls.logs, entry)
-	if len(ls.logs) > ls.maxLen {
-		ls.logs = ls.logs[len(ls.logs)-ls.maxLen:]
+	newLen := len(ls.logs)
+	if newLen > ls.maxLen {
+		ls.logs = ls.logs[newLen-ls.maxLen:]
+		newLen = ls.maxLen
+	}
+	if ls.OnAppend != nil {
+		ls.OnAppend(prevLen, newLen, ls.maxLen)
 	}
 }
 
