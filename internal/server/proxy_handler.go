@@ -206,6 +206,7 @@ func (pr *ProviderRouter) executeProxy(w http.ResponseWriter, r *http.Request, p
 		Retries:         cfg.MaxRetries,
 		Provider:        ps.Name,
 	})
+	pr.metrics.RetryCount.WithLabelValues(ps.Name).Add(float64(cfg.MaxRetries))
 	slog.Debug("proxy response debug", "status", 503, "duration_ms", time.Since(start).Seconds()*1000, "retries", cfg.MaxRetries)
 	pr.recordProxyMetrics(r.Method, "5xx", "", start)
 }
@@ -290,6 +291,9 @@ func (pr *ProviderRouter) handleNonRetryable(w http.ResponseWriter, ps *Provider
 	slog.Warn("non-retryable client error", "provider", ps.Name, "method", method, "url", target, "status", resp.StatusCode)
 	slog.Debug("proxy response debug", "status", resp.StatusCode, "duration_ms", time.Since(start).Seconds()*1000, "retries", attempt+1)
 	pr.recordProxyMetrics(method, "4xx", fmt.Sprintf("%d", idx), start)
+	if attempt > 0 {
+		pr.metrics.RetryCount.WithLabelValues(ps.Name).Add(float64(attempt))
+	}
 }
 
 // handleSuccess processes a successful 2xx/3xx response, including streaming
@@ -327,6 +331,15 @@ func (pr *ProviderRouter) handleSuccess(w http.ResponseWriter, ps *ProviderState
 	entry.InputTokens = inputTokens
 	entry.OutputTokens = outputTokens
 	pr.logs.Append(entry)
+	if inputTokens > 0 {
+		pr.metrics.TokenUsage.WithLabelValues(ps.Name, "input").Add(float64(inputTokens))
+	}
+	if outputTokens > 0 {
+		pr.metrics.TokenUsage.WithLabelValues(ps.Name, "output").Add(float64(outputTokens))
+	}
+	if attempt > 0 {
+		pr.metrics.RetryCount.WithLabelValues(ps.Name).Add(float64(attempt))
+	}
 	durationMs := time.Since(start).Milliseconds()
 	slog.Info("proxy success",
 		"provider", ps.Name,

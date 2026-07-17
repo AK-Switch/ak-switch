@@ -220,3 +220,51 @@ func TestSnapshotSince(t *testing.T) {
 		}
 	})
 }
+
+func TestOnAppendCallback(t *testing.T) {
+	s := New(3)
+	var calls []struct{ prev, next, max int }
+	s.OnAppend = func(prev, next, max int) {
+		calls = append(calls, struct{ prev, next, max int }{prev, next, max})
+	}
+
+	// Append 1 entry — no overflow
+	s.Append(utils.LogEntry{Timestamp: "e1", Key: "k1", KeyIndex: 1, Method: "GET", URL: "/", Status: 200, RequestBodySize: 0})
+	if len(calls) != 1 {
+		t.Fatalf("expected 1 callback call, got %d", len(calls))
+	}
+	if calls[0].prev != 0 || calls[0].next != 1 || calls[0].max != 3 {
+		t.Errorf("got callback(%d,%d,%d), want (0,1,3)", calls[0].prev, calls[0].next, calls[0].max)
+	}
+
+	// Append 2 more — still no overflow
+	s.Append(utils.LogEntry{Timestamp: "e2", Key: "k2", KeyIndex: 2, Method: "GET", URL: "/", Status: 200, RequestBodySize: 0})
+	s.Append(utils.LogEntry{Timestamp: "e3", Key: "k3", KeyIndex: 3, Method: "GET", URL: "/", Status: 200, RequestBodySize: 0})
+	if len(calls) != 3 {
+		t.Fatalf("expected 3 callback calls, got %d", len(calls))
+	}
+	if calls[2].prev != 2 || calls[2].next != 3 || calls[2].max != 3 {
+		t.Errorf("got callback(%d,%d,%d), want (2,3,3)", calls[2].prev, calls[2].next, calls[2].max)
+	}
+
+	// Append 4th entry — overflow (drop oldest)
+	s.Append(utils.LogEntry{Timestamp: "e4", Key: "k4", KeyIndex: 4, Method: "GET", URL: "/", Status: 200, RequestBodySize: 0})
+	if len(calls) != 4 {
+		t.Fatalf("expected 4 callback calls, got %d", len(calls))
+	}
+	// With maxLen=3, after append: prev=3, new entries would be 4, truncated to 3 → next=3
+	// dropped = (prev+1) - next = 4-3 = 1
+	if calls[3].prev != 3 || calls[3].next != 3 || calls[3].max != 3 {
+		t.Errorf("overflow: got callback(%d,%d,%d), want (3,3,3)", calls[3].prev, calls[3].next, calls[3].max)
+	}
+	if s.Len() != 3 {
+		t.Errorf("expected Len()=3 after overflow, got %d", s.Len())
+	}
+
+	// Verify OnAppend nil is safe
+	s.OnAppend = nil
+	s.Append(utils.LogEntry{Timestamp: "e5", Key: "k5", KeyIndex: 5, Method: "GET", URL: "/", Status: 200, RequestBodySize: 0})
+	if len(calls) != 4 {
+		t.Errorf("expected no extra callback calls after setting nil, got %d", len(calls))
+	}
+}
