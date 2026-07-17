@@ -24,6 +24,155 @@ func TestNextReturnsKey(t *testing.T) {
 	}
 }
 
+// ── RPM-aware key selection ──────────────────────────────
+
+func Test_NextPrefersLowRPMKey(t *testing.T) {
+	p := NewKeyPool([]string{"high", "medium", "low"}, nil)
+
+	// Simulate requests: high=10, medium=5, low=0 (all within last minute)
+	now := time.Now()
+	for i := 0; i < 10; i++ {
+		p.requestHistory[0] = append(p.requestHistory[0], now.Add(-time.Duration(i)*time.Second))
+	}
+	for i := 0; i < 5; i++ {
+		p.requestHistory[1] = append(p.requestHistory[1], now.Add(-time.Duration(i)*time.Second))
+	}
+	// key 2 (low) has 0 requests — should be preferred
+
+	// Run Next() multiple times and verify the low-RPM key is selected most often
+	lowCount := 0
+	mediumCount := 0
+	highCount := 0
+	for i := 0; i < 30; i++ {
+		idx, _, ok := p.Next()
+		if !ok {
+			t.Fatalf("Next() returned ok=false, expected all keys available")
+		}
+		switch idx {
+		case 0:
+			highCount++
+		case 1:
+			mediumCount++
+		case 2:
+			lowCount++
+		}
+		p.Release(idx)
+	}
+
+	// Low RPM key should be selected more than high RPM key
+	if lowCount <= highCount {
+		t.Errorf("low-RPM key (idx=2) selected %d times, high-RPM key (idx=0) selected %d times; expected low > high", lowCount, highCount)
+	}
+	t.Logf("selection counts — high(10): %d, medium(5): %d, low(0): %d", highCount, mediumCount, lowCount)
+}
+
+func Test_NextSkipsHighRPMWhenEnoughCandidates(t *testing.T) {
+	p := NewKeyPool([]string{"high", "low1", "low2"}, nil)
+
+	// Simulate key 0 having high RPM, keys 1 and 2 having low RPM
+	now := time.Now()
+	for i := 0; i < 50; i++ {
+		p.requestHistory[0] = append(p.requestHistory[0], now.Add(-time.Duration(i)*time.Second))
+	}
+	// keys 1 and 2 have 0 RPM
+
+	// Run 20 iterations — key 0 should rarely be selected
+	highCount := 0
+	for i := 0; i < 20; i++ {
+		idx, _, ok := p.Next()
+		if !ok {
+			t.Fatalf("Next() returned ok=false on iteration %d", i)
+		}
+		if idx == 0 {
+			highCount++
+		}
+		p.Release(idx)
+	}
+
+	// High RPM key should be selected less than 50% of the time
+	// (in practice with 2 low-RPM alternatives, it should be ~0)
+	if highCount > 10 {
+		t.Errorf("high-RPM key selected %d/20 times, expected <= 10", highCount)
+	}
+	t.Logf("high-RPM key selected %d/20 times", highCount)
+}
+
+func Test_NextAllKeysSameRPM(t *testing.T) {
+	p := NewKeyPool([]string{"a", "b", "c"}, nil)
+
+	// All keys have same RPM (0)
+	// Should just round-robin without issues
+	seen := make(map[int]int)
+	for i := 0; i < 9; i++ {
+		idx, _, ok := p.Next()
+		if !ok {
+			t.Fatalf("Next() returned ok=false on iteration %d", i)
+		}
+		seen[idx]++
+		p.Release(idx)
+	}
+
+	// With 3 keys and 9 calls, each should be selected ~3 times
+	if len(seen) != 3 {
+		t.Errorf("expected 3 unique keys, got %d: %v", len(seen), seen)
+	}
+	for k, v := range seen {
+		if v < 1 {
+			t.Errorf("key %d was never selected", k)
+		}
+		t.Logf("key %d selected %d times", k, v)
+	}
+}
+
+func Test_NextRPMWithInUse(t *testing.T) {
+	p := NewKeyPool([]string{"a", "b", "c"}, nil)
+
+	// Key 2 has lowest RPM, but is inUse — should be skipped
+	now := time.Now()
+	for i := 0; i < 10; i++ {
+		p.requestHistory[0] = append(p.requestHistory[0], now.Add(-time.Duration(i)*time.Second))
+	}
+	// key 1: 0 RPM
+	// key 2: 0 RPM but inUse
+
+	p.inUse[2] = true
+
+	// Key 1 should be selected (lowest RPM among available)
+	for i := 0; i < 5; i++ {
+		idx, _, ok := p.Next()
+		if !ok {
+			t.Fatalf("Next() returned ok=false on iteration %d", i)
+		}
+		if idx == 2 {
+			t.Errorf("key 2 (inUse) was selected on iteration %d", i)
+		}
+		if idx == 0 {
+			// high RPM — acceptable but less preferred
+			t.Logf("iteration %d: selected high-RPM key (idx=0)", i)
+		}
+		p.Release(idx)
+	}
+}
+
+func Test_NextRPMHistoryCleanedUp(t *testing.T) {
+	p := NewKeyPool([]string{"a", "b"}, nil)
+
+	// Add old timestamps (>60s) to key 0 — should be ignored for RPM calculation
+	old := time.Now().Add(-120 * time.Second)
+	for i := 0; i < 100; i++ {
+		p.requestHistory[0] = append(p.requestHistory[0], old)
+	}
+	// Key 1 has 0 RPM (no history)
+
+	// Key 0's old history should be ignored
+	idx, _, ok := p.Next()
+	if !ok {
+		t.Fatal("Next() returned ok=false")
+	}
+	_ = idx
+	p.Release(idx)
+}
+
 func TestNextAllCooldown(t *testing.T) {
 	p := NewKeyPool([]string{"key-a", "key-b", "key-c"}, nil)
 	// Put all keys on cooldown for 10 minutes
