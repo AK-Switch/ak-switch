@@ -150,6 +150,27 @@ func (h *ColorHandler) handleCompact(ctx context.Context, r slog.Record) error {
 	bracketTS := fmt.Sprintf("%s[%s]%s", colorGray, ts, colorReset)
 
 	switch r.Message {
+	case "proxy request":
+		var method, url string
+		var bodySize int64
+		r.Attrs(func(a slog.Attr) bool {
+			switch a.Key {
+			case "method":
+				method = fmt.Sprintf("%v", a.Value.Any())
+			case "url":
+				url = fmt.Sprintf("%v", a.Value.Any())
+			case "body_size":
+				bodySize = attrInt64(a)
+			}
+			return true
+		})
+		url = compactURL(url)
+		sizeStr := formatSizeCompact(bodySize)
+		line := fmt.Sprintf("%s %s→ %s %s (%s)%s\n",
+			bracketTS, colorGray, method, url, sizeStr, colorReset)
+		fmt.Fprint(h.writer, line)
+		return nil
+
 	case "proxy success":
 		var status int
 		var provider, method, url, keyName string

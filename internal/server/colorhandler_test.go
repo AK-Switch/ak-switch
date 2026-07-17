@@ -102,12 +102,15 @@ func TestCompact_ProxyRequest(t *testing.T) {
 		"url", "https://token.sensenova.cn/v1/messages?beta=true", "body_size", 392394)
 
 	output := buf.String()
-	// Should fall through to TextHandler since compact mode no longer handles "proxy request"
-	if !strings.Contains(output, "level=INFO") {
-		t.Errorf("proxy request should fall through to TextHandler, got: %q", output)
+	// Compact mode handles "proxy request" with a compact format
+	if !strings.Contains(output, "→ POST") {
+		t.Errorf("compact request should contain → POST, got: %q", output)
 	}
-	if !strings.Contains(output, "proxy request") {
-		t.Errorf("proxy request should contain message text, got: %q", output)
+	if !strings.Contains(output, "/v1/messages?beta=true") {
+		t.Errorf("compact request should contain URL path, got: %q", output)
+	}
+	if strings.Contains(output, "INFO") {
+		t.Errorf("compact request should not contain level label INFO, got: %q", output)
 	}
 }
 
