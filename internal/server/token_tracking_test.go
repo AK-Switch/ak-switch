@@ -96,6 +96,54 @@ func TestExtractTokenUsage_PartialUsage(t *testing.T) {
 	}
 }
 
+
+
+// ── extractResponseText ──────────────────────────
+
+func TestExtractResponseText_AnthropicFormat(t *testing.T) {
+	body := []byte(`{"content":[{"type":"text","text":"Hello world"},{"type":"text","text":"Second block"}]}`)
+	text := extractResponseText(body)
+	if text != "Hello world Second block" {
+		t.Errorf("extractResponseText = %q, want %q", text, "Hello world Second block")
+	}
+}
+
+func TestExtractResponseText_OpenAIFormat(t *testing.T) {
+	body := []byte(`{"choices":[{"message":{"content":"Hello from OpenAI"}}]}`)
+	text := extractResponseText(body)
+	if text != "Hello from OpenAI" {
+		t.Errorf("extractResponseText = %q, want %q", text, "Hello from OpenAI")
+	}
+}
+
+func TestExtractResponseText_EmptyBody(t *testing.T) {
+	text := extractResponseText(nil)
+	if text != "" {
+		t.Errorf("extractResponseText(nil) = %q, want empty", text)
+	}
+
+	text = extractResponseText([]byte{})
+	if text != "" {
+		t.Errorf("extractResponseText(empty) = %q, want empty", text)
+	}
+}
+
+func TestExtractResponseText_NoTextContent(t *testing.T) {
+	body := []byte(`{"id":"msg_xxx","type":"message"}`)
+	text := extractResponseText(body)
+	if text != "" {
+		t.Errorf("extractResponseText = %q, want empty", text)
+	}
+}
+
+func TestExtractResponseText_AnthropicNoTextBlock(t *testing.T) {
+	body := []byte(`{"content":[{"type":"tool_use","name":"get_weather"}]}`)
+	text := extractResponseText(body)
+	if text != "" {
+		t.Errorf("extractResponseText = %q, want empty for tool_use only", text)
+	}
+}
+
 // ── streamSSEAndEstimateTokens ─────────────────────────
 
 func TestStreamSSE_EmptyStream(t *testing.T) {

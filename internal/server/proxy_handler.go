@@ -334,7 +334,8 @@ func (pr *ProviderRouter) handleSuccess(w http.ResponseWriter, ps *ProviderState
 			inputTokens, outputTokens = extractTokenUsage(body)
 			// Also run tiktoken estimation for calibration comparison
 			inputEstimate := estimateInputTokens(bodyBytes, model)
-			outputEstimate := estimateOutputTokens(string(body), model)
+			responseText := extractResponseText(body)
+			outputEstimate := estimateOutputTokens(responseText, model)
 			if model != "" {
 				if inputEstimate > 0 && inputTokens > 0 {
 					pr.calibrator.Record(model, inputEstimate, inputTokens)
@@ -434,6 +435,58 @@ func extractTokenUsage(body []byte) (inputTokens, outputTokens int) {
 	}
 	// Fallback to OpenAI format (prompt_tokens/completion_tokens)
 	return result.Usage.PromptTokens, result.Usage.CompletionTokens
+}
+
+// extractResponseText extracts the text content from a response JSON body.
+// Supports both Anthropic format (content array of {type, text}) and
+// OpenAI format (choices[0].message.content). Returns empty string on failure.
+func extractResponseText(body []byte) string {
+	// Anthropic format: {"content": [{"type": "text", "text": "..."}]}
+	var anthropicResp struct {
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
+	}
+	if err := json.Unmarshal(body, &anthropicResp); err == nil {
+		var textBuilder strings.Builder
+		for _, block := range anthropicResp.Content {
+			if block.Type == "text" && block.Text != "" {
+				if textBuilder.Len() > 0 {
+					textBuilder.WriteByte(' ')
+				}
+				textBuilder.WriteString(block.Text)
+			}
+		}
+		if textBuilder.Len() > 0 {
+			return textBuilder.String()
+		}
+	}
+
+	// OpenAI format: {"choices": [{"message": {"content": "..."}}]}
+	var openAIResp struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.Unmarshal(body, &openAIResp); err == nil {
+		var textBuilder strings.Builder
+		for _, choice := range openAIResp.Choices {
+			if choice.Message.Content != "" {
+				if textBuilder.Len() > 0 {
+					textBuilder.WriteByte(' ')
+				}
+				textBuilder.WriteString(choice.Message.Content)
+			}
+		}
+		if textBuilder.Len() > 0 {
+			return textBuilder.String()
+		}
+	}
+
+	return ""
 }
 
 // recordProxyMetrics records request total count and duration metrics.
