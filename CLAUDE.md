@@ -51,6 +51,8 @@ go test -tags=e2e -run TestName -timeout=5m -race .         # E2E
 - `v0.x.1` — bug 修复（patch）
 - 当前最新：v0.3.0（旧测试 tag 已清理）
 
+**发版前确认：** CHANGELOG.md 已更新 → `git add CHANGELOG.md && git commit -m "docs: update changelog for v0.x.x"` → 再打 tag
+
 **流程（二选一）：**
 - `make release VERSION=v0.4.0`（等价于 `git tag v0.4.0 && git push origin v0.4.0`）
 - 或从 GitHub Actions 页面手动触发 `Build & Release` workflow，填入版本号
