@@ -98,7 +98,7 @@ func TestStreamSSE_EmptyStream(t *testing.T) {
 	respBody := io.NopCloser(strings.NewReader(""))
 	resp := &http.Response{Body: respBody, Header: make(http.Header)}
 
-	input, output := streamSSEAndEstimateTokens(w, resp, nil)
+	input, output, _ := streamSSEAndEstimateTokens(w, resp, nil)
 
 	if input != 0 {
 		t.Errorf("input_tokens = %d, want 0", input)
@@ -119,7 +119,7 @@ func TestStreamSSE_NoContentDeltaEvents(t *testing.T) {
 	respBody := io.NopCloser(strings.NewReader(sseData))
 	resp := &http.Response{Body: respBody, Header: make(http.Header)}
 
-	_, output := streamSSEAndEstimateTokens(w, resp, nil)
+	_, output, _ := streamSSEAndEstimateTokens(w, resp, nil)
 
 	if output != 0 {
 		t.Errorf("output_tokens = %d, want 0 (no content delta)", output)
@@ -137,7 +137,7 @@ func TestStreamSSE_SingleContentBlock(t *testing.T) {
 	respBody := io.NopCloser(strings.NewReader(sseData))
 	resp := &http.Response{Body: respBody, Header: make(http.Header)}
 
-	_, output := streamSSEAndEstimateTokens(w, resp, nil)
+	_, output, _ := streamSSEAndEstimateTokens(w, resp, nil)
 
 	// "Hello world" should produce at least 1 token
 	if output <= 0 {
@@ -162,7 +162,7 @@ func TestStreamSSE_InputTokenEstimation(t *testing.T) {
 
 	reqBody := []byte(`{"messages":[{"role":"user","content":"Say hello in one word"}]}`)
 
-	input, output := streamSSEAndEstimateTokens(w, resp, reqBody)
+	input, output, _ := streamSSEAndEstimateTokens(w, resp, reqBody)
 
 	if input <= 0 {
 		t.Errorf("input_tokens = %d, want > 0", input)
@@ -182,7 +182,7 @@ func TestStreamSSE_LongText(t *testing.T) {
 	respBody := io.NopCloser(strings.NewReader(sseData))
 	resp := &http.Response{Body: respBody, Header: make(http.Header)}
 
-	_, output := streamSSEAndEstimateTokens(w, resp, nil)
+	_, output, _ := streamSSEAndEstimateTokens(w, resp, nil)
 
 	if output <= 1 {
 		t.Errorf("output_tokens = %d, want > 1 for longer text", output)
@@ -205,7 +205,7 @@ func TestStreamSSE_MultipleContentBlocks(t *testing.T) {
 	respBody := io.NopCloser(strings.NewReader(sseData))
 	resp := &http.Response{Body: respBody, Header: make(http.Header)}
 
-	_, output := streamSSEAndEstimateTokens(w, resp, nil)
+	_, output, _ := streamSSEAndEstimateTokens(w, resp, nil)
 
 	if output <= 0 {
 		t.Errorf("output_tokens = %d, want > 0", output)
