@@ -308,3 +308,98 @@ func TestKeyringItemKey(t *testing.T) {
 		}
 	}
 }
+func TestSaveKeysInsecure_ThenLoadKeys(t *testing.T) {
+	store := &KeyStore{
+		Keys: []KeyEntry{
+			{Key: "sk-insecure-1", Name: "ci-env"},
+			{Key: "sk-insecure-2"},
+		},
+	}
+
+	if err := SaveKeysInsecure("insecure-test", store); err != nil {
+		t.Fatalf("SaveKeysInsecure: %v", err)
+	}
+
+	// LoadKeys should find the insecure file (keyring not set up)
+	loaded, err := LoadKeys("insecure-test")
+	if err != nil {
+		t.Fatalf("LoadKeys: %v", err)
+	}
+	if loaded == nil {
+		t.Fatal("LoadKeys returned nil, want insecure file data")
+	}
+	if len(loaded.Keys) != 2 {
+		t.Fatalf("got %d keys, want 2", len(loaded.Keys))
+	}
+	if loaded.Keys[0].Key != "sk-insecure-1" || loaded.Keys[0].Name != "ci-env" {
+		t.Errorf("entry 0 mismatch: %+v", loaded.Keys[0])
+	}
+	if loaded.Keys[1].Key != "sk-insecure-2" {
+		t.Errorf("entry 1 mismatch: %+v", loaded.Keys[1])
+	}
+}
+
+func TestLoadKeys_InsecureFileFallback(t *testing.T) {
+	// Setup: mock keyring is empty, but insecure file exists
+	setupMockKeyring(t)
+
+	store := &KeyStore{Keys: []KeyEntry{{Key: "fallback-key"}}}
+	if err := SaveKeysInsecure("fallback-test", store); err != nil {
+		t.Fatalf("SaveKeysInsecure: %v", err)
+	}
+
+	// LoadKeys should find the insecure file (keyring has no data)
+	loaded, err := LoadKeys("fallback-test")
+	if err != nil {
+		t.Fatalf("LoadKeys: %v", err)
+	}
+	if loaded == nil {
+		t.Fatal("LoadKeys returned nil, want insecure fallback data")
+	}
+	if len(loaded.Keys) != 1 || loaded.Keys[0].Key != "fallback-key" {
+		t.Errorf("unexpected data: %+v", loaded.Keys)
+	}
+}
+
+func TestLoadKeysFromStore_InsecureFileFallback(t *testing.T) {
+	store := &KeyStore{Keys: []KeyEntry{{Key: "fromstore-insecure"}}}
+	if err := SaveKeysInsecure("fromstore-test", store); err != nil {
+		t.Fatalf("SaveKeysInsecure: %v", err)
+	}
+
+	cfg := &config.Config{}
+	keys, names, loaded := LoadKeysFromStore("fromstore-test", cfg)
+	if !loaded {
+		t.Fatal("LoadKeysFromStore: loaded=false, want true")
+	}
+	if len(keys) != 1 || keys[0] != "fromstore-insecure" {
+		t.Errorf("keys = %v, want [fromstore-insecure]", keys)
+	}
+	if len(names) != 1 || names[0] != "" {
+		t.Errorf("names = %v, want empty strings", names)
+	}
+}
+
+func TestSaveKeysInsecure_FileExists(t *testing.T) {
+	// Write an insecure file, then overwrite it
+	store1 := &KeyStore{Keys: []KeyEntry{{Key: "first-version"}}}
+	if err := SaveKeysInsecure("overwrite-test", store1); err != nil {
+		t.Fatalf("SaveKeysInsecure first: %v", err)
+	}
+
+	store2 := &KeyStore{Keys: []KeyEntry{{Key: "second-version"}}}
+	if err := SaveKeysInsecure("overwrite-test", store2); err != nil {
+		t.Fatalf("SaveKeysInsecure second: %v", err)
+	}
+
+	loaded, err := LoadKeys("overwrite-test")
+	if err != nil {
+		t.Fatalf("LoadKeys: %v", err)
+	}
+	if loaded == nil || len(loaded.Keys) != 1 {
+		t.Fatalf("expected 1 key, got %+v", loaded)
+	}
+	if loaded.Keys[0].Key != "second-version" {
+		t.Errorf("key = %q, want %q", loaded.Keys[0].Key, "second-version")
+	}
+}
