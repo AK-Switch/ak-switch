@@ -13,6 +13,13 @@ func TestKeyAddCmd_HasNameFlag(t *testing.T) {
 	}
 }
 
+func TestKeyAddCmd_HasInsecureStorageFlag(t *testing.T) {
+	flag := keyAddCmd.Flags().Lookup("insecure-storage")
+	if flag == nil {
+		t.Fatal("expected --insecure-storage flag to be registered on key add command")
+	}
+}
+
 func TestProviderAddCmd_HasTargetFlag(t *testing.T) {
 	flag := providerAddCmd.Flags().Lookup("target")
 	if flag == nil {

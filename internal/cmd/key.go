@@ -110,6 +110,7 @@ func init() {
 	keyCmd.AddCommand(keyEnableCmd)
 
 	keyAddCmd.Flags().StringP("name", "n", "", "Display name for the key")
+	keyAddCmd.Flags().Bool("insecure-storage", false, "Store keys in plaintext (WARNING: not encrypted)")
 }
 
 var keyCmd = &cobra.Command{
@@ -125,10 +126,12 @@ var keyAddCmd = &cobra.Command{
 
 The key is added to the system keyring (or encrypted file fallback).
 If the store does not exist, it is created.
+Use --insecure-storage to store keys in plaintext (CI/disposable environments).
 
 Example:
   akswitch key add nvidia sk-xxxxxxxxxxxxxxxx
-  akswitch key add nvidia sk-xxxxxxxxxxxxxxxx --name my-key`,
+  akswitch key add nvidia sk-xxxxxxxxxxxxxxxx --name my-key
+  akswitch key add nvidia sk-xxxxxxxxxxxxxxxx --insecure-storage`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		provider := args[0]
@@ -136,6 +139,13 @@ Example:
 		name, _ := cmd.Flags().GetString("name")
 
 		setupEncryption()
+
+		insecure, _ := cmd.Flags().GetBool("insecure-storage")
+		if insecure {
+			fmt.Fprintln(os.Stderr, "WARNING: API keys will be stored in plaintext (not encrypted).")
+			fmt.Fprintln(os.Stderr, "Use this only in CI or environments without a system keyring.")
+			fmt.Fprintln(os.Stderr, "Do not use this on a shared machine.")
+		}
 
 		store, err := keypool.LoadKeys(provider)
 		if err != nil {
@@ -150,8 +160,14 @@ Example:
 			Name: name,
 		})
 
-		if err := keypool.SaveKeys(provider, store); err != nil {
-			return fmt.Errorf("failed to save keys for %q: %w", provider, err)
+		if insecure {
+			if err := keypool.SaveKeysInsecure(provider, store); err != nil {
+				return fmt.Errorf("failed to save keys for %q: %w", provider, err)
+			}
+		} else {
+			if err := keypool.SaveKeys(provider, store); err != nil {
+				return fmt.Errorf("failed to save keys for %q: %w", provider, err)
+			}
 		}
 
 		fmt.Printf("Key added to provider %q (total: %d keys)\n", provider, len(store.Keys))

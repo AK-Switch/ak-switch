@@ -123,8 +123,29 @@ func SaveKeys(provider string, store *KeyStore) error {
 	return saveToKeyring(provider, store)
 }
 
+// SaveKeysInsecure saves a KeyStore for a provider as a plaintext JSON file.
+// WARNING: The keys are NOT encrypted. Only use in CI/disposable environments.
+// The file is written to <XDG config dir>/keys/<provider>.json.
+func SaveKeysInsecure(provider string, store *KeyStore) error {
+	path, err := insecureKeysPath(provider)
+	if err != nil {
+		return err
+	}
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return fmt.Errorf("create keys dir: %w", err)
+	}
+	data, err := json.MarshalIndent(store, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0644)
+}
+
 // LoadKeys loads a KeyStore for a provider from the system keyring.
-// If no keyring data is found, attempts migration from the old encrypted file.
+// If no keyring data is found, attempts fallback backends in order:
+//   1. Insecure plaintext file (<XDG config dir>/keys/<provider>.json)
+//   2. Migration from old encrypted file (<XDG config dir>/keys/<provider>.enc)
 // Returns (nil, nil) if no stored keys exist in any backend.
 func LoadKeys(provider string) (*KeyStore, error) {
 	// 1. Try keyring first
@@ -135,7 +156,13 @@ func LoadKeys(provider string) (*KeyStore, error) {
 		return store, nil
 	}
 
-	// 2. Migrate from old encrypted file
+	// 2. Try insecure plaintext file
+	store, err = loadInsecureFile(provider)
+	if err == nil && store != nil {
+		return store, nil
+	}
+
+	// 3. Migrate from old encrypted file
 	oldPath, pathErr := legacyKeysPath(provider)
 	if pathErr != nil {
 		return nil, nil
@@ -152,6 +179,24 @@ func LoadKeys(provider string) (*KeyStore, error) {
 	}
 
 	return nil, nil
+}
+
+// insecureKeysPath returns the path for a provider's insecure plaintext key file.
+func insecureKeysPath(provider string) (string, error) {
+	xdgPath, err := config.XDGConfigPath()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(filepath.Dir(xdgPath), "keys", provider+".json"), nil
+}
+
+// loadInsecureFile loads a KeyStore from a plaintext JSON file.
+func loadInsecureFile(provider string) (*KeyStore, error) {
+	path, err := insecureKeysPath(provider)
+	if err != nil {
+		return nil, err
+	}
+	return LoadFullStore(path)
 }
 
 // legacyKeysPath returns the old file path for a provider's keys.
@@ -180,7 +225,13 @@ func LoadKeysFromStore(name string, cfg *config.Config) (keys, names []string, l
 		}
 	}
 
-	// 3. Fallback: legacy encrypted file
+	// 3. Fallback: insecure plaintext file
+	if store, err := loadInsecureFile(name); err == nil && store != nil {
+		k, n := keysFromStore(store)
+		return k, n, true
+	}
+
+	// 4. Fallback: legacy encrypted file
 	xdgPath, err := config.XDGConfigPath()
 	if err != nil {
 		return nil, nil, false

@@ -267,3 +267,60 @@ func TestKeyRemove_InvalidIndex(t *testing.T) {
 		t.Errorf("error message = %q, want it to contain 'out of range'", err.Error())
 	}
 }
+
+// TestKeyAdd_InsecureStorage verifies that "akswitch key add <provider> <key> --insecure-storage"
+// stores the key as plaintext JSON and prints a warning.
+func TestKeyAdd_InsecureStorage(t *testing.T) {
+	cmd.ResetConfigEnv()
+	tmpDir := t.TempDir()
+	config.ConfigDir = tmpDir
+	t.Cleanup(func() { config.ConfigDir = "" })
+
+	xdgPath, err := config.XDGConfigPath()
+	if err != nil {
+		t.Fatalf("XDGConfigPath failed: %v", err)
+	}
+	cmd.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+	cmd.RunCommand(t, "akswitch", "provider", "add", "insecurtest",
+		"--target", "https://insecurtest.api.com/v1",
+		"--port", "9510",
+	)
+
+	// Capture stderr and stdout
+	var stderrBuf, stdoutBuf bytes.Buffer
+	oldStdout := os.Stdout
+	oldStderr := os.Stderr
+	rOut, wOut, _ := os.Pipe()
+	rErr, wErr, _ := os.Pipe()
+	os.Stdout = wOut
+	os.Stderr = wErr
+
+	cmd.RunCommand(t, "akswitch", "key", "add", "insecurtest", "sk-insecure-test-key", "--insecure-storage")
+
+	wOut.Close()
+	wErr.Close()
+	os.Stdout = oldStdout
+	os.Stderr = oldStderr
+	io.Copy(&stdoutBuf, rOut)
+	io.Copy(&stderrBuf, rErr)
+
+	stderr := stderrBuf.String()
+	if !strings.Contains(stderr, "WARNING") {
+		t.Errorf("stderr missing warning:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, "plaintext") {
+		t.Errorf("stderr missing 'plaintext':\n%s", stderr)
+	}
+
+	// Verify key is stored (LoadKeys falls back to insecure file)
+	store, err := keypool.LoadKeys("insecurtest")
+	if err != nil {
+		t.Fatalf("LoadKeys failed: %v", err)
+	}
+	if store == nil || len(store.Keys) == 0 {
+		t.Fatal("no keys found after insecure add")
+	}
+	if store.Keys[0].Key != "sk-insecure-test-key" {
+		t.Errorf("Key = %q, want %q", store.Keys[0].Key, "sk-insecure-test-key")
+	}
+}
