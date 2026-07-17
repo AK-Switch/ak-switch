@@ -31,7 +31,8 @@ var startCmd = &cobra.Command{
 		providerFilter, _ := cmd.Flags().GetString("provider")
 		startAll, _ := cmd.Flags().GetBool("all")
 		logFormat, _ := cmd.Flags().GetString("log-format")
-			startServer(dashHTML, providerFilter, startAll, logFormat)
+		restartLogFormat = logFormat
+		startServer(dashHTML, providerFilter, startAll, logFormat)
 	},
 }
 
@@ -132,13 +133,14 @@ func resolveProviders(dashboardHTML string, providerFilter string, startAll bool
 // initProviders registers each selected provider into the router,
 // loading their API keys and applying log level configuration.
 func initProviders(router *server.ProviderRouter, providers map[string]*config.Config, shouldStart func(name string) bool, providerFilter string, logCompact bool) {
+	server.SetLogFormat(logCompact)
 	for name, cfg := range providers {
 		if !shouldStart(name) {
 			slog.Debug("skipping provider", "name", name)
 			continue
 		}
 
-		server.ApplyLogLevel(cfg.LogLevel, logCompact)
+		server.ApplyLogLevel(cfg.LogLevel)
 
 		// Load API keys from encrypted store or env
 		keys, keyNames := loadKeysForProvider(name, cfg)
@@ -285,6 +287,6 @@ func checkPidFile(pidFile string) (bool, int) {
 func init() {
 	startCmd.Flags().String("provider", "", "Only start the specified provider")
 	startCmd.Flags().Bool("all", false, "Start all providers (default: first provider alphabetically, or error if none configured)")
-	startCmd.Flags().String("log-format", "default", "Log output format: default or compact")
+	startCmd.Flags().String("log-format", "compact", "Log output format: default or compact")
 	rootCmd.AddCommand(startCmd)
 }
