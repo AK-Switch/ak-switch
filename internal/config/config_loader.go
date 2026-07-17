@@ -75,6 +75,10 @@ func LoadAllTomlProviders(path string) (map[string]*Config, error) {
 	if port == 0 {
 		port = DefaultConfig().Port
 	}
+	host := tc.Host
+	if host == "" {
+		host = DefaultConfig().Host
+	}
 	for name, p := range tc.Provider {
 		if p == nil {
 			p = DefaultConfig()
@@ -82,6 +86,8 @@ func LoadAllTomlProviders(path string) (map[string]*Config, error) {
 			mergeConfig(p)
 			p.Port = port
 		}
+		// Top-level host overrides per-provider host
+		p.Host = host
 		// Top-level log fields override per-provider log fields
 		if tc.LogFile != "" {
 			p.LogFile = tc.LogFile
@@ -95,6 +101,21 @@ func LoadAllTomlProviders(path string) (map[string]*Config, error) {
 		result[name] = p
 	}
 	return result, nil
+}
+
+// FindServerHost finds the first non-empty host from TOML providers.
+// Returns empty string if no host is configured or if the TOML file cannot be loaded.
+func FindServerHost(xdgPath string) string {
+	providers, err := LoadAllTomlProviders(xdgPath)
+	if err != nil {
+		return ""
+	}
+	for _, cfg := range providers {
+		if cfg.Host != "" {
+			return cfg.Host
+		}
+	}
+	return ""
 }
 
 // FindServerPort finds the first non-zero port from TOML providers.

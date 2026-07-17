@@ -12,7 +12,7 @@ func triggerReload() {
 	port := detectServerPort()
 
 	client := &http.Client{Timeout: 3 * time.Second}
-	url := fmt.Sprintf("http://127.0.0.1:%d/api/reload", port)
+	url := fmt.Sprintf("http://%s:%d/api/reload", detectServerHost(), port)
 	resp, err := client.Post(url, "application/json", nil)
 	if err != nil {
 		// Server not running, silently ignore

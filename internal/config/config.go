@@ -15,6 +15,7 @@ import (
 // to ensure required fields are present.
 type Config struct {
 	Port            int      `toml:"port,omitempty"`            // HTTP listen port (default 8080)
+	Host            string   `toml:"host,omitempty"`            // HTTP listen address (default "127.0.0.1")
 	TargetBase      string   `toml:"target"`                    // Upstream target base URL (required)
 	GenaiBase       string   `toml:"genai,omitempty"`           // Generative AI base URL (required)
 	AdminToken      string   `toml:"admin_token,omitempty"`     // Optional admin authentication token
@@ -62,6 +63,7 @@ type ConfigChange struct {
 func DefaultConfig() *Config {
 	return &Config{
 		Port:                8080,
+		Host:                "127.0.0.1",
 		MaxRetries:          2,
 		LogLevel:            "info",
 		CooldownSec:         15,
@@ -145,6 +147,9 @@ func mergeConfig(cfg *Config) {
 	}
 	if cfg.CooldownSec == 0 {
 		cfg.CooldownSec = def.CooldownSec
+	}
+	if cfg.Host == "" {
+		cfg.Host = def.Host
 	}
 	if cfg.MaxRetries == 0 {
 		cfg.MaxRetries = def.MaxRetries
