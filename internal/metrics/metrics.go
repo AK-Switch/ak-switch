@@ -24,6 +24,12 @@ type Metrics struct {
 
 	// Token usage metrics
 	TokenUsage *prometheus.CounterVec // akswitch_token_usage_total, labels: {"provider", "direction"}
+
+	// Retry metrics
+	RetryCount *prometheus.CounterVec // akswitch_retries_total, labels: {"provider"}
+
+	// Uptime tracking
+	UptimeSeconds prometheus.Gauge // akswitch_uptime_seconds
 }
 
 // NewRegistry creates a non-global Prometheus registry and registers all application metrics.
@@ -116,6 +122,21 @@ func NewRegistry() (*prometheus.Registry, *Metrics) {
 				Help:      "Total token usage by provider and direction (input/output).",
 			},
 			[]string{"provider", "direction"},
+		),
+		RetryCount: factory.NewCounterVec(
+			prometheus.CounterOpts{
+				Namespace: "akswitch",
+				Name:      "retries_total",
+				Help:      "Total number of retry attempts by provider.",
+			},
+			[]string{"provider"},
+		),
+		UptimeSeconds: factory.NewGauge(
+			prometheus.GaugeOpts{
+				Namespace: "akswitch",
+				Name:      "uptime_seconds",
+				Help:      "Server uptime in seconds.",
+			},
 		),
 	}
 
