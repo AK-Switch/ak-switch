@@ -15,8 +15,8 @@ func TestStartCmd_HasLogFormatFlag(t *testing.T) {
 	if !strings.Contains(flag.Usage, "compact") {
 		t.Errorf("--log-format flag usage should mention compact, got: %s", flag.Usage)
 	}
-	if flag.DefValue != "default" {
-		t.Errorf("--log-format flag default should be \"default\", got: %q", flag.DefValue)
+	if flag.DefValue != "compact" {
+		t.Errorf("--log-format flag default should be \"compact\", got: %q", flag.DefValue)
 	}
 }
 
