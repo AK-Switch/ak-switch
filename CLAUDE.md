@@ -138,14 +138,9 @@ internal/
 1. 从 main 创建分支
 2. 写代码，确保本地测试通过（`make test-all`）
 3. 提交 **Draft PR**（标题写明改动内容）
-4. 完成，不等 CI，不合并
+4. 完成——不等 CI，不合并，不提 auto-merge
 
-**Merger（合并）**
-- 仓库已启用 Auto-merge（自动合并）
-- 操作：`gh pr merge <number> --auto --merge`
-- 设完后 CI 绿了自动合并，不等
-
-### 提交前检查清单（强制）
+需要合并时，调用 merger skill（说"你是Merger"）。
 
 ### 提交前检查清单（强制）
 
