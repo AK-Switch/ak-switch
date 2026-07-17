@@ -18,6 +18,10 @@ import (
 // ApplyLogLevel sets this value, and both handlers reflect the change automatically.
 var logLevel slog.LevelVar
 
+// logCompact controls whether stdout uses compact ColorHandler format.
+// Set via SetLogFormat before the first ApplyLogLevel call.
+var logCompact bool
+
 // fileHandlerWriter is the active lumberjack.Logger for file logging.
 // nil when file logging is not configured.
 var fileHandlerWriter *lumberjack.Logger
@@ -73,11 +77,19 @@ func NewProxyEngine(cfg *config.Config, pool *keypool.KeyPool) *ProxyEngine {
 
 
 
+// SetLogFormat sets the log output format for stdout.
+// compact=true enables the compact ColorHandler format.
+// Must be called before the first ApplyLogLevel call to take effect.
+func SetLogFormat(compact bool) {
+	logCompact = compact
+}
+
 // ApplyLogLevel sets the global slog handler's minimum level based on a string.
 // Supported values: "debug", "info", "warn", "error".
 // Unknown or empty values default to slog.LevelInfo.
 // Updates both the stderr handler and the active file handler (if any).
-func ApplyLogLevel(level string, compact bool) {
+// The log output format (compact vs default) is controlled by SetLogFormat.
+func ApplyLogLevel(level string) {
 	var lvl slog.Level
 	switch strings.ToLower(level) {
 	case "debug":
@@ -93,7 +105,7 @@ func ApplyLogLevel(level string, compact bool) {
 	}
 	logLevel.Set(lvl)
 
-	stderrHandler := newHandler(os.Stderr, &logLevel, compact)
+	stderrHandler := newHandler(os.Stderr, &logLevel, logCompact)
 	if fileHandlerWriter != nil {
 		fileHandler := slog.NewTextHandler(fileHandlerWriter, &slog.HandlerOptions{Level: &logLevel})
 		slog.SetDefault(slog.New(&multiHandler{stderr: stderrHandler, file: fileHandler}))

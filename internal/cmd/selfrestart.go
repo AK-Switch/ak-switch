@@ -9,10 +9,11 @@ import (
 
 // 自监控重启相关全局变量
 var (
-	restartExePath string         // 当前二进制路径
-	restartSigCh   chan os.Signal // 指向 startServer 的信号通道
-	restartTicker  *time.Ticker   // 文件修改时间轮询
-	binaryUpdated  bool           // 由二进制更新检测 goroutine 设为 true，用于区分 Ctrl+C 和热更新
+	restartExePath   string         // 当前二进制路径
+	restartSigCh     chan os.Signal // 指向 startServer 的信号通道
+	restartTicker    *time.Ticker   // 文件修改时间轮询
+	binaryUpdated    bool           // 由二进制更新检测 goroutine 设为 true，用于区分 Ctrl+C 和热更新
+	restartLogFormat string         // 启动时的 --log-format 值，自重启时传递给新进程
 )
 
 // SetupSelfRestart 启动二进制自监控 goroutine。
@@ -88,7 +89,8 @@ func ExecRestart() {
 	}
 
 	slog.Info("正在启动新进程...", "path", exePath)
-	cmd := exec.Command(exePath, "start")
+	args := []string{"start", "--log-format", restartLogFormat}
+	cmd := exec.Command(exePath, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
