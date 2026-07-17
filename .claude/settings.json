@@ -1,5 +1,20 @@
 {
   "worktree": {
     "cleanupPeriodDays": 7
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/session-start.sh",
+            "timeout": 30,
+            "shell": "bash",
+            "statusMessage": "同步主目录到最新版本..."
+          }
+        ]
+      }
+    ]
   }
 }
