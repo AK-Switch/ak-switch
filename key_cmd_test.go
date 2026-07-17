@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -32,6 +31,7 @@ func TestKeyAdd_AddsKey(t *testing.T) {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
 	cmd.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+	keypool.RemoveKeys("keytest")
 	cmd.RunCommand(t, "akswitch", "provider", "add", "keytest",
 		"--target", "https://keytest.api.com/v1",
 		"--port", "9501",
@@ -40,12 +40,10 @@ func TestKeyAdd_AddsKey(t *testing.T) {
 	// Add a key
 	cmd.RunCommand(t, "akswitch", "key", "add", "keytest", "sk-test-key-12345")
 
-	// Verify key was added to the store
-	keysDir := filepath.Join(filepath.Dir(xdgPath), "keys")
-	keyFile := filepath.Join(keysDir, "keytest.enc")
-	store, err := keypool.LoadFullStore(keyFile)
+	// Verify key was added via keyring
+	store, err := keypool.LoadKeys("keytest")
 	if err != nil {
-		t.Fatalf("LoadFullStore failed: %v", err)
+		t.Fatalf("LoadKeys failed: %v", err)
 	}
 	if store == nil || len(store.Keys) == 0 {
 		t.Fatal("no keys found in store after add")
@@ -68,6 +66,7 @@ func TestKeyList_ShowsKeys(t *testing.T) {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
 	cmd.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+	keypool.RemoveKeys("listtest")
 	cmd.RunCommand(t, "akswitch", "provider", "add", "listtest",
 		"--target", "https://listtest.api.com/v1",
 		"--port", "9502",
@@ -114,6 +113,7 @@ func TestKeyRemove_RemovesKey(t *testing.T) {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
 	cmd.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+	keypool.RemoveKeys("removetest")
 	cmd.RunCommand(t, "akswitch", "provider", "add", "removetest",
 		"--target", "https://removetest.api.com/v1",
 		"--port", "9503",
@@ -125,11 +125,9 @@ func TestKeyRemove_RemovesKey(t *testing.T) {
 	cmd.RunCommand(t, "akswitch", "key", "remove", "removetest", "0")
 
 	// Verify key[0] was removed (should now be "sk-remove-key-2")
-	keysDir := filepath.Join(filepath.Dir(xdgPath), "keys")
-	keyFile := filepath.Join(keysDir, "removetest.enc")
-	store, err := keypool.LoadFullStore(keyFile)
+	store, err := keypool.LoadKeys("removetest")
 	if err != nil {
-		t.Fatalf("LoadFullStore failed: %v", err)
+		t.Fatalf("LoadKeys failed: %v", err)
 	}
 	if len(store.Keys) != 1 {
 		t.Fatalf("expected 1 key after remove, got %d", len(store.Keys))
@@ -152,6 +150,7 @@ func TestKeyDisable_DisablesKey(t *testing.T) {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
 	cmd.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+	keypool.RemoveKeys("disabletest")
 	cmd.RunCommand(t, "akswitch", "provider", "add", "disabletest",
 		"--target", "https://disabletest.api.com/v1",
 		"--port", "9504",
@@ -162,11 +161,9 @@ func TestKeyDisable_DisablesKey(t *testing.T) {
 	cmd.RunCommand(t, "akswitch", "key", "disable", "disabletest", "0")
 
 	// Verify key is disabled
-	keysDir := filepath.Join(filepath.Dir(xdgPath), "keys")
-	keyFile := filepath.Join(keysDir, "disabletest.enc")
-	store, err := keypool.LoadFullStore(keyFile)
+	store, err := keypool.LoadKeys("disabletest")
 	if err != nil {
-		t.Fatalf("LoadFullStore failed: %v", err)
+		t.Fatalf("LoadKeys failed: %v", err)
 	}
 	if len(store.Keys) != 1 {
 		t.Fatalf("expected 1 key, got %d", len(store.Keys))
@@ -189,6 +186,7 @@ func TestKeyEnable_EnablesKey(t *testing.T) {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
 	cmd.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+	keypool.RemoveKeys("enabletest")
 	cmd.RunCommand(t, "akswitch", "provider", "add", "enabletest",
 		"--target", "https://enabletest.api.com/v1",
 		"--port", "9506",
@@ -200,11 +198,9 @@ func TestKeyEnable_EnablesKey(t *testing.T) {
 	cmd.RunCommand(t, "akswitch", "key", "enable", "enabletest", "0")
 
 	// Verify key is enabled again
-	keysDir := filepath.Join(filepath.Dir(xdgPath), "keys")
-	keyFile := filepath.Join(keysDir, "enabletest.enc")
-	store, err := keypool.LoadFullStore(keyFile)
+	store, err := keypool.LoadKeys("enabletest")
 	if err != nil {
-		t.Fatalf("LoadFullStore failed: %v", err)
+		t.Fatalf("LoadKeys failed: %v", err)
 	}
 	if len(store.Keys) != 1 {
 		t.Fatalf("expected 1 key, got %d", len(store.Keys))
@@ -227,6 +223,7 @@ func TestKeyEnable_InvalidIndex(t *testing.T) {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
 	cmd.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+	keypool.RemoveKeys("enableerrtest")
 	cmd.RunCommand(t, "akswitch", "provider", "add", "enableerrtest",
 		"--target", "https://enableerrtest.api.com/v1",
 		"--port", "9507",
@@ -255,6 +252,7 @@ func TestKeyRemove_InvalidIndex(t *testing.T) {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
 	cmd.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+	keypool.RemoveKeys("errtest")
 	cmd.RunCommand(t, "akswitch", "provider", "add", "errtest",
 		"--target", "https://errtest.api.com/v1",
 		"--port", "9505",

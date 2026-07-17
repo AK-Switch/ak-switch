@@ -116,15 +116,71 @@ func SaveFullStore(path string, store *KeyStore) error {
 	return os.WriteFile(path, data, 0644)
 }
 
+// SaveKeys saves a KeyStore for a provider using the system keyring.
+// This is the primary write path; file-based SaveFullStore is retained
+// for migration and backward compatibility.
+func SaveKeys(provider string, store *KeyStore) error {
+	return saveToKeyring(provider, store)
+}
+
+// LoadKeys loads a KeyStore for a provider from the system keyring.
+// If no keyring data is found, attempts migration from the old encrypted file.
+// Returns (nil, nil) if no stored keys exist in any backend.
+func LoadKeys(provider string) (*KeyStore, error) {
+	// 1. Try keyring first
+	store, err := loadFromKeyring(provider)
+	if err != nil {
+		store = nil
+	} else if store != nil {
+		return store, nil
+	}
+
+	// 2. Migrate from old encrypted file
+	oldPath, pathErr := legacyKeysPath(provider)
+	if pathErr != nil {
+		return nil, nil
+	}
+	oldStore, loadErr := LoadFullStore(oldPath)
+	if loadErr != nil || oldStore == nil {
+		return nil, nil
+	}
+
+	// Migrate to keyring — best-effort; if it fails, keep old file
+	if saveErr := saveToKeyring(provider, oldStore); saveErr == nil {
+		os.Rename(oldPath, oldPath+".bak")
+		return oldStore, nil
+	}
+
+	return nil, nil
+}
+
+// legacyKeysPath returns the old file path for a provider's keys.
+func legacyKeysPath(provider string) (string, error) {
+	xdgPath, err := config.XDGConfigPath()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(filepath.Dir(xdgPath), "keys", provider+".enc"), nil
+}
+
 // LoadKeysFromStore loads API keys for a provider from the configured keys file
 // or the standard encrypted store. Returns loaded keys and whether keys were loaded.
 func LoadKeysFromStore(name string, cfg *config.Config) (keys, names []string, loaded bool) {
+	// 1. Try system keyring first
+	if store, err := loadFromKeyring(name); err == nil && store != nil {
+		k, n := keysFromStore(store)
+		return k, n, true
+	}
+
+	// 2. Fallback: custom keys file
 	if cfg.KeysFile != "" {
 		fileKeys, fileNames, err := LoadKeysFromFile(cfg.KeysFile)
 		if err == nil && fileKeys != nil {
 			return fileKeys, fileNames, true
 		}
 	}
+
+	// 3. Fallback: legacy encrypted file
 	xdgPath, err := config.XDGConfigPath()
 	if err != nil {
 		return nil, nil, false
@@ -135,4 +191,20 @@ func LoadKeysFromStore(name string, cfg *config.Config) (keys, names []string, l
 		return fileKeys, fileNames, true
 	}
 	return nil, nil, false
+}
+
+// RemoveKeys removes a provider's keys from the system keyring.
+func RemoveKeys(provider string) error {
+	return removeFromKeyring(provider)
+}
+
+// keysFromStore extracts key and name slices from a KeyStore.
+func keysFromStore(store *KeyStore) (keys, names []string) {
+	keys = make([]string, len(store.Keys))
+	names = make([]string, len(store.Keys))
+	for i, entry := range store.Keys {
+		keys[i] = entry.Key
+		names[i] = entry.Name
+	}
+	return keys, names
 }
