@@ -65,12 +65,19 @@ go test -tags=e2e -count=1 -timeout=5m -race ./
 4. 仓库启用 Auto-merge（squash），CI 通过后自动合并
 5. 合并后删除功能分支
 
-## 文档纪律
+## 📋 文档纪律（强制执行）
 
-- 修改 CLI 命令/标志 → 同步更新 `docs/cli-reference.md`
-- 新增配置字段 → 同步更新 `docs/configuration.md`
-- 新增 API 端点 → 同步更新 `docs/api.md`
-- 发版 → 更新 `CHANGELOG.md`
+每次变更都必须同步更新文档。这是**纪律，不是建议**——不更新的后果是 2 个月后又来一轮文档翻新。
+
+| 变更类型 | 必须同步更新的文档 | 时机 |
+|---------|------------------|------|
+| 新增/修改 CLI 命令或标志 | `docs/cli-reference.md` | **同一 PR** |
+| 新增/修改配置字段 | `docs/configuration.md` | **同一 PR** |
+| 新增/修改 API 端点 | `docs/api.md` | **同一 PR** |
+| 发版 / 里程碑完成 | `CHANGELOG.md` | 发版前 |
+| 新增功能影响架构 | `docs/architecture.md` | **同一 PR** |
+
+**核心原则：** 文档和代码在同一次合并中到达 main。先合并代码后补文档 = 文档永远补不上。
 
 ## 发版
 
