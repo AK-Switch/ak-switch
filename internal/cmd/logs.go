@@ -37,7 +37,7 @@ var logsCmd = &cobra.Command{
 		// Determine the server port from config or default
 		port := detectServerPort()
 
-		logURL := fmt.Sprintf("http://127.0.0.1:%d/logs", port)
+		logURL := fmt.Sprintf("http://%s:%d/logs", detectServerHost(), port)
 		if logsSince != "" {
 			logURL += "?" + url.Values{"since": {logsSince}}.Encode()
 		}
