@@ -51,6 +51,11 @@ jobs:
           CGO_ENABLED: 0
         run: |
           VERSION="${{ github.event.inputs.version || github.ref_name }}"
+          # Windows 构建时嵌入 exe 图标
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            GOOS= GOARCH= go install github.com/akavel/rsrc@latest
+            GOOS= GOARCH= $(go env GOPATH)/bin/rsrc -ico assets/icon.ico -o cmd/akswitch/akswitch.syso
+          fi
           go build -ldflags="-s -w -X akswitch/internal/cmd.Version=$VERSION" -o akswitch-${{ matrix.suffix }} ./cmd/akswitch/
       - name: Upload artifact
         uses: actions/upload-artifact@v4
