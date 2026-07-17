@@ -1,6 +1,6 @@
 # AK Switch — API Key 轮转代理
 
-[![Go Version](https://img.shields.io/badge/Go-1.26-blue)](https://go.dev)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/bigmanBass666/akswitch)](https://go.dev)
 [![Tests](https://img.shields.io/github/actions/workflow/status/bigmanBass666/akswitch/go.yml?branch=main&label=tests)](https://github.com/bigmanBass666/akswitch/actions)
 [![Release](https://img.shields.io/github/v/release/bigmanBass666/akswitch)](https://github.com/bigmanBass666/akswitch/releases)
 
@@ -39,17 +39,17 @@ akswitch start
 
 ## 核心功能
 
-- **Key 轮转** — 多 Key 轮询、429 指数退避、401/403 永久禁用、自动恢复
-- **RPM 感知选择** — 自动选择请求率最低的 Key，均衡负载
-- **两层熔断** — Key 级（限流退避） + 上游级（502/503 熔断 + 半开探测）
-- **单端口多 provider** — 一个端口、一个进程管理多个 provider（`/{provider}/...` 路径路由）
-- **Token 用量追踪** — 流式/非流式请求的 input/output tokens 提取与校准
-- **CLI 管理** — `provider` / `key` 增删查改，`status / logs / stop` 运行时管理
-- **加密存储** — API Key 以 AES-256-GCM 加密存储，可选 OS Keyring
-- **配置热重载** — TOML 配置修改自动生效，支持 diff 脱敏输出
-- **Dashboard** — 内置 Web 实时面板（`/dashboard`）
-- **Prometheus 指标** — 开箱即用的监控栈（AK Switch + Prometheus + Grafana）
-- **compact 日志** — 终端彩色精简日志输出，支持 `--log-format=default` 切换
+- 🔑 **Key 轮转** — 多 Key 轮询、429 指数退避、401/403 永久禁用、自动恢复
+- ⚖️ **RPM 感知选择** — 自动选择请求率最低的 Key，均衡负载
+- 🛡️ **两层熔断** — Key 级（限流退避） + 上游级（502/503 熔断 + 半开探测）
+- 🌐 **单端口多 provider** — 一个端口、一个进程管理多个 provider（`/{provider}/...` 路径路由）
+- 📊 **Token 用量追踪** — 流式/非流式请求的 input/output tokens 提取与校准
+- ⌨️ **CLI 管理** — `provider` / `key` 增删查改，`status / logs / stop` 运行时管理
+- 🔒 **加密存储** — API Key 以 AES-256-GCM 加密存储，可选 OS Keyring
+- ♻️ **配置热重载** — TOML 配置修改自动生效，支持 diff 脱敏输出
+- 📈 **Dashboard** — 内置 Web 实时面板（`/dashboard`）
+- 📏 **Prometheus 指标** — 开箱即用的监控栈（AK Switch + Prometheus + Grafana）
+- 📝 **compact 日志** — 终端彩色精简日志输出，支持 `--log-format=default` 切换
 
 ## 文档
 
