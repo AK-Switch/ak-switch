@@ -413,19 +413,27 @@ func buildLogEntry(ps *ProviderState, key string, idx int, method, target string
 	}
 }
 
-// extractTokenUsage attempts to parse input_tokens and output_tokens from
-// a JSON response body (Anthropic-style usage block). Returns 0, 0 on failure.
+// extractTokenUsage attempts to parse input_tokens/output_tokens from a JSON response body.
+// Supports both Anthropic format (input_tokens/output_tokens) and OpenAI format
+// (prompt_tokens/completion_tokens). Returns 0, 0 on failure.
 func extractTokenUsage(body []byte) (inputTokens, outputTokens int) {
 	var result struct {
 		Usage struct {
-			InputTokens  int `json:"input_tokens"`
-			OutputTokens int `json:"output_tokens"`
+			InputTokens      int `json:"input_tokens"`
+			OutputTokens     int `json:"output_tokens"`
+			PromptTokens     int `json:"prompt_tokens"`
+			CompletionTokens int `json:"completion_tokens"`
 		} `json:"usage"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
 		return 0, 0
 	}
-	return result.Usage.InputTokens, result.Usage.OutputTokens
+	// Prefer Anthropic format (input_tokens/output_tokens)
+	if result.Usage.InputTokens > 0 || result.Usage.OutputTokens > 0 {
+		return result.Usage.InputTokens, result.Usage.OutputTokens
+	}
+	// Fallback to OpenAI format (prompt_tokens/completion_tokens)
+	return result.Usage.PromptTokens, result.Usage.CompletionTokens
 }
 
 // recordProxyMetrics records request total count and duration metrics.
