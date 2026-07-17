@@ -519,13 +519,15 @@ func estimateOutputTokens(text string) int {
 
 // estimateInputTokens extracts message content from a request body and estimates
 // the input token count using tiktoken. Returns 0 if parsing fails or body is empty.
+// Supports both OpenAI format (content is a string) and Anthropic format
+// (content is an array of {type, text} objects).
 func estimateInputTokens(bodyBytes []byte) int {
 	if len(bodyBytes) == 0 {
 		return 0
 	}
 	var reqBody struct {
 		Messages []struct {
-			Content string `json:"content"`
+			Content json.RawMessage `json:"content"`
 		} `json:"messages"`
 	}
 	if err := json.Unmarshal(bodyBytes, &reqBody); err != nil || len(reqBody.Messages) == 0 {
@@ -533,7 +535,27 @@ func estimateInputTokens(bodyBytes []byte) int {
 	}
 	var inputBuf strings.Builder
 	for _, msg := range reqBody.Messages {
-		inputBuf.WriteString(msg.Content)
+		// content can be either a string or an array of {type, text} objects
+		if len(msg.Content) == 0 {
+			continue
+		}
+		if msg.Content[0] == '"' {
+			// String format: "content": "text"
+			var s string
+			if json.Unmarshal(msg.Content, &s) == nil {
+				inputBuf.WriteString(s)
+			}
+		} else if msg.Content[0] == '[' {
+			// Anthropic array format: "content": [{"type": "text", "text": "..."}]
+			var parts []struct {
+				Text string `json:"text"`
+			}
+			if json.Unmarshal(msg.Content, &parts) == nil {
+				for _, p := range parts {
+					inputBuf.WriteString(p.Text)
+				}
+			}
+		}
 	}
 	tke, err := tiktoken.GetEncoding("cl100k_base")
 	if err != nil {
