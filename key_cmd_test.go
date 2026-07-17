@@ -324,3 +324,163 @@ func TestKeyAdd_InsecureStorage(t *testing.T) {
 		t.Errorf("Key = %q, want %q", store.Keys[0].Key, "sk-insecure-test-key")
 	}
 }
+// ── Key Import Acceptance Tests ─────────────────────────
+
+// TestKeyImport_FromArgs verifies that "akswitch key import <provider> <key1> <key2>"
+// imports multiple keys from command line arguments.
+func TestKeyImport_FromArgs(t *testing.T) {
+	cmd.ResetConfigEnv()
+	tmpDir := t.TempDir()
+	config.ConfigDir = tmpDir
+	t.Cleanup(func() { config.ConfigDir = "" })
+
+	xdgPath, err := config.XDGConfigPath()
+	if err != nil {
+		t.Fatalf("XDGConfigPath failed: %v", err)
+	}
+	cmd.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+	keypool.RemoveKeys("importtest")
+	cmd.RunCommand(t, "akswitch", "provider", "add", "importtest",
+		"--target", "https://importtest.api.com/v1",
+		"--port", "9520",
+	)
+
+	// Import three keys from args
+	cmd.RunCommand(t, "akswitch", "key", "import", "importtest", "sk-import-1", "sk-import-2", "sk-import-3")
+
+	// Verify all keys were imported
+	store, err := keypool.LoadKeys("importtest")
+	if err != nil {
+		t.Fatalf("LoadKeys failed: %v", err)
+	}
+	if store == nil || len(store.Keys) != 3 {
+		t.Fatalf("expected 3 keys, got %d", len(store.Keys))
+	}
+	if store.Keys[0].Key != "sk-import-1" || store.Keys[1].Key != "sk-import-2" || store.Keys[2].Key != "sk-import-3" {
+		t.Errorf("keys mismatch: %+v", store.Keys)
+	}
+}
+
+// TestKeyImport_FromFile verifies that "akswitch key import <provider> --file <path>"
+// imports keys from a JSON file.
+func TestKeyImport_FromFile(t *testing.T) {
+	cmd.ResetConfigEnv()
+	tmpDir := t.TempDir()
+	config.ConfigDir = tmpDir
+	t.Cleanup(func() { config.ConfigDir = "" })
+
+	xdgPath, err := config.XDGConfigPath()
+	if err != nil {
+		t.Fatalf("XDGConfigPath failed: %v", err)
+	}
+	cmd.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+	keypool.RemoveKeys("fileimporttest")
+	cmd.RunCommand(t, "akswitch", "provider", "add", "fileimporttest",
+		"--target", "https://fileimporttest.api.com/v1",
+		"--port", "9521",
+	)
+
+	// Write a JSON file with keys
+	keysJSON := []byte(`["sk-file-1", "sk-file-2", "sk-file-3"]`)
+	keysFile := tmpDir + "/keys.json"
+	if err := os.WriteFile(keysFile, keysJSON, 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	// Import from file
+	cmd.RunCommand(t, "akswitch", "key", "import", "fileimporttest", "--file", keysFile)
+
+	// Verify all keys were imported
+	store, err := keypool.LoadKeys("fileimporttest")
+	if err != nil {
+		t.Fatalf("LoadKeys failed: %v", err)
+	}
+	if store == nil || len(store.Keys) != 3 {
+		t.Fatalf("expected 3 keys, got %d", len(store.Keys))
+	}
+	if store.Keys[0].Key != "sk-file-1" || store.Keys[1].Key != "sk-file-2" || store.Keys[2].Key != "sk-file-3" {
+		t.Errorf("keys mismatch: %+v", store.Keys)
+	}
+}
+
+// TestKeyImport_FromFileWithObjects verifies that the JSON format with key objects works.
+func TestKeyImport_FromFileWithObjects(t *testing.T) {
+	cmd.ResetConfigEnv()
+	tmpDir := t.TempDir()
+	config.ConfigDir = tmpDir
+	t.Cleanup(func() { config.ConfigDir = "" })
+
+	xdgPath, err := config.XDGConfigPath()
+	if err != nil {
+		t.Fatalf("XDGConfigPath failed: %v", err)
+	}
+	cmd.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+	keypool.RemoveKeys("objimporttest")
+	cmd.RunCommand(t, "akswitch", "provider", "add", "objimporttest",
+		"--target", "https://objimporttest.api.com/v1",
+		"--port", "9522",
+	)
+
+	// Write a JSON file with key objects (with names)
+	keysJSON := []byte(`[{"key": "sk-obj-1", "name": "key-one"}, {"key": "sk-obj-2", "name": "key-two"}]`)
+	keysFile := tmpDir + "/keys.json"
+	if err := os.WriteFile(keysFile, keysJSON, 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	// Import from file
+	cmd.RunCommand(t, "akswitch", "key", "import", "objimporttest", "--file", keysFile)
+
+	// Verify keys were imported with names
+	store, err := keypool.LoadKeys("objimporttest")
+	if err != nil {
+		t.Fatalf("LoadKeys failed: %v", err)
+	}
+	if store == nil || len(store.Keys) != 2 {
+		t.Fatalf("expected 2 keys, got %d", len(store.Keys))
+	}
+	if store.Keys[0].Key != "sk-obj-1" || store.Keys[0].Name != "key-one" {
+		t.Errorf("entry 0 mismatch: %+v", store.Keys[0])
+	}
+	if store.Keys[1].Key != "sk-obj-2" || store.Keys[1].Name != "key-two" {
+		t.Errorf("entry 1 mismatch: %+v", store.Keys[1])
+	}
+}
+
+// TestKeyImport_EmptyInput verifies that importing with no keys returns an error.
+func TestKeyImport_EmptyInput(t *testing.T) {
+	cmd.ResetConfigEnv()
+	tmpDir := t.TempDir()
+	config.ConfigDir = tmpDir
+	t.Cleanup(func() { config.ConfigDir = "" })
+
+	xdgPath, err := config.XDGConfigPath()
+	if err != nil {
+		t.Fatalf("XDGConfigPath failed: %v", err)
+	}
+	cmd.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+	keypool.RemoveKeys("emptyimporttest")
+	cmd.RunCommand(t, "akswitch", "provider", "add", "emptyimporttest",
+		"--target", "https://emptyimporttest.api.com/v1",
+		"--port", "9523",
+	)
+
+	// Write an empty JSON array to a file
+	keysJSON := []byte(`[]`)
+	keysFile := tmpDir + "/empty.json"
+	if err := os.WriteFile(keysFile, keysJSON, 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	// Import empty file should succeed but add no keys
+	cmd.RunCommand(t, "akswitch", "key", "import", "emptyimporttest", "--file", keysFile)
+
+	store, err := keypool.LoadKeys("emptyimporttest")
+	if err != nil {
+		t.Fatalf("LoadKeys failed: %v", err)
+	}
+	if store != nil && len(store.Keys) > 0 {
+		t.Errorf("expected no keys, got %d", len(store.Keys))
+	}
+}
+

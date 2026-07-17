@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 
@@ -76,6 +78,10 @@ func init() {
 	keyCmd.AddCommand(keyRemoveCmd)
 	keyCmd.AddCommand(keyDisableCmd)
 	keyCmd.AddCommand(keyEnableCmd)
+	keyCmd.AddCommand(keyImportCmd)
+	keyImportCmd.Flags().StringP("file", "f", "", "Import keys from a JSON file")
+	keyImportCmd.Flags().StringP("name", "n", "", "Display name for imported keys")
+	keyImportCmd.Flags().Bool("insecure-storage", false, "Store keys in plaintext (WARNING: not encrypted)")
 
 	keyAddCmd.Flags().StringP("name", "n", "", "Display name for the key")
 	keyAddCmd.Flags().Bool("insecure-storage", false, "Store keys in plaintext (WARNING: not encrypted)")
@@ -141,7 +147,102 @@ Example:
 		return nil
 	},
 }
+var keyImportCmd = &cobra.Command{
+	Use:   "import <provider> [keys...]",
+	Short: "Import API keys from a file, stdin, or command line",
+	Long: `Import one or more API keys for the specified provider.
 
+Keys can be provided as command-line arguments, from a JSON file, or from stdin.
+
+JSON file format:
+  ["key1", "key2", "key3"]
+  or
+  [{"key": "key1", "name": "name1"}, {"key": "key2"}]
+
+Examples:
+  akswitch key import nvidia sk-1 sk-2 sk-3
+  akswitch key import nvidia --file keys.json
+  cat keys.json | akswitch key import nvidia`,
+	Args: cobra.MinimumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		provider := args[0]
+		keyArgs := args[1:]
+
+		filePath, _ := cmd.Flags().GetString("file")
+		name, _ := cmd.Flags().GetString("name")
+		insecure, _ := cmd.Flags().GetBool("insecure-storage")
+
+		// Parse input source
+		var entries []keypool.KeyEntry
+		if filePath != "" {
+			data, err := os.ReadFile(filePath)
+			if err != nil {
+				return fmt.Errorf("failed to read %q: %w", filePath, err)
+			}
+			entries, err = parseKeyEntries(data)
+			if err != nil {
+				return fmt.Errorf("failed to parse %q: %w", filePath, err)
+			}
+		} else if len(keyArgs) > 0 {
+			for _, k := range keyArgs {
+				entries = append(entries, keypool.KeyEntry{Key: k, Name: name})
+			}
+		} else {
+			data, err := io.ReadAll(os.Stdin)
+			if err != nil {
+				return fmt.Errorf("failed to read stdin: %w", err)
+			}
+			if len(data) == 0 {
+				return fmt.Errorf("no input provided: specify keys as arguments, use --file, or pipe to stdin")
+			}
+			entries, err = parseKeyEntries(data)
+			if err != nil {
+				return fmt.Errorf("failed to parse stdin: %w", err)
+			}
+			if name != "" {
+				for i := range entries {
+					if entries[i].Name == "" {
+						entries[i].Name = name
+					}
+				}
+			}
+		}
+
+		if len(entries) == 0 {
+			return fmt.Errorf("no keys to import")
+		}
+
+		if insecure {
+			fmt.Fprintln(os.Stderr, "WARNING: API keys will be stored in plaintext (not encrypted).")
+			fmt.Fprintln(os.Stderr, "Use this only in CI or environments without a system keyring.")
+			fmt.Fprintln(os.Stderr, "Do not use this on a shared machine.")
+		}
+
+		store, err := keypool.LoadKeys(provider)
+		if err != nil {
+			return fmt.Errorf("failed to load keys for %q: %w", provider, err)
+		}
+		if store == nil {
+			store = &keypool.KeyStore{Keys: []keypool.KeyEntry{}}
+		}
+
+		store.Keys = append(store.Keys, entries...)
+
+		if insecure {
+			if err := keypool.SaveKeysInsecure(provider, store); err != nil {
+				return fmt.Errorf("failed to save keys for %q: %w", provider, err)
+			}
+		} else {
+			if err := keypool.SaveKeys(provider, store); err != nil {
+				return fmt.Errorf("failed to save keys for %q: %w", provider, err)
+			}
+		}
+
+					fmt.Printf("Imported %d key(s) to provider %q (total: %d keys)\n", len(entries), provider, len(store.Keys))
+		triggerReload()
+		return nil
+	},
+}
 var keyListCmd = &cobra.Command{
 	Use:   "list <provider>",
 	Short: "List API keys for a provider",
@@ -242,4 +343,25 @@ Example:
 		}
 		return updateKey(args[0], idx, KeyEnable)
 	},
+}
+
+// parseKeyEntries parses JSON key data into KeyEntry slices.
+// Supports: ["key1", "key2"] or [{"key": "key1", "name": "n1"}, ...]
+func parseKeyEntries(data []byte) ([]keypool.KeyEntry, error) {
+	// Try array of strings first
+	var keys []string
+	if err := json.Unmarshal(data, &keys); err == nil {
+		entries := make([]keypool.KeyEntry, len(keys))
+		for i, k := range keys {
+			entries[i] = keypool.KeyEntry{Key: k}
+		}
+		return entries, nil
+	}
+
+	// Try array of objects
+	var entries []keypool.KeyEntry
+	if err := json.Unmarshal(data, &entries); err != nil {
+		return nil, fmt.Errorf("expected JSON array of strings or key objects: %w", err)
+	}
+	return entries, nil
 }
