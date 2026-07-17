@@ -96,6 +96,7 @@ Providers (from /home/user/.config/akswitch/config.toml):
 
 ```bash
 akswitch key add <provider> <key> [--name <name>]    # 添加 Key
+akswitch key import <provider> [keys...]               # 批量导入 Key（文件/参数/标准输入）
 akswitch key list <provider>                           # 列出 Key（脱敏显示）
 akswitch key remove <provider> <index>                 # 删除 Key
 akswitch key disable <provider> <index>                # 禁用 Key
