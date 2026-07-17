@@ -55,12 +55,7 @@ func setupEncryption() {
 func updateKey(provider string, idx int, op KeyMutation) error {
 	setupEncryption()
 
-	path, err := keysPath(provider)
-	if err != nil {
-		return err
-	}
-
-	store, err := keypool.LoadFullStore(path)
+	store, err := keypool.LoadKeys(provider)
 	if err != nil {
 		return fmt.Errorf("failed to load keys for %q: %w", provider, err)
 	}
@@ -89,7 +84,7 @@ func updateKey(provider string, idx int, op KeyMutation) error {
 		store.Keys = append(store.Keys[:idx], store.Keys[idx+1:]...)
 	}
 
-	if err := keypool.SaveFullStore(path, store); err != nil {
+	if err := keypool.SaveKeys(provider, store); err != nil {
 		return fmt.Errorf("failed to save keys for %q: %w", provider, err)
 	}
 
@@ -161,7 +156,7 @@ Example:
 			Name: name,
 		})
 
-		if err := keypool.SaveFullStore(path, store); err != nil {
+		if err := keypool.SaveKeys(provider, store); err != nil {
 			return fmt.Errorf("failed to save keys for %q: %w", provider, err)
 		}
 

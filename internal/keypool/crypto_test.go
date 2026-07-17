@@ -206,6 +206,7 @@ func TestEncryptDecrypt_EmptyKeyExplicit(t *testing.T) {
 func TestEncryptDecrypt_PackageLevelRoundTrip(t *testing.T) {
 	key := testKey('P')
 	SetEncryptionKey(key)
+	defer SetEncryptionKey(nil)
 
 	if !EncryptionKeySet() {
 		t.Fatal("EncryptionKeySet() = false after SetEncryptionKey")
@@ -230,6 +231,7 @@ func TestEncryptDecrypt_PackageLevelRoundTrip(t *testing.T) {
 func TestEncryptDecrypt_PackageLevelWrongKey(t *testing.T) {
 	// Set a key
 	SetEncryptionKey(testKey('1'))
+	defer SetEncryptionKey(nil)
 
 	original := []byte("data with key")
 	encrypted, err := Encrypt(original)
