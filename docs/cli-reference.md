@@ -4,27 +4,25 @@
 
 ## 全局标志
 
-| 标志 | 说明 |
-|------|------|
-| `--provider` | 只启动指定 provider |
-| `--all` | 启动所有 provider |
-| `--tag` | 进程标识标签 |
-| `--help` | 显示帮助信息 |
+无全局标志。每个子命令有各自的标志，见各命令说明。
 
 ## `akswitch start`
 
 读取 `config.toml`，初始化 Key 池，启动 HTTP 代理服务。
 
 ```bash
-akswitch start                    # 启动第一个 provider（按名称字母序）
-akswitch start --all              # 启动所有 provider
-akswitch start --provider <name>  # 只启动指定 provider
+akswitch start                           # 启动第一个 provider（按名称字母序）
+akswitch start --all                     # 启动所有 provider
+akswitch start --provider <name>         # 只启动指定 provider
+akswitch start --log-format=compact      # 精简日志模式（默认）
+akswitch start --log-format=default      # 标准日志模式
 ```
 
 - 读取 `config.toml` 中所有 `[provider.*]` 段
 - 默认启动按名称字母序的第一个 provider（可设 `default_provider` 指定、或 `--all` 启动全部）
 - `--all` 强制启动所有 provider（忽略 `default_provider` 设置）
 - `--provider <name>` 只启动指定 provider（优先级最高）
+- `--log-format` 指定日志格式：`compact`（精简）或 `default`（标准），默认为 `compact`
 - 自动写入 `akswitch.pid` 文件，`akswitch stop` 通过此文件发送中断信号
 
 ### 启动顺序
@@ -56,6 +54,7 @@ akswitch config view                # 打印当前配置
 akswitch provider add <name> -t <url> -p <port> [flags]  # 新增 provider
 akswitch provider list                                     # 列出所有 provider
 akswitch provider remove <name>                            # 删除 provider
+akswitch provider default <name>                           # 设置默认 provider
 ```
 
 ### `provider add` 标志
@@ -67,6 +66,7 @@ akswitch provider remove <name>                            # 删除 provider
 | `--genai` | `-g` | 否 | — | GenAI 基础 URL（`/genai/` 路径路由） |
 | `--cooldown-sec` | `-c` | 否 | `60` | 429 后 Key 冷却时长（秒） |
 | `--max-retries` | `-r` | 否 | `3` | 每次请求的最大重试次数 |
+| `--default` | | 否 | `false` | 添加后立即设为默认 provider |
 
 示例：
 
@@ -78,6 +78,9 @@ akswitch provider add nvidia --target https://integrate.api.nvidia.com/v1 --port
 akswitch provider add sensenova \
   --target https://api.sensenova.com/v1 \
   --cooldown-sec 30 --max-retries 5
+
+# 添加并设为默认
+akswitch provider add openai --target https://api.openai.com/v1 --port 3001 --default
 ```
 
 ### `provider list` 输出示例
@@ -85,8 +88,8 @@ akswitch provider add sensenova \
 ```
 Providers (from /home/user/.config/akswitch/config.toml):
   NAME        TARGET                                            PORT
-  nvidia      https://integrate.api.nvidia.com/v1               3001
-  sensenova   https://api.sensenova.com/v1                      3002
+  nvidia      https://integrate.api.nvidia.com/v1               3001  (default)
+  sensenova   https://api.sensenova.com/v1                      3001
 ```
 
 ## `akswitch key`
@@ -123,6 +126,9 @@ akswitch key remove nvidia 0
 
 # 禁用 Key[1]
 akswitch key disable nvidia 1
+
+# 重新启用 Key[1]
+akswitch key enable nvidia 1
 ```
 
 ## `akswitch status`
@@ -153,29 +159,37 @@ Uptime: 32559s
 读取运行实例的请求日志。
 
 ```bash
-akswitch logs                     # 所有实例
-akswitch logs nvidia              # 仅 nvidia 实例
+akswitch logs                         # 显示所有日志
+akswitch logs --last=20               # 只显示最近 20 条
+akswitch logs --since=2026-07-14T00:00:00Z   # 只显示此时间后的条目
+akswitch logs --verbose               # 显示完整 method/URL
+akswitch logs --compact               # 精简格式（TTFB、总耗时、body 大小）
 ```
 
-日志格式：
+默认输出格式（`--verbose` 带完整 method/URL）：
 
 ```
 === Provider "nvidia" (port 3001) ===
-  [2026-07-01T12:00:00Z] POST /v1/chat/completions -> 200
-  [2026-07-01T12:00:01Z] POST /v1/chat/completions -> 429
+  [12:00:00.000] 200 (nvidia, key: nvap...xxxx, 342ms)
+  [12:00:01.000] 429 (nvidia, key: nvap...yyyy, 12ms)
 ```
 
 ## `akswitch stop`
 
-读取 `akswitch.pid` 文件，向运行中的进程发送中断信号实现优雅关闭。
+读取 `akswitch.pid` 文件，向运行中的进程发送中断信号，轮询等待进程退出。
 
 ```bash
 akswitch stop
 ```
 
-两种停止方式，依次尝试：
-1. **PID 文件**：读取 `akswitch.pid` → 发送 `os.Interrupt` → 等待进程退出
-2. **健康检查回退**：PID 文件不可用时，探测实例端点并打印运行状态
+执行流程：
+
+1. 读取 `akswitch.pid` 文件获取 PID
+2. Windows：`taskkill` 发送关闭信号；Unix：发送 `os.Interrupt`
+3. 轮询等待进程退出（最长 10 秒，每 500ms 检查一次）
+4. 进程退出后删除 PID 文件
+
+PID 文件不可用时，打印手动终止命令并报错。
 
 ## `akswitch version`
 
