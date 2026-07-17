@@ -343,6 +343,10 @@ func (pr *ProviderRouter) handleSuccess(w http.ResponseWriter, ps *ProviderState
 					pr.calibrator.Record(model, outputEstimate, outputTokens)
 				}
 			}
+			// Fallback to tiktoken estimation when API response doesn't include output_tokens
+			if outputTokens == 0 && outputEstimate > 0 {
+				outputTokens = outputEstimate
+			}
 			w.Write(body)
 			respBodySize = int64(len(body))
 		}
