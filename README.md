@@ -67,6 +67,14 @@ akswitch start
 AK Switch **不做** provider 级路由、请求整流、响应变换（ccswitch 已成熟）。
 AK Switch **只做** 单 provider 内多 Key 的智能轮转、限流处理、自动熔断。
 
+## ⚠️ 个人项目
+
+本项目最初为解决作者遇到的 API 429（限流）问题而创建，**主要服务于个人需求**。
+
+- 功能开发以作者自身需求为优先级
+- Issue 和 PR 可能不会及时响应，请谅解
+- 不接受未经沟通的功能请求
+
 ## License
 
 [MIT](LICENSE)

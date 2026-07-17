@@ -48,3 +48,6 @@ data/
 prometheus-data/
 grafana-data/
 
+# Claude Code worktrees (runtime checkouts, not project code)
+.claude/worktrees/
+
