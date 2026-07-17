@@ -193,6 +193,11 @@ func LoadKeysFromStore(name string, cfg *config.Config) (keys, names []string, l
 	return nil, nil, false
 }
 
+// RemoveKeys removes a provider's keys from the system keyring.
+func RemoveKeys(provider string) error {
+	return removeFromKeyring(provider)
+}
+
 // keysFromStore extracts key and name slices from a KeyStore.
 func keysFromStore(store *KeyStore) (keys, names []string) {
 	keys = make([]string, len(store.Keys))

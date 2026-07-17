@@ -121,11 +121,10 @@ var keyCmd = &cobra.Command{
 var keyAddCmd = &cobra.Command{
 	Use:   "add <provider> <key>",
 	Short: "Add a new API key for a provider",
-	Long: `Add a new API key to the encrypted key store for the specified provider.
+	Long: `Add a new API key to the key store for the specified provider.
 
-The key is appended to the provider's key file. If the file does not exist,
-it is created. Keys are encrypted using AES-256-GCM when KEYS_ENCRYPTION_KEY
-is set; otherwise they are stored as base64-encoded plaintext.
+The key is added to the system keyring (or encrypted file fallback).
+If the store does not exist, it is created.
 
 Example:
   akswitch key add nvidia sk-xxxxxxxxxxxxxxxx
@@ -138,12 +137,7 @@ Example:
 
 		setupEncryption()
 
-		path, err := keysPath(provider)
-		if err != nil {
-			return err
-		}
-
-		store, err := keypool.LoadFullStore(path)
+		store, err := keypool.LoadKeys(provider)
 		if err != nil {
 			return fmt.Errorf("failed to load keys for %q: %w", provider, err)
 		}
@@ -173,7 +167,7 @@ var keyListCmd = &cobra.Command{
 masked value, status, and optional name.
 
 Example output:
-  Keys for provider "nvidia" (from <path>):
+  Keys for provider "nvidia":
     [0] sk-****xx  (active)
     [1] sk-****yy  [disabled]
     [2] sk-****zz  (active)  name: my-key`,
@@ -183,22 +177,17 @@ Example output:
 
 		setupEncryption()
 
-		path, err := keysPath(provider)
-		if err != nil {
-			return err
-		}
-
-		store, err := keypool.LoadFullStore(path)
+		store, err := keypool.LoadKeys(provider)
 		if err != nil {
 			return fmt.Errorf("failed to load keys for %q: %w", provider, err)
 		}
 
 		if store == nil || len(store.Keys) == 0 {
-			fmt.Printf("No keys found for provider %q (file: %s)\n", provider, path)
+			fmt.Printf("No keys found for provider %q\n", provider)
 			return nil
 		}
 
-		fmt.Printf("Keys for provider %q (from %s):\n", provider, path)
+		fmt.Printf("Keys for provider %q:\n", provider)
 		for i, entry := range store.Keys {
 			status := "active"
 			if entry.Disabled {
