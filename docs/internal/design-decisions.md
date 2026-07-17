@@ -14,7 +14,7 @@
 
 ## 已知约束
 
-- **ccswitch 领域不碰** — 格式化/整流/转发、provider 路由、请求修改、响应变换等 ccswitch 已成熟的功能不重复造轮。详见 `.agents/documents/ccswitch-analysis.md`。
+- **ccswitch 领域不碰** — 格式化/整流/转发、provider 路由、请求修改、响应变换等 ccswitch 已成熟的功能不重复造轮。详见 `.agents/documents/archive/plans/ccswitch-analysis.md`。
 - **WSL2 9p 文件系统不支持 inotify** — 容器内热重载不会触发（不影响裸跑）
 - **高并发性能瓶颈** — 100+ QPS 开始饱和，个人场景到不了这个量级
 

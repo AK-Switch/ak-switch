@@ -18,17 +18,18 @@
 
 | 方法 | 路径 | 鉴权 | 说明 |
 |------|------|------|------|
-| `GET` | `/health` | 可选 | 健康检查，返回 Key 详情 |
-| `GET` | `/api/config` | 否 | 获取当前配置（Key 脱敏） |
-| `POST` | `/api/config` | 是 | 更新配置并热重载 |
-| `GET` | `/api/keys` | 否 | 列出所有 Key 状态 |
+| `GET` | `/health` | 是 | 健康检查，返回各 provider 详情 |
+| `GET` | `/api/config` | 否 | 获取当前配置（Key 脱敏）。`?provider=` 可选，指定 provider 返回该 provider 配置，不指定则返回所有 |
+| `GET` | `/api/keys` | 否 | 列出所有 Key 状态。`?provider=` 可选，指定 provider 返回该 provider 的 Key，不指定则返回所有 |
 | `POST` | `/api/keys` | 是 | 添加新 Key |
 | `DELETE` | `/api/keys` | 是 | 删除 Key（body `{"index": n}`） |
 | `POST` | `/api/keys/{index}/disable` | 是 | 禁用指定 Key |
+| `POST` | `/api/keys/{index}/enable` | 是 | 启用指定 Key |
 | `PUT` | `/api/keys/{index}/cooldown` | 是 | 冷却指定 Key |
 | `DELETE` | `/api/keys/{index}` | 是 | 按索引删除 Key |
 | `GET` | `/api/stats` | 否 | 请求统计（成功率、Key 状态、运行时长） |
 | `POST` | `/api/reload` | 是 | 从 `config.toml` 重新加载配置 |
+| `POST` | `/api/log-level` | 是 | 动态修改日志级别。body: `{"level": "debug\|info\|warn\|error"}` |
 | `GET` | `/logs` | 否 | 获取请求日志（最近 1000 条） |
 | `POST` | `/clear` | 是 | 清空日志 |
 | `GET` | `/metrics` | 否 | Prometheus 指标 |
@@ -53,11 +54,7 @@ curl -X POST http://localhost:3000/api/reload \
   "total_requests": 142,
   "successful_requests": 138,
   "failed_requests": 4,
-  "uptime_seconds": 3600,
-  "key_details": [
-    {"index": 0, "key": "nva...xxx", "active": true, "cooling_until": null, "name": ""},
-    {"index": 1, "key": "nva...yyy", "active": true, "cooling_until": "2026-07-01T13:00:00Z", "name": "prod-key"}
-  ]
+  "uptime_seconds": 3600
 }
 ```
 
