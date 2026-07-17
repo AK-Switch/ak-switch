@@ -75,9 +75,14 @@ func TestExtractTokenUsage_NilBody(t *testing.T) {
 }
 
 func TestExtractTokenUsage_OpenAIFormat(t *testing.T) {
-	// OpenAI-style format should not crash, but won't parse correctly
 	body := []byte(`{"usage":{"prompt_tokens":10,"completion_tokens":3,"total_tokens":13}}`)
-	_, _ = extractTokenUsage(body)
+	input, output := extractTokenUsage(body)
+	if input != 10 {
+		t.Errorf("input_tokens = %d, want 10 (from prompt_tokens)", input)
+	}
+	if output != 3 {
+		t.Errorf("output_tokens = %d, want 3 (from completion_tokens)", output)
+	}
 }
 
 func TestExtractTokenUsage_PartialUsage(t *testing.T) {
@@ -98,7 +103,7 @@ func TestStreamSSE_EmptyStream(t *testing.T) {
 	respBody := io.NopCloser(strings.NewReader(""))
 	resp := &http.Response{Body: respBody, Header: make(http.Header)}
 
-	input, output, _ := streamSSEAndEstimateTokens(w, resp, nil)
+	input, output, _ := streamSSEAndEstimateTokens(w, resp, nil, "")
 
 	if input != 0 {
 		t.Errorf("input_tokens = %d, want 0", input)
@@ -119,7 +124,7 @@ func TestStreamSSE_NoContentDeltaEvents(t *testing.T) {
 	respBody := io.NopCloser(strings.NewReader(sseData))
 	resp := &http.Response{Body: respBody, Header: make(http.Header)}
 
-	_, output, _ := streamSSEAndEstimateTokens(w, resp, nil)
+	_, output, _ := streamSSEAndEstimateTokens(w, resp, nil, "")
 
 	if output != 0 {
 		t.Errorf("output_tokens = %d, want 0 (no content delta)", output)
@@ -137,7 +142,7 @@ func TestStreamSSE_SingleContentBlock(t *testing.T) {
 	respBody := io.NopCloser(strings.NewReader(sseData))
 	resp := &http.Response{Body: respBody, Header: make(http.Header)}
 
-	_, output, _ := streamSSEAndEstimateTokens(w, resp, nil)
+	_, output, _ := streamSSEAndEstimateTokens(w, resp, nil, "")
 
 	// "Hello world" should produce at least 1 token
 	if output <= 0 {
@@ -162,7 +167,7 @@ func TestStreamSSE_InputTokenEstimation(t *testing.T) {
 
 	reqBody := []byte(`{"messages":[{"role":"user","content":"Say hello in one word"}]}`)
 
-	input, output, _ := streamSSEAndEstimateTokens(w, resp, reqBody)
+	input, output, _ := streamSSEAndEstimateTokens(w, resp, reqBody, "")
 
 	if input <= 0 {
 		t.Errorf("input_tokens = %d, want > 0", input)
@@ -182,7 +187,7 @@ func TestStreamSSE_LongText(t *testing.T) {
 	respBody := io.NopCloser(strings.NewReader(sseData))
 	resp := &http.Response{Body: respBody, Header: make(http.Header)}
 
-	_, output, _ := streamSSEAndEstimateTokens(w, resp, nil)
+	_, output, _ := streamSSEAndEstimateTokens(w, resp, nil, "")
 
 	if output <= 1 {
 		t.Errorf("output_tokens = %d, want > 1 for longer text", output)
@@ -205,7 +210,7 @@ func TestStreamSSE_MultipleContentBlocks(t *testing.T) {
 	respBody := io.NopCloser(strings.NewReader(sseData))
 	resp := &http.Response{Body: respBody, Header: make(http.Header)}
 
-	_, output, _ := streamSSEAndEstimateTokens(w, resp, nil)
+	_, output, _ := streamSSEAndEstimateTokens(w, resp, nil, "")
 
 	if output <= 0 {
 		t.Errorf("output_tokens = %d, want > 0", output)
@@ -233,7 +238,7 @@ func TestStreamSSE_AllEventsPreserved(t *testing.T) {
 	respBody := io.NopCloser(strings.NewReader(sseData))
 	resp := &http.Response{Body: respBody, Header: make(http.Header)}
 
-	streamSSEAndEstimateTokens(w, resp, nil)
+	streamSSEAndEstimateTokens(w, resp, nil, "")
 
 	responseBody := w.Body.String()
 	if !strings.Contains(responseBody, "message_start") {

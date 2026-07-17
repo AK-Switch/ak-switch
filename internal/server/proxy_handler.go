@@ -325,7 +325,7 @@ func (pr *ProviderRouter) handleSuccess(w http.ResponseWriter, ps *ProviderState
 
 	contentType := resp.Header.Get("Content-Type")
 	if strings.Contains(contentType, "text/event-stream") {
-		inputTokens, outputTokens, respBodySize = streamSSEAndEstimateTokens(w, resp, bodyBytes)
+		inputTokens, outputTokens, respBodySize = streamSSEAndEstimateTokens(w, resp, bodyBytes, model)
 	} else {
 		// Non-streaming: read body to extract token usage, then write to client
 		body, err := io.ReadAll(resp.Body)
@@ -333,8 +333,8 @@ func (pr *ProviderRouter) handleSuccess(w http.ResponseWriter, ps *ProviderState
 		if err == nil {
 			inputTokens, outputTokens = extractTokenUsage(body)
 			// Also run tiktoken estimation for calibration comparison
-			inputEstimate := estimateInputTokens(bodyBytes)
-			outputEstimate := estimateOutputTokens(string(body))
+			inputEstimate := estimateInputTokens(bodyBytes, model)
+			outputEstimate := estimateOutputTokens(string(body), model)
 			if model != "" {
 				if inputEstimate > 0 && inputTokens > 0 {
 					pr.calibrator.Record(model, inputEstimate, inputTokens)
@@ -468,7 +468,7 @@ func streamResponse(w http.ResponseWriter, resp *http.Response) {
 // streamSSEAndEstimateTokens streams SSE events to the client while accumulating
 // content_block_delta text for token estimation. After the stream ends, it uses
 // tiktoken to estimate input and output tokens from the accumulated text.
-func streamSSEAndEstimateTokens(w http.ResponseWriter, resp *http.Response, bodyBytes []byte) (int, int, int64) {
+func streamSSEAndEstimateTokens(w http.ResponseWriter, resp *http.Response, bodyBytes []byte, model string) (int, int, int64) {
 	defer resp.Body.Close()
 
 	var outputBuf strings.Builder
@@ -508,21 +508,32 @@ func streamSSEAndEstimateTokens(w http.ResponseWriter, resp *http.Response, body
 	}
 
 	// Estimate output tokens from accumulated text
-	outputTokens := estimateOutputTokens(outputBuf.String())
+	outputTokens := estimateOutputTokens(outputBuf.String(), model)
 
 	// Estimate input tokens from request body
-	inputTokens := estimateInputTokens(bodyBytes)
+	inputTokens := estimateInputTokens(bodyBytes, model)
 
 	return inputTokens, outputTokens, respBodySize
 }
 
+// encodingForModel returns the appropriate tiktoken encoding name for a given model.
+// Returns "cl100k_base" as the default fallback for unknown models.
+func encodingForModel(model string) string {
+	// gpt-4o / o1 / o3 series use o200k_base
+	if strings.HasPrefix(model, "gpt-4o") || strings.HasPrefix(model, "o1") || strings.HasPrefix(model, "o3") {
+		return "o200k_base"
+	}
+	return "cl100k_base"
+}
+
 // estimateOutputTokens uses tiktoken to estimate the number of tokens in a text string.
+// The model parameter determines which tiktoken encoding to use.
 // Returns 0 if tiktoken initialization fails or text is empty.
-func estimateOutputTokens(text string) int {
+func estimateOutputTokens(text string, model string) int {
 	if text == "" {
 		return 0
 	}
-	tke, err := tiktoken.GetEncoding("cl100k_base")
+	tke, err := tiktoken.GetEncoding(encodingForModel(model))
 	if err != nil {
 		return 0
 	}
@@ -533,7 +544,7 @@ func estimateOutputTokens(text string) int {
 // the input token count using tiktoken. Returns 0 if parsing fails or body is empty.
 // Supports both OpenAI format (content is a string) and Anthropic format
 // (content is an array of {type, text} objects).
-func estimateInputTokens(bodyBytes []byte) int {
+func estimateInputTokens(bodyBytes []byte, model string) int {
 	if len(bodyBytes) == 0 {
 		return 0
 	}
@@ -569,7 +580,7 @@ func estimateInputTokens(bodyBytes []byte) int {
 			}
 		}
 	}
-	tke, err := tiktoken.GetEncoding("cl100k_base")
+	tke, err := tiktoken.GetEncoding(encodingForModel(model))
 	if err != nil {
 		return 0
 	}
