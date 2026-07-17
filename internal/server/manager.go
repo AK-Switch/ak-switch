@@ -265,6 +265,22 @@ func (pr *ProviderRouter) StartBackgroundTasks() {
 			ActiveHealthCheck(p.Config, p.Proxy, pr.metrics, p, pr.stop)
 		}()
 	}
+
+	// Router-level uptime gauge
+	pr.wg.Add(1)
+	go func() {
+		defer pr.wg.Done()
+		uptimeTicker := time.NewTicker(10 * time.Second)
+		defer uptimeTicker.Stop()
+		for {
+			select {
+			case <-pr.stop:
+				return
+			case <-uptimeTicker.C:
+				pr.metrics.UptimeSeconds.Set(time.Since(pr.startTime).Seconds())
+			}
+		}
+	}()
 }
 
 // extractProvider parses the first path segment as the provider name and returns the rest.

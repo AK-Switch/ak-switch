@@ -212,3 +212,94 @@ func TestMetricsEndpointAccessible(t *testing.T) {
 		}
 	}
 }
+
+// TestRetryMetrics verifies that retry counters are exposed via /metrics
+// when retries occur during proxy requests.
+func TestRetryMetrics(t *testing.T) {
+	// Mock upstream that always returns 503 to trigger retries
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer upstream.Close()
+
+	cfg := &config.Config{
+		TargetBase:             upstream.URL,
+		GenaiBase:              upstream.URL,
+		Port:                   0,
+		MaxRetries:             3,
+		CooldownSec:            30,
+		UpstreamCBThreshold:    10,
+		CBResetSec:             60,
+		HealthCheckIntervalSec: 30,
+		HealthCheckPath:        "/health",
+		HealthCheckTimeoutSec:  5,
+	}
+	pool := keypool.NewKeyPool([]string{"test-key-1234567890"}, nil)
+	pr := server.NewProviderRouter("")
+	pr.AddProvider("test", cfg, pool)
+	srv := httptest.NewServer(pr.Handler())
+	defer srv.Close()
+
+	// Send a request that will trigger retries
+	resp, err := http.Get(srv.URL + "/test/v1/models")
+	if err != nil {
+		t.Fatalf("GET /test/v1/models: %v", err)
+	}
+	resp.Body.Close()
+
+	// Check /metrics for retry counters
+	metricsResp, err := http.Get(srv.URL + "/metrics")
+	if err != nil {
+		t.Fatalf("GET /metrics: %v", err)
+	}
+	defer metricsResp.Body.Close()
+	body, _ := io.ReadAll(metricsResp.Body)
+	metricsBody := string(body)
+
+	// Retry counter should be present
+	if !strings.Contains(metricsBody, "akswitch_retries_total") {
+		t.Error("retries_total metric not found in /metrics output")
+	}
+	if !strings.Contains(metricsBody, "provider=\"test\"") {
+		t.Error("provider label not found in retry metric")
+	}
+}
+
+// TestUptimeMetrics verifies that uptime gauge is exposed via /metrics
+func TestUptimeMetrics(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	cfg := &config.Config{
+		TargetBase:             upstream.URL,
+		GenaiBase:              upstream.URL,
+		Port:                   0,
+		MaxRetries:             1,
+		CooldownSec:            60,
+		UpstreamCBThreshold:    5,
+		CBResetSec:             30,
+		HealthCheckIntervalSec: 30,
+		HealthCheckPath:        "/health",
+		HealthCheckTimeoutSec:  5,
+	}
+	pool := keypool.NewKeyPool([]string{"test-key-1234567890"}, nil)
+	pr := server.NewProviderRouter("")
+	pr.AddProvider("test", cfg, pool)
+	srv := httptest.NewServer(pr.Handler())
+	defer srv.Close()
+
+	// Check /metrics for uptime gauge
+	metricsResp, err := http.Get(srv.URL + "/metrics")
+	if err != nil {
+		t.Fatalf("GET /metrics: %v", err)
+	}
+	defer metricsResp.Body.Close()
+	body, _ := io.ReadAll(metricsResp.Body)
+	metricsBody := string(body)
+
+	if !strings.Contains(metricsBody, "akswitch_uptime_seconds") {
+		t.Error("uptime_seconds metric not found in /metrics output")
+	}
+}
