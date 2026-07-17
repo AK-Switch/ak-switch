@@ -310,6 +310,17 @@ func (pr *ProviderRouter) handleSuccess(w http.ResponseWriter, ps *ProviderState
 	w.WriteHeader(resp.StatusCode)
 
 	var inputTokens, outputTokens int
+	var model string
+
+	// Extract model name from request body for calibration
+	var reqBody struct {
+		Model string `json:"model"`
+	}
+	if len(bodyBytes) > 0 {
+		json.Unmarshal(bodyBytes, &reqBody)
+		model = reqBody.Model
+	}
+
 	var respBodySize int64
 
 	contentType := resp.Header.Get("Content-Type")
@@ -321,8 +332,26 @@ func (pr *ProviderRouter) handleSuccess(w http.ResponseWriter, ps *ProviderState
 		resp.Body.Close()
 		if err == nil {
 			inputTokens, outputTokens = extractTokenUsage(body)
+			// Also run tiktoken estimation for calibration comparison
+			inputEstimate := estimateInputTokens(bodyBytes)
+			outputEstimate := estimateOutputTokens(string(body))
+			if model != "" {
+				if inputEstimate > 0 && inputTokens > 0 {
+					pr.calibrator.Record(model, inputEstimate, inputTokens)
+				}
+				if outputEstimate > 0 && outputTokens > 0 {
+					pr.calibrator.Record(model, outputEstimate, outputTokens)
+				}
+			}
 			w.Write(body)
 			respBodySize = int64(len(body))
+		}
+	}
+
+	// Apply calibration to streaming estimates
+	if model != "" && strings.Contains(contentType, "text/event-stream") {
+		if outputTokens > 0 {
+			outputTokens = pr.calibrator.Apply(model, outputTokens)
 		}
 	}
 
@@ -467,34 +496,50 @@ func streamSSEAndEstimateTokens(w http.ResponseWriter, resp *http.Response, body
 	}
 
 	// Estimate output tokens from accumulated text
-	var outputTokens int
-	if outputBuf.Len() > 0 {
-		if tke, err := tiktoken.GetEncoding("cl100k_base"); err == nil {
-			outputTokens = len(tke.Encode(outputBuf.String(), nil, nil))
-		}
-	}
+	outputTokens := estimateOutputTokens(outputBuf.String())
 
 	// Estimate input tokens from request body
-	var inputTokens int
-	if len(bodyBytes) > 0 {
-		// Try to extract and concatenate message content for token counting
-		var reqBody struct {
-			Messages []struct {
-				Content string `json:"content"`
-			} `json:"messages"`
-		}
-		if err := json.Unmarshal(bodyBytes, &reqBody); err == nil && len(reqBody.Messages) > 0 {
-			var inputBuf strings.Builder
-			for _, msg := range reqBody.Messages {
-				inputBuf.WriteString(msg.Content)
-			}
-			if tke, err := tiktoken.GetEncoding("cl100k_base"); err == nil {
-				inputTokens = len(tke.Encode(inputBuf.String(), nil, nil))
-			}
-		}
-	}
+	inputTokens := estimateInputTokens(bodyBytes)
 
 	return inputTokens, outputTokens, respBodySize
+}
+
+// estimateOutputTokens uses tiktoken to estimate the number of tokens in a text string.
+// Returns 0 if tiktoken initialization fails or text is empty.
+func estimateOutputTokens(text string) int {
+	if text == "" {
+		return 0
+	}
+	tke, err := tiktoken.GetEncoding("cl100k_base")
+	if err != nil {
+		return 0
+	}
+	return len(tke.Encode(text, nil, nil))
+}
+
+// estimateInputTokens extracts message content from a request body and estimates
+// the input token count using tiktoken. Returns 0 if parsing fails or body is empty.
+func estimateInputTokens(bodyBytes []byte) int {
+	if len(bodyBytes) == 0 {
+		return 0
+	}
+	var reqBody struct {
+		Messages []struct {
+			Content string `json:"content"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal(bodyBytes, &reqBody); err != nil || len(reqBody.Messages) == 0 {
+		return 0
+	}
+	var inputBuf strings.Builder
+	for _, msg := range reqBody.Messages {
+		inputBuf.WriteString(msg.Content)
+	}
+	tke, err := tiktoken.GetEncoding("cl100k_base")
+	if err != nil {
+		return 0
+	}
+	return len(tke.Encode(inputBuf.String(), nil, nil))
 }
 
 // ── Extracted Utilities ───────────────────────────────
