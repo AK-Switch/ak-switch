@@ -27,7 +27,7 @@ var statusCmd = &cobra.Command{
 		port := detectServerPort()
 
 		// Query health endpoint on the server port
-		healthURL := fmt.Sprintf("http://127.0.0.1:%d/health", port)
+		healthURL := fmt.Sprintf("http://%s:%d/health", detectServerHost(), port)
 		resp, err := client.Get(healthURL)
 		if err != nil {
 			return fmt.Errorf("server not reachable at %s: %w", healthURL, err)
@@ -58,7 +58,7 @@ var statusCmd = &cobra.Command{
 		}
 
 		// Query stats endpoint
-		statsURL := fmt.Sprintf("http://127.0.0.1:%d/api/stats", port)
+		statsURL := fmt.Sprintf("http://%s:%d/api/stats", detectServerHost(), port)
 		statsResp, err := client.Get(statsURL)
 		if err == nil {
 			statsBody, _ := io.ReadAll(statsResp.Body)

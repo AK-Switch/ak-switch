@@ -19,6 +19,7 @@ type fieldDef struct {
 // Add new fields here instead of adding if-blocks to Diff().
 var configDiffFields = []fieldDef{
 	{"PORT", func(c, o *Config) bool { return c.Port == o.Port }, func(c *Config) string { return strconv.Itoa(c.Port) }},
+		{"HOST", func(c, o *Config) bool { return c.Host == o.Host }, func(c *Config) string { return c.Host }},
 	{"TARGET_BASE_URL", func(c, o *Config) bool { return c.TargetBase == o.TargetBase }, func(c *Config) string { return c.TargetBase }},
 	{"GENAI_BASE_URL", func(c, o *Config) bool { return c.GenaiBase == o.GenaiBase }, func(c *Config) string { return c.GenaiBase }},
 	{"DISABLE_THINKING", func(c, o *Config) bool { return c.DisableThinking == o.DisableThinking }, func(c *Config) string { return strconv.FormatBool(c.DisableThinking) }},
