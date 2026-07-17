@@ -108,7 +108,7 @@ type ProviderRouter struct {
 // NewProviderRouter creates a new ProviderRouter.
 func NewProviderRouter(dashboardHTML string) *ProviderRouter {
 	reg, m := akswitchmetrics.NewRegistry()
-	return &ProviderRouter{
+	pr := &ProviderRouter{
 		providers:       make(map[string]*ProviderState),
 		logs:            logstore.New(10000),
 		startTime:       time.Now(),
@@ -118,6 +118,14 @@ func NewProviderRouter(dashboardHTML string) *ProviderRouter {
 		stop:            make(chan struct{}),
 		calibrator:      tracker.NewCalibrator(15),
 	}
+	pr.logs.OnAppend = func(prevLen, newLen, maxLen int) {
+		pr.metrics.LogStoreEntries.Inc()
+		if dropped := (prevLen + 1) - newLen; dropped > 0 {
+			pr.metrics.LogStoreDropped.Add(float64(dropped))
+		}
+		pr.metrics.LogStoreFillRatio.Set(float64(newLen) / float64(maxLen))
+	}
+	return pr
 }
 
 // AddProvider creates a new ProviderState with the given name, config, and key pool.
@@ -260,6 +268,22 @@ func (pr *ProviderRouter) StartBackgroundTasks() {
 			ActiveHealthCheck(p.Config, p.Proxy, pr.metrics, p, pr.stop)
 		}()
 	}
+
+	// Router-level uptime gauge
+	pr.wg.Add(1)
+	go func() {
+		defer pr.wg.Done()
+		uptimeTicker := time.NewTicker(10 * time.Second)
+		defer uptimeTicker.Stop()
+		for {
+			select {
+			case <-pr.stop:
+				return
+			case <-uptimeTicker.C:
+				pr.metrics.UptimeSeconds.Set(time.Since(pr.startTime).Seconds())
+			}
+		}
+	}()
 }
 
 // extractProvider parses the first path segment as the provider name and returns the rest.

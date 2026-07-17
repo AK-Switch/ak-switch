@@ -11,6 +11,9 @@ import (
 // Calibrator maintains per-model calibration ratios using a sliding window.
 // It compares tiktoken estimates against actual upstream token counts (from
 // non-streaming responses) to compute a correction factor.
+//
+// The calibration ratio is the median of (actual / estimate) for the last N samples.
+// Ratios are applied to streaming estimates to improve accuracy.
 type Calibrator struct {
 	mu         sync.RWMutex
 	windowSize int
@@ -24,6 +27,7 @@ type sample struct {
 }
 
 // NewCalibrator creates a Calibrator with the given sliding window size.
+// windowSize should be at least 3 for meaningful calibration.
 func NewCalibrator(windowSize int) *Calibrator {
 	if windowSize < 3 {
 		windowSize = 3
@@ -35,6 +39,8 @@ func NewCalibrator(windowSize int) *Calibrator {
 }
 
 // Record adds a calibration sample for a model.
+// estimate is the tiktoken-estimated value, actual is the upstream-reported value.
+// Samples with estimate <= 0 or actual <= 0 are silently skipped.
 func (c *Calibrator) Record(model string, estimate, actual int) {
 	if estimate <= 0 || actual <= 0 {
 		return
@@ -52,6 +58,7 @@ func (c *Calibrator) Record(model string, estimate, actual int) {
 	samples := c.models[model]
 	samples = append(samples, s)
 
+	// Trim to window size
 	if len(samples) > c.windowSize {
 		samples = samples[len(samples)-c.windowSize:]
 	}
@@ -59,7 +66,8 @@ func (c *Calibrator) Record(model string, estimate, actual int) {
 	c.models[model] = samples
 }
 
-// Ratio returns the calibration ratio for a model. Returns 1.0 if < 3 samples.
+// Ratio returns the calibration ratio for a model.
+// Returns 1.0 if fewer than 3 samples are available (no meaningful calibration).
 func (c *Calibrator) Ratio(model string) float64 {
 	c.mu.RLock()
 	samples := c.models[model]
@@ -69,6 +77,7 @@ func (c *Calibrator) Ratio(model string) float64 {
 		return 1.0
 	}
 
+	// Compute median of ratios
 	ratios := make([]float64, len(samples))
 	for i, s := range samples {
 		ratios[i] = s.ratio
@@ -79,6 +88,7 @@ func (c *Calibrator) Ratio(model string) float64 {
 }
 
 // Apply adjusts a token estimate using the model's calibration ratio.
+// Returns the original estimate if no calibration data is available.
 func (c *Calibrator) Apply(model string, estimate int) int {
 	ratio := c.Ratio(model)
 	if ratio == 1.0 {
