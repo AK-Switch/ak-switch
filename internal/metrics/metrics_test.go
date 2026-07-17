@@ -99,3 +99,70 @@ func TestLogStoreMetricsRegistration(t *testing.T) {
 		}
 	}
 }
+
+func TestRetryCounterRegistration(t *testing.T) {
+	reg, m := NewRegistry()
+	if m.RetryCount == nil {
+		t.Fatal("RetryCount counter should not be nil")
+	}
+
+	// Increment and verify
+	m.RetryCount.WithLabelValues("test-provider").Add(5)
+	m.RetryCount.WithLabelValues("test-provider").Add(3)
+
+	metrics, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("Gather failed: %v", err)
+	}
+
+	found := false
+	for _, mf := range metrics {
+		if mf.GetName() == "akswitch_retries_total" {
+			for _, m := range mf.GetMetric() {
+				if m.GetCounter().GetValue() != 8 {
+					t.Errorf("retry count = %v, want 8", m.GetCounter().GetValue())
+				}
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Error("retry metric not found in gathered metrics")
+	}
+
+	// Verify provider label
+	if m.RetryCount.WithLabelValues("other-provider").Add(0); true {
+		// Ensure no panic on label assignment
+	}
+}
+
+func TestUptimeGaugeRegistration(t *testing.T) {
+	reg, m := NewRegistry()
+	if m.UptimeSeconds == nil {
+		t.Fatal("UptimeSeconds gauge should not be nil")
+	}
+
+	// Set and verify
+	m.UptimeSeconds.Set(123.456)
+
+	metrics, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("Gather failed: %v", err)
+	}
+
+	found := false
+	for _, mf := range metrics {
+		if mf.GetName() == "akswitch_uptime_seconds" {
+			for _, m := range mf.GetMetric() {
+				val := m.GetGauge().GetValue()
+				if val < 123 || val > 124 {
+					t.Errorf("uptime = %v, want near 123.456", val)
+				}
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Error("uptime metric not found in gathered metrics")
+	}
+}
