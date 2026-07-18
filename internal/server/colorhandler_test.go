@@ -103,8 +103,8 @@ func TestCompact_ProxyRequest(t *testing.T) {
 
 	output := buf.String()
 	// Compact mode handles "proxy request" with a compact format
-	if !strings.Contains(output, "→ POST") {
-		t.Errorf("compact request should contain → POST, got: %q", output)
+	if !strings.Contains(output, "POST") {
+		t.Errorf("compact request should contain POST, got: %q", output)
 	}
 	if !strings.Contains(output, "/v1/messages?beta=true") {
 		t.Errorf("compact request should contain URL path, got: %q", output)

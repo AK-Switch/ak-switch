@@ -20,6 +20,7 @@ const (
 	colorGreen  = "\033[32m"
 	colorYellow = "\033[33m"
 	colorGray   = "\033[90m"
+	colorCyan   = "\033[36m"
 	colorWhite  = "\033[97m"
 )
 
@@ -166,8 +167,9 @@ func (h *ColorHandler) handleCompact(ctx context.Context, r slog.Record) error {
 		})
 		url = compactURL(url)
 		sizeStr := formatSizeCompact(bodySize)
-		line := fmt.Sprintf("%s %s→ %s %s (%s)%s\n",
-			bracketTS, colorGray, method, url, sizeStr, colorReset)
+		mc := methodColor(method)
+		line := fmt.Sprintf("%s %s→ %s%s%s %s (%s)%s\n",
+			bracketTS, colorGray, mc, method, colorReset, url, sizeStr, colorReset)
 		fmt.Fprint(h.writer, line)
 		return nil
 
@@ -233,8 +235,10 @@ func (h *ColorHandler) handleCompact(ctx context.Context, r slog.Record) error {
 		}
 
 		timingStr := strings.Join(timingParts, " ")
-		line := fmt.Sprintf("%s %s%d%s %s %s %s (%s) [%s]%s\n",
-			bracketTS, colorGreen, status, colorReset, provider, method, url, keyPart, timingStr, colorReset)
+		mc := methodColor(method)
+		dc := durationColor(durationMs)
+		line := fmt.Sprintf("%s %s%d%s %s%s%s %s%s%s %s (%s) [%s%s%s]%s\n",
+			bracketTS, colorGreen, status, colorReset, colorGray, provider, colorReset, mc, method, colorReset, url, keyPart, dc, timingStr, colorReset, colorReset)
 		fmt.Fprint(h.writer, line)
 		return nil
 
@@ -253,8 +257,9 @@ func (h *ColorHandler) handleCompact(ctx context.Context, r slog.Record) error {
 			return true
 		})
 		url = compactURL(url)
-		line := fmt.Sprintf("%s %s✗ %d %s %s%s\n",
-			bracketTS, colorRed, status, method, url, colorReset)
+		mc := methodColor(method)
+		line := fmt.Sprintf("%s %s✗ %d %s%s%s %s%s\n",
+			bracketTS, colorRed, status, mc, method, colorReset, url, colorReset)
 		fmt.Fprint(h.writer, line)
 		return nil
 
@@ -262,6 +267,35 @@ func (h *ColorHandler) handleCompact(ctx context.Context, r slog.Record) error {
 		return h.inner.Handle(ctx, r)
 	}
 }
+// methodColor returns an ANSI color code for an HTTP method.
+func methodColor(method string) string {
+	switch method {
+	case "GET":
+		return colorGreen
+	case "POST":
+		return colorCyan
+	case "PUT":
+		return colorYellow
+	case "DELETE":
+		return colorRed
+	default:
+		return colorWhite
+	}
+}
+
+// durationColor returns an ANSI color code based on duration threshold.
+// < 1s → gray (fast), 1-5s → yellow (moderate), > 5s → red (slow).
+func durationColor(ms int64) string {
+	switch {
+	case ms >= 5000:
+		return colorRed
+	case ms >= 1000:
+		return colorYellow
+	default:
+		return colorGray
+	}
+}
+
 // compactURL strips scheme and host from a URL, keeping only the path.
 func compactURL(rawURL string) string {
 	if idx := strings.Index(rawURL, "://"); idx >= 0 {
