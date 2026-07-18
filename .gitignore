@@ -51,3 +51,6 @@ grafana-data/
 # Claude Code worktrees (runtime checkouts, not project code)
 .claude/worktrees/
 
+
+# Private skills - not tracked
+.claude/skills/remote-monitoring/
