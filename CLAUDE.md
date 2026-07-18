@@ -19,6 +19,8 @@ go test -tags=e2e -run TestName -timeout=5m -race .         # E2E
 
 ## 测试
 
+### 分层
+
 测试按速度分层，用 `//go:build` 标签区分：
 
 | 层级 | 标签 | 上限 | 命令 |
@@ -27,20 +29,43 @@ go test -tags=e2e -run TestName -timeout=5m -race .         # E2E
 | 集成 | `integration` | <=10s | `make test-integration` |
 | E2E | `e2e` | <=2m | `make test-e2e` |
 
-**新增测试文件规则：**
-1. 先判断所属层级，加对应 `//go:build` 标签
-2. CLI 命令测试必须包含输出断言（`assertOutputContains` 或类似）
-3. 禁止无输出断言的 `runCommand` 模式（只测不崩不算测完）
-4. **每个 `init()` 中注册的标志，必须在对应 `*_cmd_test.go` 中有 `Lookup` 测试**（如 `TestXxxCmd_HasYyyFlag`），与标志代码在**同一个 PR** 中加入
-5. **边界**：Key <=12 字符时 `MaskKey` 输出 `****`（已在 `utils_test.go` 覆盖）
+### 原则
 
-**测试策略：**
+写测试时，用以下四个原则指导决策，而不是记忆具体规则。
+
+**1. 测试是规格**
+测试定义"应该输出什么"，代码是实现。改动输出格式前，先改测试定义新格式，再改代码。
+- `TestCompact_Acceptance_SingleProvider` 的断言直接写入期望的日志格式字符串，一眼就知道终端输出长什么样
+- `TestCompact_Acceptance_NonRetryableError` 断言 `✗ 429 (    d1-1    )`，明确了错误行的格式布局
+- 作为对比：`TestCompact_ProxyRequest` 只检查包含"POST"和"/v1/messages"，没有写出完整格式，就不够规格
+
+**2. 反馈速度决定一切**
+测试分层就是为了保证速度，慢的测试等于没有测试。
+- 纯函数（`formatLogLine`、`truncateKeyName`、`MaskKey`）在 unit 层测，不需要启动服务器
+- CLI 命令解析在 unit 层测（`runCommand` + 输出断言），不需要真实代理
+- 集成测试（`proxy_test.go`）mock upstream 做真实代理请求，验证完整流程，上限 10s
+- 不写：mock 掉一切只测 JSON 序列化的 Handler 测试（如 `handlers_test.go`）——它既不够快（要启动服务器）也不够真（不经过真实代理逻辑）
+
+**3. 测试服务于变更**
+每个测试都应该对应一个"未来有人会改这个"的假设，没有假设就不需要测试。
+- `TestXxxCmd_HasYyyFlag` 对应"未来有人会删这个 flag"的假设，与标志代码在同一个 PR 中加入
+- `TestCompact_Acceptance_LongKeyName` 对应"未来有人会改 truncate 逻辑"的假设
+- `TestCompact_Acceptance_Retry` 对应"未来有人会改重试显示位置"的假设
+- `TestMaskKey_ShortKey` 对应"未来有人会改 MaskKey 边界"的假设
+- 反过来：`formatLogLine` 不需要测空输入，因为调用方永远不会传空值
+
+**4. 测试是文档**
+读测试应该比读代码更快理解功能。测试断言直接写出期望值，而不是"不崩就行"。
+- 验收测试剥离 ANSI 码后，断言字符串就是终端输出的真实样子，不需要看 `colorhandler.go` 的格式化逻辑
+- before/after 对比优于绝对值快照，因为前者表达的是"变化了什么"，后者是"当前值是什么"（容易过时）
+- 负载测试脚本放在 `test/load/`，独立于 unit 测试，因为它们是不同读者的文档
+
+### 策略
+
 - **主攻方向**：集成验收测试（mock upstream + 真实代理请求），如 `proxy_test.go`
 - **测试入口**：所有 CLI 可达路径用 `testhelper.go` 中的 `runCommand()` 或子进程模式（`start_cmd_test.go`）
-- **标准**：before/after 对比，不测绝对值快照
-- **不写**：mock 掉一切只测 JSON 的 Handler 测试（如 `handlers_test.go`）
-- **日志格式测试**：`formatLogLine` 纯函数可在 `unit` 层测试（`log_format_test.go`），无需 HTTP 服务器
-- **负载测试**：`test/load/` 下有 `akswitch.exe` 压测脚本
+- **build tag**：每个测试文件必须加对应层级的 `//go:build` 标签
+- **CLI 测试**：必须包含输出断言，禁止无断言的 `runCommand` 模式
 
 ## 发版
 

@@ -26,10 +26,11 @@ const (
 
 // ColorHandler is a slog.Handler wrapper that adds ANSI color to output.
 type ColorHandler struct {
-	inner     slog.Handler
-	writer    io.Writer
-	addSource bool
-	compact   bool
+	inner          slog.Handler
+	writer         io.Writer
+	addSource      bool
+	compact        bool
+	singleProvider bool
 }
 
 // newHandler creates an appropriate slog.Handler based on the output destination.
@@ -37,7 +38,7 @@ type ColorHandler struct {
 // - If w is a terminal → ColorHandler (ANSI colored)
 // - Otherwise → plain TextHandler
 // lvl should be a *slog.LevelVar for dynamic level updates, or a fixed slog.Level.
-func newHandler(w io.Writer, lvl slog.Leveler, compact bool) slog.Handler {
+func newHandler(w io.Writer, lvl slog.Leveler, compact bool, singleProvider bool) slog.Handler {
 	// NO_COLOR convention: https://no-color.org/
 	if os.Getenv("NO_COLOR") != "" {
 		return slog.NewTextHandler(w, &slog.HandlerOptions{Level: lvl})
@@ -46,10 +47,11 @@ func newHandler(w io.Writer, lvl slog.Leveler, compact bool) slog.Handler {
 	// Check if it's a terminal
 	if f, ok := w.(*os.File); ok && term.IsTerminal(int(f.Fd())) {
 		return &ColorHandler{
-			inner:     slog.NewTextHandler(w, &slog.HandlerOptions{Level: lvl, AddSource: true}),
-			writer:    w,
-			addSource: lvl.Level() <= slog.LevelDebug, // only show caller in debug
-			compact:   compact,
+			inner:          slog.NewTextHandler(w, &slog.HandlerOptions{Level: lvl, AddSource: true}),
+			writer:         w,
+			addSource:      lvl.Level() <= slog.LevelDebug, // only show caller in debug
+			compact:        compact,
+			singleProvider: singleProvider,
 		}
 	}
 
@@ -175,7 +177,7 @@ func (h *ColorHandler) handleCompact(ctx context.Context, r slog.Record) error {
 
 	case "proxy success":
 		var status int
-		var provider, method, url, keyName string
+		var provider, keyName string
 		var retry int
 		var durationMs, ttfbMs, reqBodySize, respBodySize int64
 		var inputTokens, outputTokens int64
@@ -185,10 +187,6 @@ func (h *ColorHandler) handleCompact(ctx context.Context, r slog.Record) error {
 				status = int(attrInt64(a))
 			case "provider":
 				provider = fmt.Sprintf("%v", a.Value.Any())
-			case "method":
-				method = fmt.Sprintf("%v", a.Value.Any())
-			case "url":
-				url = fmt.Sprintf("%v", a.Value.Any())
 			case "key_name":
 				keyName = fmt.Sprintf("%v", a.Value.Any())
 			case "retry":
@@ -209,57 +207,69 @@ func (h *ColorHandler) handleCompact(ctx context.Context, r slog.Record) error {
 			return true
 		})
 
-		url = compactURL(url)
-		keyPart := fmt.Sprintf("key: %s", keyName)
-		if retry > 0 {
-			keyPart = fmt.Sprintf("%s, retry %d", keyPart, retry)
+		keyDisplay := truncateKeyName(keyName)
+
+		var line strings.Builder
+
+		// Timestamp
+		line.WriteString(fmt.Sprintf("%s[%s]%s ", colorGray, ts, colorReset))
+
+		// Status code
+		line.WriteString(fmt.Sprintf("%s%d%s ", colorGreen, status, colorReset))
+
+		// Provider (only when multiple providers)
+		if !h.singleProvider {
+			line.WriteString(fmt.Sprintf("%s%s%s ", colorGray, provider, colorReset))
 		}
 
-		// Build timing bracket parts
-		var timingParts []string
-		timingParts = append(timingParts, fmt.Sprintf("ttfb=%s", formatDurationCompact(ttfbMs)))
-		timingParts = append(timingParts, fmt.Sprintf("total=%s", formatDurationCompact(durationMs)))
+		// Key name in parentheses (centered, fixed 12-char field)
+		line.WriteString(fmt.Sprintf("(%s)", keyDisplay))
 
-		// Body size info
+		// Retry
+		if retry > 0 {
+			line.WriteString(fmt.Sprintf(" retry %d", retry))
+		}
+
+		// Timing: TTFB and total duration, each with own color
+		tc := ttfbColor(ttfbMs)
+		dc := durationColor(durationMs)
+		line.WriteString(fmt.Sprintf(" ttfb=%s%s%s total=%s%s%s",
+			tc, formatDurationCompact(ttfbMs), colorReset,
+			dc, formatDurationCompact(durationMs), colorReset))
+
+		// Body size
 		reqSizeStr := formatSizeCompact(reqBodySize)
 		if respBodySize > 0 {
 			respSizeStr := formatSizeCompact(respBodySize)
-			timingParts = append(timingParts, fmt.Sprintf("%s→%s", reqSizeStr, respSizeStr))
+			line.WriteString(fmt.Sprintf(" %s%s→%s%s", colorGray, reqSizeStr, respSizeStr, colorReset))
 		} else {
-			timingParts = append(timingParts, reqSizeStr)
+			line.WriteString(fmt.Sprintf(" %s%s%s", colorGray, reqSizeStr, colorReset))
 		}
 
 		// Token info
 		if inputTokens > 0 || outputTokens > 0 {
-			timingParts = append(timingParts, fmt.Sprintf("tok=%d+%d", inputTokens, outputTokens))
+			line.WriteString(fmt.Sprintf(" %stok=%d+%d%s", colorGray, inputTokens, outputTokens, colorReset))
 		}
 
-		timingStr := strings.Join(timingParts, " ")
-		mc := methodColor(method)
-		dc := durationColor(durationMs)
-		line := fmt.Sprintf("%s %s%d%s %s%s%s %s%s%s %s (%s) [%s%s%s]%s\n",
-			bracketTS, colorGreen, status, colorReset, colorGray, provider, colorReset, mc, method, colorReset, url, keyPart, dc, timingStr, colorReset, colorReset)
-		fmt.Fprint(h.writer, line)
+		line.WriteString("\n")
+		fmt.Fprint(h.writer, line.String())
 		return nil
 
 	case "non-retryable client error":
-		var method, url string
 		var status int
+		var keyName string
 		r.Attrs(func(a slog.Attr) bool {
 			switch a.Key {
-			case "method":
-				method = fmt.Sprintf("%v", a.Value.Any())
-			case "url":
-				url = fmt.Sprintf("%v", a.Value.Any())
 			case "status":
 				status = int(attrInt64(a))
+			case "key_name":
+				keyName = fmt.Sprintf("%v", a.Value.Any())
 			}
 			return true
 		})
-		url = compactURL(url)
-		mc := methodColor(method)
-		line := fmt.Sprintf("%s %s✗ %d %s%s%s %s%s\n",
-			bracketTS, colorRed, status, mc, method, colorReset, url, colorReset)
+		keyDisplay := truncateKeyName(keyName)
+		line := fmt.Sprintf("%s %s✗ %d (%s)%s\n",
+			bracketTS, colorRed, status, keyDisplay, colorReset)
 		fmt.Fprint(h.writer, line)
 		return nil
 
@@ -283,11 +293,42 @@ func methodColor(method string) string {
 	}
 }
 
-// durationColor returns an ANSI color code based on duration threshold.
-// < 1s → gray (fast), 1-5s → yellow (moderate), > 5s → red (slow).
+// keyNameWidth is the fixed display width for key names in compact mode.
+const keyNameWidth = 12
+
+// truncateKeyName truncates a key name to keyNameWidth characters.
+// Shorter names are centered with padding; longer names are truncated
+// with middle ellipsis (e.g. "sk-an...xxxx").
+func truncateKeyName(name string) string {
+	runes := []rune(name)
+	if len(runes) <= keyNameWidth {
+		totalPad := keyNameWidth - len(runes)
+		leftPad := totalPad / 2
+		rightPad := totalPad - leftPad
+		return strings.Repeat(" ", leftPad) + name + strings.Repeat(" ", rightPad)
+	}
+	// Truncate: keep first 5 + "..." + last 4 = 12
+	return string(runes[:5]) + "..." + string(runes[len(runes)-4:])
+}
+
+// durationColor returns an ANSI color code based on total duration threshold.
+// < 3s → gray (normal), 3-10s → yellow (moderate), > 10s → red (slow).
 func durationColor(ms int64) string {
 	switch {
-	case ms >= 5000:
+	case ms >= 10000:
+		return colorRed
+	case ms >= 3000:
+		return colorYellow
+	default:
+		return colorGray
+	}
+}
+
+// ttfbColor returns an ANSI color code based on TTFB (time to first byte) threshold.
+// < 1s → gray (fast), 1-3s → yellow (moderate), > 3s → red (slow).
+func ttfbColor(ms int64) string {
+	switch {
+	case ms >= 3000:
 		return colorRed
 	case ms >= 1000:
 		return colorYellow

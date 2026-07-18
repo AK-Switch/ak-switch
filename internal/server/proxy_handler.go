@@ -288,7 +288,7 @@ func (pr *ProviderRouter) handleNonRetryable(w http.ResponseWriter, ps *Provider
 	io.Copy(w, resp.Body)
 
 	pr.logs.Append(buildLogEntry(ps, key, idx, method, target, resp.StatusCode, len(bodyBytes), start, attempt, ttfb.Milliseconds()))
-	slog.Warn("non-retryable client error", "provider", ps.Name, "method", method, "url", target, "status", resp.StatusCode)
+	slog.Warn("non-retryable client error", "provider", ps.Name, "method", method, "url", target, "status", resp.StatusCode, "key_name", ps.Pool.Name(idx))
 	slog.Debug("proxy response debug", "status", resp.StatusCode, "duration_ms", time.Since(start).Seconds()*1000, "retries", attempt+1)
 	pr.recordProxyMetrics(method, "4xx", fmt.Sprintf("%d", idx), start)
 	if attempt > 0 {

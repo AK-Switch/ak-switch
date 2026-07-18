@@ -22,6 +22,11 @@ var logLevel slog.LevelVar
 // Set via SetLogFormat before the first ApplyLogLevel call.
 var logCompact bool
 
+// logSingleProvider controls whether the provider name is shown in compact mode.
+// When true (single provider), the provider name is hidden.
+// Set via SetLogFormat before the first ApplyLogLevel call.
+var logSingleProvider bool
+
 // fileHandlerWriter is the active lumberjack.Logger for file logging.
 // nil when file logging is not configured.
 var fileHandlerWriter *lumberjack.Logger
@@ -79,9 +84,11 @@ func NewProxyEngine(cfg *config.Config, pool *keypool.KeyPool) *ProxyEngine {
 
 // SetLogFormat sets the log output format for stdout.
 // compact=true enables the compact ColorHandler format.
+// singleProvider=true hides the provider name in compact mode.
 // Must be called before the first ApplyLogLevel call to take effect.
-func SetLogFormat(compact bool) {
+func SetLogFormat(compact bool, singleProvider bool) {
 	logCompact = compact
+	logSingleProvider = singleProvider
 }
 
 // ApplyLogLevel sets the global slog handler's minimum level based on a string.
@@ -105,7 +112,7 @@ func ApplyLogLevel(level string) {
 	}
 	logLevel.Set(lvl)
 
-	stderrHandler := newHandler(os.Stderr, &logLevel, logCompact)
+	stderrHandler := newHandler(os.Stderr, &logLevel, logCompact, logSingleProvider)
 	if fileHandlerWriter != nil {
 		fileHandler := slog.NewTextHandler(fileHandlerWriter, &slog.HandlerOptions{Level: &logLevel})
 		slog.SetDefault(slog.New(&multiHandler{stderr: stderrHandler, file: fileHandler}))
