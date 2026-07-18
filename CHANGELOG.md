@@ -4,6 +4,31 @@
 
 ---
 
+## v0.1.2（2026-07-19）
+
+### Windows 图标修复
+- 修复 icon.ico 尺寸：从 1254×1254 单图缩放为 256/48/32/16 标准多尺寸 ICO
+- 修复 CI 中 rsrc 图标嵌入：临时清除 GOOS/GOARCH 后再安装运行 rsrc
+
+### Release Notes 增量
+- 替换 `generate_release_notes: true` 为显式 `gh api generate-notes` 调用，支持 `previous_tag` 参数，不再包含全部历史 PR
+
+### Token 计量加固
+- 修复流式响应中 `output_tokens` 始终为 0 的问题
+- 支持多种 SSE 流式格式（`message_delta`、`content_block_start`、OpenAI 格式）
+- 修复 `estimateInputTokens` 对 Anthropic 格式（content 为数组）的兼容性
+- Token 计量全面加固（边界情况容错）
+
+### 配置增强
+- 移除 `KEYS_ENCRYPTION_KEY` 环境变量，简化密钥管理
+- keyring 不可用时自动回退到加密文件存储，新增 `--insecure-storage` 明文逃生口
+- `Host` 改为可配置项，支持绑定 Tailscale IP 等非默认地址
+
+### 项目技能
+- 添加 `remote-monitoring` 项目级 skill，管理远程监控栈（Prometheus/Grafana/nssm）
+
+---
+
 ## 日志条目增强（PR #36）
 
 - LogEntry 新增 DurationMs/Attempt/Provider 字段
