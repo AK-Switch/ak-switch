@@ -50,6 +50,9 @@ gh pr diff <N> --name-only | sort
 # 2. 当两个或多个 PR 改动了同一个文件 → 存在依赖或冲突
 # 3. 检查 commit 祖先关系，判断谁依赖谁
 git merge-base --is-ancestor <branch-A> <branch-B> && echo "A is ancestor of B"
+
+# 4. 当两个或多个 PR 都改 internal/ 下的 Go 文件时，检查函数级冲突
+gh pr diff <N> | grep '^[+-]func ' | sort
 ```
 
 **依赖类型判断：**
@@ -109,8 +112,26 @@ gh pr update-branch <N>
 # 重跑失败的 CI
 gh run rerun <run-id>
 
-# 轮询等待
-gh pr view <N> --json state,mergeStateStatus,statusCheckRollup
+# 轮询等待（Windows Git Bash 不带 jq，用 gh --jq 替代）
+gh pr view <N> --json state,mergeStateStatus
+
+# 查看完整状态（含 checks 详情）
+gh pr view <N> --json statusCheckRollup,mergeStateStatus,mergeable --jq '{mergeStateStatus, mergeable, checks: [.statusCheckRollup[]? | {name, status, conclusion}]}'
+```
+
+**Windows 平台轮询方案（PowerShell，替代 bash 循环）：**
+```powershell
+$maxAttempts = 20
+for ($i = 1; $i -le $maxAttempts; $i++) {
+    Start-Sleep -Seconds 30
+    $pr = gh pr view <N> --json statusCheckRollup,mergeStateStatus,state --jq '{checks: [.statusCheckRollup[]? | {name, status, conclusion}], mergeState: .mergeStateStatus, state: .state}'
+    $prObj = $pr | ConvertFrom-Json
+    $completed = ($prObj.checks | Where-Object { $_.status -eq "COMPLETED" }).Count
+    $total = $prObj.checks.Count
+    if ($prObj.state -eq "MERGED") { Write-Host "✅ PR #N merged!"; break }
+    Write-Host "[$($i*30)s] $($prObj.mergeState) — CI: $completed/$total completed"
+    $prObj.checks | ForEach-Object { Write-Host "  $($_.name): $($_.status) $($_.conclusion)" }
+}
 ```
 
 **CI 失败分类：**
@@ -157,10 +178,16 @@ foreach ($pr in @(1,2,3)) { gh pr merge $pr --squash --auto }
 ```
 
 **注意事项：**
+- `gh pr merge --auto` 成功时无输出（exit code 0），用 `gh pr view <N> --json autoMergeRequest` 验证是否生效
 - Draft PR 不能开 auto-merge → 先 `gh pr ready <N>`
 - 开了 auto-merge 后如果 PR 状态变为 `DIRTY` → 需要手动解决冲突
 - 已开 auto-merge 的 PR 如果被判断为 supersede → 先关 auto-merge 再关闭 PR
 - **开 auto-merge 前先检查 `mergeStateStatus`**：如果 `BEHIND`，先更新分支再开，否则开了也合不掉
+
+**BEHIND 状态延迟处理：** `gh pr update-branch` 后 CI 通过但 mergeState 仍是 `BEHIND` 时：
+1. 等 10-15 秒让 GitHub 重新计算状态
+2. 如果仍是 BEHIND，尝试再次 `gh pr update-branch`
+3. 仍然可以开 auto-merge（即使 BEHIND，分支更新后 CI 通过会自动合并）
 
 **合并后扫描（横向维护）：**
 
@@ -169,7 +196,7 @@ foreach ($pr in @(1,2,3)) { gh pr merge $pr --squash --auto }
 
 ```bash
 # 1. 合并一个 PR 后，扫描所有其他 PR 的 mergeStateStatus
-gh pr list --state open --json number,headRefName,mergeStateStatus | jq -r '.[] | select(.mergeStateStatus == "BEHIND") | "PR #\(.number) is BEHIND"'
+gh pr list --state open --json number,headRefName,mergeStateStatus --jq '.[] | select(.mergeStateStatus == "BEHIND") | "PR #\(.number) is BEHIND"'
 
 # 2. 对每个 BEHIND 的 PR 更新分支（触发 CI 重新运行）
 gh pr update-branch <N>
@@ -202,7 +229,12 @@ done
 # 2. 拉取最新 main
 git checkout main
 git fetch origin
-git merge --ff-only origin/main
+
+# 尝试快进合并，本地 main 分叉时用 reset 兜底
+git merge --ff-only origin/main || {
+  echo "本地 main 已分叉，执行 git reset --hard origin/main"
+  git reset --hard origin/main
+}
 
 # 3. 编译安装最新二进制
 go install ./cmd/akswitch/
