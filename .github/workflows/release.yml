@@ -79,7 +79,10 @@ jobs:
       - name: Get previous tag for release notes
         id: prev_tag
         run: |
-          PREV=$(gh api /repos/${{ github.repository }}/releases --jq '.[1].tag_name' 2>/dev/null || echo "")
+          PREV=$(git tag --sort=-version:refname | head -2 | tail -1)
+          if [ "$PREV" = "${{ github.ref_name }}" ]; then
+            PREV=""
+          fi
           echo "tag=$PREV" >> "$GITHUB_OUTPUT"
       - name: Generate release notes (incremental)
         id: release_notes
