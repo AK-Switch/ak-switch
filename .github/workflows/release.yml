@@ -88,7 +88,7 @@ jobs:
           if [ -n "$PREV" ]; then
             NOTES=$(gh api /repos/${{ github.repository }}/releases/generate-notes \
               -f tag_name="${{ github.ref_name }}" \
-              -f previous_tag="$PREV" \
+              -f previous_tag_name="$PREV" \
               --jq '.body')
           else
             NOTES=$(gh api /repos/${{ github.repository }}/releases/generate-notes \
