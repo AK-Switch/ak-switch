@@ -132,7 +132,14 @@ func resolveProviders(dashboardHTML string, providerFilter string, startAll bool
 // initProviders registers each selected provider into the router,
 // loading their API keys and applying log level configuration.
 func initProviders(router *server.ProviderRouter, providers map[string]*config.Config, shouldStart func(name string) bool, providerFilter string, logCompact bool) {
-	server.SetLogFormat(logCompact)
+	// Determine if only one provider is active (hide provider name in compact mode)
+	startedCount := 0
+	for name := range providers {
+		if shouldStart(name) {
+			startedCount++
+		}
+	}
+	server.SetLogFormat(logCompact, startedCount <= 1)
 	for name, cfg := range providers {
 		if !shouldStart(name) {
 			slog.Debug("skipping provider", "name", name)
