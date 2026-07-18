@@ -299,3 +299,111 @@ func TestStreamSSE_AllEventsPreserved(t *testing.T) {
 		t.Error("response missing message_delta event")
 	}
 }
+
+func TestStreamSSE_MessageDeltaOutputTokens(t *testing.T) {
+	w := httptest.NewRecorder()
+	sseData := "" +
+		"event: content_block_delta\n" +
+		"data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hello\"}}\n\n" +
+		"event: message_delta\n" +
+		"data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":42}}\n\n" +
+		"event: message_stop\n" +
+		"data: {\"type\":\"message_stop\"}\n\n"
+
+	respBody := io.NopCloser(strings.NewReader(sseData))
+	resp := &http.Response{Body: respBody, Header: make(http.Header)}
+
+	_, output, _ := streamSSEAndEstimateTokens(w, resp, nil, "")
+
+	// Should use API's output_tokens=42 from message_delta, not tiktoken estimation
+	if output != 42 {
+		t.Errorf("output_tokens = %d, want 42 (from message_delta.usage.output_tokens)", output)
+	}
+}
+
+func TestStreamSSE_MessageDeltaNoUsage(t *testing.T) {
+	w := httptest.NewRecorder()
+	sseData := "" +
+		"event: content_block_delta\n" +
+		"data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hello world\"}}\n\n" +
+		"event: message_delta\n" +
+		"data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"}}\n\n" +
+		"event: message_stop\n" +
+		"data: {\"type\":\"message_stop\"}\n\n"
+
+	respBody := io.NopCloser(strings.NewReader(sseData))
+	resp := &http.Response{Body: respBody, Header: make(http.Header)}
+
+	_, output, _ := streamSSEAndEstimateTokens(w, resp, nil, "")
+
+	// No usage in message_delta, should fall back to tiktoken estimation
+	if output <= 0 {
+		t.Errorf("output_tokens = %d, want > 0 (tiktoken estimation fallback)", output)
+	}
+}
+
+func TestStreamSSE_ContentBlockStartText(t *testing.T) {
+	w := httptest.NewRecorder()
+	sseData := "" +
+		"event: content_block_start\n" +
+		"data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"Initial text\"}}\n\n" +
+		"event: content_block_delta\n" +
+		"data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" and more\"}}\n\n"
+
+	respBody := io.NopCloser(strings.NewReader(sseData))
+	resp := &http.Response{Body: respBody, Header: make(http.Header)}
+
+	_, output, _ := streamSSEAndEstimateTokens(w, resp, nil, "")
+
+	// Should accumulate text from both content_block_start and content_block_delta
+	if output <= 0 {
+		t.Errorf("output_tokens = %d, want > 0 (text from start + delta)", output)
+	}
+}
+
+func TestStreamSSE_OpenAIFormat(t *testing.T) {
+	w := httptest.NewRecorder()
+	sseData := "" +
+		"data: {\"id\":\"chatcmpl-xxx\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hello\"},\"finish_reason\":null}]}\n\n" +
+		"data: {\"id\":\"chatcmpl-xxx\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" world\"},\"finish_reason\":null}]}\n\n" +
+		"data: {\"id\":\"chatcmpl-xxx\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n" +
+		"data: [DONE]\n\n"
+
+	respBody := io.NopCloser(strings.NewReader(sseData))
+	resp := &http.Response{Body: respBody, Header: make(http.Header)}
+
+	_, output, _ := streamSSEAndEstimateTokens(w, resp, nil, "")
+
+	// Should handle OpenAI format by accumulating choices[].delta.content
+	if output <= 0 {
+		t.Errorf("output_tokens = %d, want > 0 for OpenAI format", output)
+	}
+
+	// Verify the response was streamed to the client
+	body := w.Body.String()
+	if !strings.Contains(body, "Hello") || !strings.Contains(body, "world") {
+		t.Errorf("response body should contain OpenAI streaming data, got: %q", body)
+	}
+}
+
+func TestStreamSSE_MessageDeltaTakesPrecedence(t *testing.T) {
+	w := httptest.NewRecorder()
+	// message_delta has usage.output_tokens=50, but accumulated text would estimate differently
+	sseData := "" +
+		"event: content_block_delta\n" +
+		"data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"A\"}}\n\n" +
+		"event: message_delta\n" +
+		"data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":50}}\n\n" +
+		"event: message_stop\n" +
+		"data: {\"type\":\"message_stop\"}\n\n"
+
+	respBody := io.NopCloser(strings.NewReader(sseData))
+	resp := &http.Response{Body: respBody, Header: make(http.Header)}
+
+	_, output, _ := streamSSEAndEstimateTokens(w, resp, nil, "")
+
+	// API's output_tokens should take precedence
+	if output != 50 {
+		t.Errorf("output_tokens = %d, want 50 (API output_tokens should take precedence)", output)
+	}
+}
