@@ -74,8 +74,30 @@ jobs:
         run: |
           cd dist
           sha256sum * > SHA256SUMS
+      - name: Get previous tag for release notes
+        id: prev_tag
+        run: |
+          PREV=$(gh api /repos/${{ github.repository }}/releases --jq '.[1].tag_name' 2>/dev/null || echo "")
+          echo "tag=$PREV" >> "$GITHUB_OUTPUT"
+      - name: Generate release notes (incremental)
+        id: release_notes
+        run: |
+          PREV="${{ steps.prev_tag.outputs.tag }}"
+          if [ -n "$PREV" ]; then
+            NOTES=$(gh api /repos/${{ github.repository }}/releases/generate-notes \
+              -f tag_name="${{ github.ref_name }}" \
+              -f previous_tag="$PREV" \
+              --jq '.body')
+          else
+            NOTES=$(gh api /repos/${{ github.repository }}/releases/generate-notes \
+              -f tag_name="${{ github.ref_name }}" \
+              --jq '.body')
+          fi
+          echo "notes<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$NOTES" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*
-          generate_release_notes: true
+          body: ${{ steps.release_notes.outputs.notes }}
