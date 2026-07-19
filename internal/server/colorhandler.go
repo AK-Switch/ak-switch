@@ -68,7 +68,12 @@ func (h *ColorHandler) Handle(ctx context.Context, r slog.Record) error {
 	if h.compact {
 		return h.handleCompact(ctx, r)
 	}
+	return h.handleNonCompact(ctx, r)
+}
 
+// handleNonCompact renders a log record with ANSI colors and standard level labels.
+// Used as the default format, and as a fallback for unrecognized messages in compact mode.
+func (h *ColorHandler) handleNonCompact(ctx context.Context, r slog.Record) error {
 	// Time
 	ts := r.Time.Format("15:04:05.000")
 
@@ -146,8 +151,9 @@ func (h *ColorHandler) Handle(ctx context.Context, r slog.Record) error {
 	return nil
 }
 
+
 // handleCompact formats proxy-related log messages in a compact one-line format.
-// Falls back to the default handler for non-proxy messages.
+// Falls back to handleNonCompact for unrecognized messages.
 func (h *ColorHandler) handleCompact(ctx context.Context, r slog.Record) error {
 	ts := r.Time.Format("15:04:05")
 	bracketTS := fmt.Sprintf("%s[%s]%s", colorGray, ts, colorReset)
@@ -274,7 +280,7 @@ func (h *ColorHandler) handleCompact(ctx context.Context, r slog.Record) error {
 		return nil
 
 	default:
-		return h.inner.Handle(ctx, r)
+		return h.handleNonCompact(ctx, r)
 	}
 }
 // methodColor returns an ANSI color code for an HTTP method.

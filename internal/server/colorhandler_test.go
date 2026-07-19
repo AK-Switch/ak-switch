@@ -282,8 +282,12 @@ func TestCompact_OtherMessages(t *testing.T) {
 	logger.Info("server started", "addr", "127.0.0.1:4000", "providers", 1)
 
 	output := buf.String()
-	if !strings.Contains(output, "level=INFO") {
-		t.Errorf("non-proxy message should use TextHandler format, got: %q", output)
+	stripped := stripANSI(output)
+	if strings.Contains(stripped, "level=INFO") {
+		t.Errorf("non-proxy message should not use TextHandler format, got: %q", stripped)
+	}
+	if !strings.Contains(stripped, "INFO") {
+		t.Errorf("non-proxy message should contain colored level label, got: %q", stripped)
 	}
 	if !strings.Contains(output, "server started") {
 		t.Errorf("non-proxy message should contain message text, got: %q", output)
