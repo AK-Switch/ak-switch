@@ -206,36 +206,40 @@ type LogEntry struct {
 
 ## 工作流
 
-- main 分支受保护，禁止直接推送
-- 执行改动前创建功能分支
-- 遵循 GitHub Flow + 原子 commit
+main 分支受保护，禁止直接推送。遵循 GitHub Flow + 原子 commit。
 
-### 角色分工
+### 通用规则
 
-**Coder（写代码）**
-1. 从 main 创建分支
-2. 写代码，确保本地测试通过（`make test-all`）
-3. 提交 **Draft PR**（标题写明改动内容）
-4. 完成——不等 CI，不合并，不提 auto-merge
+- **新增 CLI 命令/标志，必须在同一 PR 中写好对应的入口测试**，详见下方 Coder 流程
+- 标志注册测试固定模式：`provider_cmd_test.go` 中的 `TestKeyAddCmd_HasNameFlag`（`Flags().Lookup("name")`）
+- 新增命令定义测试固定模式：`TestKeyUpdateCmd_Exists`（检查变量非 nil）
+- 提交前必须跑完**新测试** + **全量回归**，两步分开执行
 
-需要合并时，调用 merger skill（说"你是Merger"）。
+### Coder 流程
 
-1. **[测试]** — 新增 CLI 命令/标志 -> 对应 CLI 入口测试已写？标志注册测试（`Lookup`）在同一个 PR？
-2. **[测试]** — `make test-all` 全量通过？
-3. **[手动验收]** — `go install` 编译安装后，按改动类型运行对应验证：
+1. **创建分支** — `git checkout -b feature/xxx main`
+2. **实现代码** — 写功能逻辑
+3. **写测试** — 在 `provider_cmd_test.go`（或对应文件）中按上述模式添加测试：
+   - 新增命令 → 加 `TestXxxCmd_Exists`
+   - 新增标志 → 加 `TestXxxCmd_HasYyyFlag`
+4. **验证新测试** — `go test -tags=unit -run TestXxx ./internal/cmd/` 确认新测试通过
+5. **验证全量** — `make test-all`
+6. **手动验收** — `go install` 编译后按改动类型运行对应验证：
 
    | 改动类型 | 验证命令 |
    |---------|---------|
    | 新增/修改 CLI 标志 | `akswitch <cmd> --help \| grep <flag>` 确认标志可见 |
    | 新增/修改 CLI 命令 | `akswitch <cmd> --help` 确认子命令存在 |
-   | 修改日志格式 | `akswitch start --help | grep log-format` 确认默认值，或 `akswitch start --log-format=default` 切回标准模式 |
+   | 修改日志格式 | `akswitch start --help \| grep log-format` 确认默认值，或 `akswitch start --log-format=default` 切回标准模式 |
    | 逻辑修复 | 用真实场景（启动代理、发送请求）确认修复生效 |
 
-4. **[提交]** — 在正确的分支？提交信息清晰？
+7. **提交 Draft PR** — 标题写明改动内容，不等 CI、不合并、不提 auto-merge
+
+需要合并时，调用 merger skill（说"你是Merger"）。
 
 ### 提交后检查
 
-- **[二进制更新]** — PR 合并后 `go install ./cmd/akswitch/` 更新本地二进制
+- 合并后 `go install ./cmd/akswitch/` 更新本地二进制
 
 ## 日志分析
 
