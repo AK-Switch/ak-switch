@@ -93,7 +93,7 @@ func init() {
 var keyCmd = &cobra.Command{
 	Use:   "key",
 	Short: "Manage API keys",
-	Long:  `Add, list, remove, disable, and enable API keys for a provider.`,
+	Long:  `Add, list, remove, update, disable, and enable API keys for a provider.`,
 }
 
 var keyAddCmd = &cobra.Command{

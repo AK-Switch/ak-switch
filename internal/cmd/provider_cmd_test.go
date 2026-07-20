@@ -61,3 +61,16 @@ func TestProviderAddCmd_HasDefaultFlag(t *testing.T) {
 		t.Fatal("expected --default flag to be registered on provider add command")
 	}
 }
+
+func TestKeyUpdateCmd_Exists(t *testing.T) {
+	if keyUpdateCmd == nil {
+		t.Fatal("expected keyUpdateCmd to be defined")
+	}
+}
+
+func TestKeyUpdateCmd_HasNameFlag(t *testing.T) {
+	flag := keyUpdateCmd.Flags().Lookup("name")
+	if flag == nil {
+		t.Fatal("expected --name flag to be registered on key update command")
+	}
+}
