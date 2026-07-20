@@ -74,3 +74,23 @@ func TestKeyUpdateCmd_HasNameFlag(t *testing.T) {
 		t.Fatal("expected --name flag to be registered on key update command")
 	}
 }
+
+func TestKeyUpdateCmd_HasByNameFlag(t *testing.T) {
+	flag := keyUpdateCmd.Flags().Lookup("by-name")
+	if flag == nil {
+		t.Fatal("expected --by-name flag to be registered on key update command")
+	}
+}
+
+func TestKeyRenameCmd_Exists(t *testing.T) {
+	if keyRenameCmd == nil {
+		t.Fatal("expected keyRenameCmd to be defined")
+	}
+}
+
+func TestKeyRenameCmd_HasByNameFlag(t *testing.T) {
+	flag := keyRenameCmd.Flags().Lookup("by-name")
+	if flag == nil {
+		t.Fatal("expected --by-name flag to be registered on key rename command")
+	}
+}
