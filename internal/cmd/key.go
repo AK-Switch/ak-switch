@@ -78,10 +78,13 @@ func init() {
 	keyCmd.AddCommand(keyRemoveCmd)
 	keyCmd.AddCommand(keyDisableCmd)
 	keyCmd.AddCommand(keyEnableCmd)
+	keyCmd.AddCommand(keyUpdateCmd)
 	keyCmd.AddCommand(keyImportCmd)
 	keyImportCmd.Flags().StringP("file", "f", "", "Import keys from a JSON file")
 	keyImportCmd.Flags().StringP("name", "n", "", "Display name for imported keys")
 	keyImportCmd.Flags().Bool("insecure-storage", false, "Store keys in plaintext (WARNING: not encrypted)")
+
+	keyUpdateCmd.Flags().StringP("name", "n", "", "New display name for the key")
 
 	keyAddCmd.Flags().StringP("name", "n", "", "Display name for the key")
 	keyAddCmd.Flags().Bool("insecure-storage", false, "Store keys in plaintext (WARNING: not encrypted)")
@@ -90,7 +93,7 @@ func init() {
 var keyCmd = &cobra.Command{
 	Use:   "key",
 	Short: "Manage API keys",
-	Long:  `Add, list, remove, disable, and enable API keys for a provider.`,
+	Long:  `Add, list, remove, update, disable, and enable API keys for a provider.`,
 }
 
 var keyAddCmd = &cobra.Command{
@@ -243,6 +246,58 @@ Examples:
 		return nil
 	},
 }
+
+var keyUpdateCmd = &cobra.Command{
+	Use:   "update <provider> <index> <key>",
+	Short: "Update an API key at the specified index",
+	Long: `Replace an existing API key at the specified index with a new key value.
+
+The key's position, disabled state, and circuit breaker state are preserved.
+Use --name to optionally rename the key.
+
+Examples:
+  akswitch key update sensenova 0 sk-xxxxxxxxxxxxxxxx
+  akswitch key update sensenova 0 sk-xxxxxxxxxxxxxxxx --name d1-2`,
+	Args: cobra.ExactArgs(3),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		provider := args[0]
+		idx, err := strconv.Atoi(args[1])
+		if err != nil {
+			return fmt.Errorf("invalid index %q: must be a non-negative integer", args[1])
+		}
+		newKey := args[2]
+
+		store, err := keypool.LoadKeys(provider)
+		if err != nil {
+			return fmt.Errorf("failed to load keys for %q: %w", provider, err)
+		}
+		if store == nil {
+			return fmt.Errorf("no keys found for provider %q", provider)
+		}
+		if idx < 0 || idx >= len(store.Keys) {
+			return fmt.Errorf("index %d out of range: provider %q has %d keys (valid: 0-%d)",
+				idx, provider, len(store.Keys), len(store.Keys)-1)
+		}
+
+		oldMasked := utils.MaskKey(store.Keys[idx].Key)
+		store.Keys[idx].Key = newKey
+
+		if cmd.Flags().Changed("name") {
+			newName, _ := cmd.Flags().GetString("name")
+			store.Keys[idx].Name = newName
+		}
+
+		if err := keypool.SaveKeys(provider, store); err != nil {
+			return fmt.Errorf("failed to save keys for %q: %w", provider, err)
+		}
+
+		fmt.Printf("Updated key [%d] %s -> %s for provider %q\n",
+			idx, oldMasked, utils.MaskKey(newKey), provider)
+		triggerReload()
+		return nil
+	},
+}
+
 var keyListCmd = &cobra.Command{
 	Use:   "list <provider>",
 	Short: "List API keys for a provider",
