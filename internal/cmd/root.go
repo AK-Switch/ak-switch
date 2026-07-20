@@ -16,9 +16,8 @@ var Version = "dev"
 var dashHTML string
 
 var rootCmd = &cobra.Command{
-	Use:           "akswitch",
-	Short:         "API Key rotation proxy for AI providers",
-	SilenceUsage:  true,
+	Use:   "akswitch",
+	Short: "API Key rotation proxy for AI providers",
 }
 
 var versionCmd = &cobra.Command{
