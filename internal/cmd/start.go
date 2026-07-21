@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"net"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -30,19 +31,20 @@ var startCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		providerFilter, _ := cmd.Flags().GetString("provider")
 		startAll, _ := cmd.Flags().GetBool("all")
+		devMode, _ := cmd.Flags().GetBool("dev")
 		logFormat, _ := cmd.Flags().GetString("log-format")
 		restartLogFormat = logFormat
-		startServer(dashHTML, providerFilter, startAll, logFormat)
+		startServer(dashHTML, providerFilter, startAll, logFormat, devMode)
 	},
 }
 
-func startServer(dashboardHTML string, providerFilter string, startAll bool, logFormat string) {
+func startServer(dashboardHTML string, providerFilter string, startAll bool, logFormat string, devMode bool) {
 	logCompact := logFormat == "compact"
 	// ── Crash recovery ─────────────────────────────
 	defer server.CrashRecover("startServer")
 
 	// ── PID pre-check ───────────────────────────────
-	if running, pid := checkPidFile(pidFilePath()); running {
+	if running, pid := checkPidFile(pidFilePath(devMode)); running {
 		slog.Error("akswitch is already running", "pid", pid)
 		fmt.Fprintf(os.Stderr, "akswitch is already running (PID %d). Stop it first with 'akswitch stop'.\n", pid)
 		os.Exit(1)
@@ -50,6 +52,20 @@ func startServer(dashboardHTML string, providerFilter string, startAll bool, log
 
 	// ── Resolve providers, config, and selection strategy ──
 	router, providers, port, host, shouldStart := resolveProviders(dashboardHTML, providerFilter, startAll)
+
+	// ── Dev mode: find available port ──────────────────
+	if devMode {
+		for i := 0; i < 10; i++ {
+			addr := fmt.Sprintf("%s:%d", host, port+i)
+			ln, err := net.Listen("tcp", addr)
+			if err == nil {
+				ln.Close()
+				port = port + i
+				break
+			}
+		}
+		fmt.Printf("🚧 Dev mode on port %d\n", port)
+	}
 
 	// ── Initialize file logging (from first provider) ──
 	for _, cfg := range providers {
@@ -72,7 +88,7 @@ func startServer(dashboardHTML string, providerFilter string, startAll bool, log
 	}
 
 	// ── Write PID file ────────────────────────────────
-	pidPath := writePIDFile()
+	pidPath := writePIDFile(devMode)
 	defer func() {
 		if err := os.Remove(pidPath); err != nil && !os.IsNotExist(err) {
 			slog.Warn("failed to remove PID file", "error", err)
@@ -185,8 +201,8 @@ func initProviders(router *server.ProviderRouter, providers map[string]*config.C
 }
 
 // writePIDFile writes the PID file and returns the path for deferred cleanup.
-func writePIDFile() string {
-	pidPath := pidFilePath()
+func writePIDFile(devMode bool) string {
+	pidPath := pidFilePath(devMode)
 	if err := os.MkdirAll(filepath.Dir(pidPath), 0755); err != nil {
 		slog.Warn("failed to create PID file directory", "error", err)
 	}
@@ -246,10 +262,16 @@ func loadKeysForProvider(name string, cfg *config.Config) (keys, names []string)
 }
 
 // pidFilePath returns the path to the PID file, located in the config directory.
-func pidFilePath() string {
+func pidFilePath(devMode bool) string {
 	xdgPath, err := config.XDGConfigPath()
 	if err != nil {
+		if devMode {
+			return "akswitch-dev.pid"
+		}
 		return "akswitch.pid"
+	}
+	if devMode {
+		return filepath.Join(filepath.Dir(xdgPath), "akswitch-dev.pid")
 	}
 	return filepath.Join(filepath.Dir(xdgPath), "akswitch.pid")
 }
@@ -291,5 +313,6 @@ func init() {
 	startCmd.Flags().String("provider", "", "Only start the specified provider")
 	startCmd.Flags().Bool("all", false, "Start all providers (default: first provider alphabetically, or error if none configured)")
 	startCmd.Flags().String("log-format", "compact", "Log output format: default or compact")
+	startCmd.Flags().Bool("dev", false, "Start in development mode with auto-incrementing port")
 	rootCmd.AddCommand(startCmd)
 }

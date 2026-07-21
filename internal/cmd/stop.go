@@ -14,6 +14,7 @@ import (
 )
 
 func init() {
+	stopCmd.Flags().Bool("dev", false, "Stop the development instance")
 	rootCmd.AddCommand(stopCmd)
 }
 
@@ -22,7 +23,8 @@ var stopCmd = &cobra.Command{
 	Short: "Stop the running akswitch server",
 	Long:  `Stop the akswitch proxy server gracefully using the PID file.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		pidData, err := os.ReadFile(pidFilePath())
+		devMode, _ := cmd.Flags().GetBool("dev")
+		pidData, err := os.ReadFile(pidFilePath(devMode))
 		if err != nil {
 			fmt.Println("Could not read PID file. Try:")
 			fmt.Println("  - Windows: taskkill /F /IM akswitch.exe")
@@ -36,7 +38,7 @@ var stopCmd = &cobra.Command{
 			fmt.Println("Invalid PID in file. Try:")
 			fmt.Println("  - Windows: taskkill /F /IM akswitch.exe")
 			fmt.Println("  - Linux/macOS: kill $(pgrep akswitch)")
-			return fmt.Errorf("invalid PID in %s", pidFilePath())
+			return fmt.Errorf("invalid PID in %s", pidFilePath(devMode))
 		}
 
 		fmt.Printf("Stopping akswitch (PID %d)...\n", pid)
@@ -81,7 +83,7 @@ var stopCmd = &cobra.Command{
 
 		if exited {
 			fmt.Println("AK Switch stopped gracefully")
-			_ = os.Remove(pidFilePath())
+			_ = os.Remove(pidFilePath(devMode))
 			return nil
 		}
 
