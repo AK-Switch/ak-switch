@@ -72,6 +72,13 @@ func updateKey(provider string, idx int, op KeyMutation) error {
 	return nil
 }
 
+// addKeyIndexFlags registers the standard --by-name flag on a command
+// that accepts a key index or name. Using this factory function ensures
+// all key-index commands consistently support --by-name.
+func addKeyIndexFlags(cmd *cobra.Command) {
+	cmd.Flags().Bool("by-name", false, "Look up key by name instead of index")
+}
+
 func init() {
 	rootCmd.AddCommand(keyCmd)
 	keyCmd.AddCommand(keyAddCmd)
@@ -87,8 +94,11 @@ func init() {
 	keyImportCmd.Flags().Bool("insecure-storage", false, "Store keys in plaintext (WARNING: not encrypted)")
 
 	keyUpdateCmd.Flags().StringP("name", "n", "", "New display name for the key")
-	keyUpdateCmd.Flags().Bool("by-name", false, "Look up key by name instead of index")
-	keyRenameCmd.Flags().Bool("by-name", false, "Look up key by name instead of index")
+	addKeyIndexFlags(keyRemoveCmd)
+	addKeyIndexFlags(keyDisableCmd)
+	addKeyIndexFlags(keyEnableCmd)
+	addKeyIndexFlags(keyUpdateCmd)
+	addKeyIndexFlags(keyRenameCmd)
 
 	keyAddCmd.Flags().StringP("name", "n", "", "Display name for the key")
 	keyAddCmd.Flags().Bool("insecure-storage", false, "Store keys in plaintext (WARNING: not encrypted)")
@@ -443,19 +453,37 @@ Example output:
 
 var keyRemoveCmd = &cobra.Command{
 	Use:   "remove <provider> <index>",
-	Short: "Remove an API key by index",
-	Long: `Remove an API key from the provider's key store at the specified index.
+	Short: "Remove an API key by index or name",
+	Long: `Remove an API key from the provider's key store at the specified index or matching name.
 
-The index corresponds to the key's position as shown in 'akswitch key list'.
-This operation cannot be undone.
+	The index corresponds to the key's position as shown in 'akswitch key list'.
+	Use --by-name to look up a key by its display name instead.
+	This operation cannot be undone.
 
-Example:
-  akswitch key remove nvidia 0`,
+	Examples:
+	  akswitch key remove nvidia 0
+	  akswitch key remove nvidia my-key --by-name`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		idx, err := strconv.Atoi(args[1])
-		if err != nil {
-			return fmt.Errorf("invalid index %q: must be a non-negative integer", args[1])
+		var idx int
+		if byName, _ := cmd.Flags().GetBool("by-name"); byName {
+			store, err := keypool.LoadKeys(args[0])
+			if err != nil {
+				return fmt.Errorf("failed to load keys for %q: %w", args[0], err)
+			}
+			if store == nil {
+				return fmt.Errorf("no keys found for provider %q", args[0])
+			}
+			idx, err = findKeyIndexByName(store, args[1])
+			if err != nil {
+				return err
+			}
+		} else {
+			var err error
+			idx, err = strconv.Atoi(args[1])
+			if err != nil {
+				return fmt.Errorf("invalid index %q: must be a non-negative integer", args[1])
+			}
 		}
 		return updateKey(args[0], idx, KeyRemove)
 	},
@@ -463,19 +491,37 @@ Example:
 
 var keyDisableCmd = &cobra.Command{
 	Use:   "disable <provider> <index>",
-	Short: "Disable an API key by index",
-	Long: `Mark an API key as disabled at the specified index.
+	Short: "Disable an API key by index or name",
+	Long: `Mark an API key as disabled at the specified index or matching name.
 
-Disabled keys are not used for new requests but remain in the key store.
-Use 'akswitch key remove' to permanently remove a key.
+	Disabled keys are not used for new requests but remain in the key store.
+	Use --by-name to look up a key by its display name instead.
+	Use 'akswitch key remove' to permanently remove a key.
 
-Example:
-  akswitch key disable nvidia 1`,
+	Examples:
+	  akswitch key disable nvidia 1
+	  akswitch key disable nvidia my-key --by-name`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		idx, err := strconv.Atoi(args[1])
-		if err != nil {
-			return fmt.Errorf("invalid index %q: must be a non-negative integer", args[1])
+		var idx int
+		if byName, _ := cmd.Flags().GetBool("by-name"); byName {
+			store, err := keypool.LoadKeys(args[0])
+			if err != nil {
+				return fmt.Errorf("failed to load keys for %q: %w", args[0], err)
+			}
+			if store == nil {
+				return fmt.Errorf("no keys found for provider %q", args[0])
+			}
+			idx, err = findKeyIndexByName(store, args[1])
+			if err != nil {
+				return err
+			}
+		} else {
+			var err error
+			idx, err = strconv.Atoi(args[1])
+			if err != nil {
+				return fmt.Errorf("invalid index %q: must be a non-negative integer", args[1])
+			}
 		}
 		return updateKey(args[0], idx, KeyDisable)
 	},
@@ -483,19 +529,37 @@ Example:
 
 var keyEnableCmd = &cobra.Command{
 	Use:   "enable <provider> <index>",
-	Short: "Enable an API key by index",
-	Long: `Re-enable a previously disabled API key at the specified index.
+	Short: "Enable an API key by index or name",
+	Long: `Re-enable a previously disabled API key at the specified index or matching name.
 
-The key will be used again for new requests.  The operation triggers a
-reload so the server picks up the change.
+	The key will be used again for new requests.  The operation triggers a
+	reload so the server picks up the change.
+	Use --by-name to look up a key by its display name instead.
 
-Example:
-  akswitch key enable nvidia 1`,
+	Examples:
+	  akswitch key enable nvidia 1
+	  akswitch key enable nvidia my-key --by-name`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		idx, err := strconv.Atoi(args[1])
-		if err != nil {
-			return fmt.Errorf("invalid index %q: must be a non-negative integer", args[1])
+		var idx int
+		if byName, _ := cmd.Flags().GetBool("by-name"); byName {
+			store, err := keypool.LoadKeys(args[0])
+			if err != nil {
+				return fmt.Errorf("failed to load keys for %q: %w", args[0], err)
+			}
+			if store == nil {
+				return fmt.Errorf("no keys found for provider %q", args[0])
+			}
+			idx, err = findKeyIndexByName(store, args[1])
+			if err != nil {
+				return err
+			}
+		} else {
+			var err error
+			idx, err = strconv.Atoi(args[1])
+			if err != nil {
+				return fmt.Errorf("invalid index %q: must be a non-negative integer", args[1])
+			}
 		}
 		return updateKey(args[0], idx, KeyEnable)
 	},
