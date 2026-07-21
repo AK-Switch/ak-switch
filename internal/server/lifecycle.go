@@ -81,10 +81,11 @@ func StartupKeyProbe(pool *keypool.KeyPool, target string) {
 		if pool.IsDisabled(i) {
 			continue
 		}
+		keyName, _ := pool.Name(i)
 		// Build a minimal probe request
 		req, err := http.NewRequest("GET", probeURL, nil)
 		if err != nil {
-			slog.Warn("failed to build key probe request", "key_index", i, "key_name", pool.Name(i), "error", err)
+			slog.Warn("failed to build key probe request", "key_index", i, "key_name", keyName, "error", err)
 			continue
 		}
 		key := pool.Keys()[i]
@@ -92,16 +93,16 @@ func StartupKeyProbe(pool *keypool.KeyPool, target string) {
 
 		resp, err := client.Do(req)
 		if err != nil {
-			slog.Warn("key probe failed (network)", "key_index", i, "key_name", pool.Name(i), "error", err)
+			slog.Warn("key probe failed (network)", "key_index", i, "key_name", keyName, "error", err)
 			continue
 		}
 		resp.Body.Close()
 
 		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 			pool.Disable(i)
-			slog.Warn("key disabled by startup probe", "key_index", i, "key_name", pool.Name(i), "status", resp.StatusCode)
+			slog.Warn("key disabled by startup probe", "key_index", i, "key_name", keyName, "status", resp.StatusCode)
 		} else {
-			slog.Info("key health check passed", "key_index", i, "key_name", pool.Name(i), "status", resp.StatusCode)
+			slog.Info("key health check passed", "key_index", i, "key_name", keyName, "status", resp.StatusCode)
 		}
 	}
 

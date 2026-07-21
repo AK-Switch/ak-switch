@@ -76,9 +76,10 @@ func (ps *ProviderState) PersistKeys() {
 	keys := ps.Pool.Keys()
 	entries := make([]keypool.KeyEntry, len(keys))
 	for i := range keys {
-		entries[i] = keypool.KeyEntry{
+		n, _ := ps.Pool.Name(i)
+			entries[i] = keypool.KeyEntry{
 			Key:      keys[i],
-			Name:     ps.Pool.Name(i),
+			Name:     n,
 			Disabled: ps.Pool.IsDisabled(i),
 		}
 	}

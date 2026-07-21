@@ -55,6 +55,7 @@ func (pr *ProviderRouter) executeProxy(w http.ResponseWriter, r *http.Request, p
 	start := time.Now()
 	var lastKey string
 	var lastIdx int
+	var lastKeyName string
 
 	bodyBytes, err := readRequestBody(w, r)
 	if err != nil {
@@ -91,6 +92,7 @@ func (pr *ProviderRouter) executeProxy(w http.ResponseWriter, r *http.Request, p
 		}
 
 		idx, key, ok := pool.Next()
+		keyName, _ := pool.Name(idx)
 		if !ok {
 			wait := pool.TimeUntilAvailable()
 			if wait < 0 {
@@ -104,7 +106,7 @@ func (pr *ProviderRouter) executeProxy(w http.ResponseWriter, r *http.Request, p
 		}
 		lastKey = key
 		lastIdx = idx
-
+		lastKeyName, _ = pool.Name(lastIdx)
 		if !pool.CB(idx).Allow() {
 			pool.Release(idx) // release since we're skipping this key
 			remaining := pool.CB(idx).CooldownRemaining()
@@ -144,10 +146,10 @@ func (pr *ProviderRouter) executeProxy(w http.ResponseWriter, r *http.Request, p
 		if err != nil {
 			switch categorizeError(0, err) {
 			case CatClientAbort:
-				slog.Debug("client aborted request", "provider", ps.Name, "key_index", idx, "key_name", pool.Name(idx), "error", err)
+				slog.Debug("client aborted request", "provider", ps.Name, "key_index", idx, "key_name", keyName, "error", err)
 				return
 			default:
-				slog.Warn("key network error", "provider", ps.Name, "key_index", idx, "key_name", pool.Name(idx), "error", err)
+				slog.Warn("key network error", "provider", ps.Name, "key_index", idx, "key_name", keyName, "error", err)
 				pr.metrics.UpstreamErrors.WithLabelValues("network").Inc()
 				upCB.RecordFailure()
 				continue
@@ -197,7 +199,7 @@ func (pr *ProviderRouter) executeProxy(w http.ResponseWriter, r *http.Request, p
 		Timestamp:       time.Now().Format(time.RFC3339),
 		Key:             lastKey,
 		KeyIndex:        lastIdx + 1,
-		KeyName:         pool.Name(lastIdx),
+		KeyName:         lastKeyName,
 		Method:          r.Method,
 		URL:             target,
 		Status:          http.StatusServiceUnavailable,
@@ -220,6 +222,7 @@ func (pr *ProviderRouter) executeProxy(w http.ResponseWriter, r *http.Request, p
 func (pr *ProviderRouter) handleRateLimited(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, cfg *config.Config, start time.Time, method, target string, bodyBytes []byte) bool {
 	defer resp.Body.Close()
 	pool := ps.Pool
+	keyName, _ := pool.Name(idx)
 
 	body, _ := io.ReadAll(resp.Body)
 	cbCooldown := pool.RecordFailure(idx)
@@ -233,11 +236,11 @@ func (pr *ProviderRouter) handleRateLimited(w http.ResponseWriter, ps *ProviderS
 		}
 	}
 	pool.Cooldown(idx, cooldown)
-	slog.Warn("key rate limited", "provider", ps.Name, "key_index", idx, "key_name", pool.Name(idx), "status", resp.StatusCode, "cb_state", fmt.Sprintf("%d", pool.CB(idx).State()), "cb_retry", pool.CB(idx).Attempt(), "body_preview", MaskSensitiveData(string(body), 1024))
+	slog.Warn("key rate limited", "provider", ps.Name, "key_index", idx, "key_name", keyName, "status", resp.StatusCode, "cb_state", fmt.Sprintf("%d", pool.CB(idx).State()), "cb_retry", pool.CB(idx).Attempt(), "body_preview", MaskSensitiveData(string(body), 1024))
 	pr.metrics.UpstreamErrors.WithLabelValues("rate_limited").Inc()
 
 	if pool.CB(idx).State() == circuitbreaker.StatePermanent {
-		slog.Warn("key quota exhausted, disabling permanently", "provider", ps.Name, "key_index", idx, "key_name", pool.Name(idx))
+		slog.Warn("key quota exhausted, disabling permanently", "provider", ps.Name, "key_index", idx, "key_name", keyName)
 		pool.Disable(idx)
 		if pool.ActiveCount() == 0 {
 			return pr.writeAllKeysExhausted(w, ps, method, start)
@@ -252,14 +255,15 @@ func (pr *ProviderRouter) handleRateLimited(w http.ResponseWriter, ps *ProviderS
 func (pr *ProviderRouter) handleAuthRejected(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, method, target string, bodyBytes []byte) bool {
 	defer resp.Body.Close()
 	pool := ps.Pool
+	keyName, _ := pool.Name(idx)
 
 	body, _ := io.ReadAll(resp.Body)
 	pr.metrics.UpstreamErrors.WithLabelValues("auth_rejected").Inc()
 	if pool.RecordAuthFailure(idx) {
 		pool.Disable(idx)
-		slog.Warn("key permanently disabled", "provider", ps.Name, "key_index", idx, "key_name", pool.Name(idx), "status", resp.StatusCode, "body_preview", MaskSensitiveData(string(body), 1024))
+		slog.Warn("key permanently disabled", "provider", ps.Name, "key_index", idx, "key_name", keyName, "status", resp.StatusCode, "body_preview", MaskSensitiveData(string(body), 1024))
 	} else {
-		slog.Warn("key auth failure", "provider", ps.Name, "key_index", idx, "key_name", pool.Name(idx), "status", resp.StatusCode, "fail_count", pool.CB(idx).AuthFailCount())
+		slog.Warn("key auth failure", "provider", ps.Name, "key_index", idx, "key_name", keyName, "status", resp.StatusCode, "fail_count", pool.CB(idx).AuthFailCount())
 	}
 	if pool.ActiveCount() == 0 {
 		writeProxyError(w, http.StatusServiceUnavailable, ErrorAllKeysInvalid, fmt.Sprintf("%s 所有 Key 已失效或吊销", ps.Name))
@@ -274,7 +278,9 @@ func (pr *ProviderRouter) handleAuthRejected(w http.ResponseWriter, ps *Provider
 func (pr *ProviderRouter) handleServerError(ps *ProviderState, idx int, resp *http.Response, attempt int) {
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
-	slog.Warn("upstream server error", "provider", ps.Name, "key_index", idx, "key_name", ps.Pool.Name(idx), "status", resp.StatusCode, "body_preview", MaskSensitiveData(string(body), 1024))
+	pool := ps.Pool
+	keyName, _ := pool.Name(idx)
+	slog.Warn("upstream server error", "provider", ps.Name, "key_index", idx, "key_name", keyName, "status", resp.StatusCode, "body_preview", MaskSensitiveData(string(body), 1024))
 	pr.metrics.UpstreamErrors.WithLabelValues("server_error").Inc()
 	ps.Proxy.upCB.RecordFailure()
 }
@@ -283,12 +289,13 @@ func (pr *ProviderRouter) handleServerError(ps *ProviderState, idx int, resp *ht
 // without further retry attempts.
 func (pr *ProviderRouter) handleNonRetryable(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, method, target string, bodyBytes []byte, attempt int, key string, ttfb time.Duration) {
 	defer resp.Body.Close()
+	keyName, _ := ps.Pool.Name(idx)
 	utils.CopyHeaders(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
 	io.Copy(w, resp.Body)
 
 	pr.logs.Append(buildLogEntry(ps, key, idx, method, target, resp.StatusCode, len(bodyBytes), start, attempt, ttfb.Milliseconds()))
-	slog.Warn("non-retryable client error", "provider", ps.Name, "method", method, "url", target, "status", resp.StatusCode, "key_name", ps.Pool.Name(idx))
+	slog.Warn("non-retryable client error", "provider", ps.Name, "method", method, "url", target, "status", resp.StatusCode, "key_name", keyName)
 	slog.Debug("proxy response debug", "status", resp.StatusCode, "duration_ms", time.Since(start).Seconds()*1000, "retries", attempt+1)
 	pr.recordProxyMetrics(method, "4xx", fmt.Sprintf("%d", idx), start)
 	if attempt > 0 {
@@ -301,6 +308,7 @@ func (pr *ProviderRouter) handleNonRetryable(w http.ResponseWriter, ps *Provider
 // token usage from the response body and records it in the log entry.
 func (pr *ProviderRouter) handleSuccess(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, method, target string, bodyBytes []byte, attempt int, key string, ttfb time.Duration) {
 	pool := ps.Pool
+	keyName, _ := pool.Name(idx)
 	upCB := ps.Proxy.upCB
 
 	pool.RecordSuccess(idx)
@@ -381,7 +389,7 @@ func (pr *ProviderRouter) handleSuccess(w http.ResponseWriter, ps *ProviderState
 		"url", target,
 		"status", resp.StatusCode,
 		"key_index", idx,
-		"key_name", pool.Name(idx),
+		"key_name", keyName,
 		"retry", attempt,
 		"input_tokens", inputTokens,
 		"output_tokens", outputTokens,
@@ -398,11 +406,12 @@ func (pr *ProviderRouter) handleSuccess(w http.ResponseWriter, ps *ProviderState
 
 // buildLogEntry creates a structured LogEntry for proxy request logging.
 func buildLogEntry(ps *ProviderState, key string, idx int, method, target string, status int, bodySize int, start time.Time, attempt int, ttfbMs int64) utils.LogEntry {
+	keyName, _ := ps.Pool.Name(idx)
 	return utils.LogEntry{
 		Timestamp:       time.Now().Format(time.RFC3339),
 		Key:             key,
 		KeyIndex:        idx + 1,
-		KeyName:         ps.Pool.Name(idx),
+		KeyName:         keyName,
 		Method:          method,
 		URL:             target,
 		Status:          status,
