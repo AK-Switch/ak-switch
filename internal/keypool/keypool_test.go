@@ -282,24 +282,30 @@ func TestNameReturnsCorrectName(t *testing.T) {
 	names := []string{"主账号", "备用key", ""}
 	p := NewKeyPool(keys, names)
 
-	if n := p.Name(0); n != "主账号" {
+	if n, err := p.Name(0); err != nil {
+		t.Errorf("Name(0) returned error: %v", err)
+	} else if n != "主账号" {
 		t.Errorf("Name(0) = %q, want %q", n, "主账号")
 	}
-	if n := p.Name(1); n != "备用key" {
+	if n, err := p.Name(1); err != nil {
+		t.Errorf("Name(1) returned error: %v", err)
+	} else if n != "备用key" {
 		t.Errorf("Name(1) = %q, want %q", n, "备用key")
 	}
-	if n := p.Name(2); n != "" {
+	if n, err := p.Name(2); err != nil {
+		t.Errorf("Name(2) returned error: %v", err)
+	} else if n != "" {
 		t.Errorf("Name(2) = %q, want empty", n)
 	}
 }
 
 func TestNameOutOfRange(t *testing.T) {
 	p := NewKeyPool([]string{"key-a"}, []string{"test"})
-	if n := p.Name(-1); n != "" {
-		t.Errorf("Name(-1) = %q, want empty", n)
+	if _, err := p.Name(-1); err == nil {
+		t.Error("Name(-1) expected error, got nil")
 	}
-	if n := p.Name(5); n != "" {
-		t.Errorf("Name(5) = %q, want empty", n)
+	if _, err := p.Name(5); err == nil {
+		t.Error("Name(5) expected error, got nil")
 	}
 }
 
@@ -323,7 +329,9 @@ func TestAddKeyWithName(t *testing.T) {
 	if idx != 1 {
 		t.Errorf("AddKey index = %d, want 1", idx)
 	}
-	if n := p.Name(1); n != "新key" {
+	if n, err := p.Name(1); err != nil {
+		t.Errorf("Name(1) after AddKey returned error: %v", err)
+	} else if n != "新key" {
 		t.Errorf("Name(1) after AddKey = %q, want %q", n, "新key")
 	}
 }

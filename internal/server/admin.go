@@ -108,12 +108,13 @@ func (pr *ProviderRouter) keysHandler(w http.ResponseWriter, r *http.Request) {
 		result := make([]map[string]interface{}, len(keys))
 		for i := range keys {
 			pool.CleanupOldRequests(i)
+			nameVal, _ := pool.Name(i)
 			result[i] = map[string]interface{}{
 				"index":       i + 1,
 				"key":         utils.MaskKey(keys[i]),
 				"status":      pool.KeyStatusLabel(i, now),
 				"requests_1m": pool.RequestsInLastMinute(i),
-				"name":        pool.Name(i),
+				"name":        nameVal,
 			}
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -351,7 +352,8 @@ func (pr *ProviderRouter) reloadHandler(w http.ResponseWriter, r *http.Request) 
 			var disabledNames []string
 			for i := 0; i < oldPool.Len(); i++ {
 				if oldPool.IsDisabled(i) {
-					disabledNames = append(disabledNames, oldPool.Name(i))
+					n, _ := oldPool.Name(i)
+					disabledNames = append(disabledNames, n)
 				}
 			}
 
@@ -360,7 +362,8 @@ func (pr *ProviderRouter) reloadHandler(w http.ResponseWriter, r *http.Request) 
 
 			for _, name := range disabledNames {
 				for i := 0; i < existing.Pool.Len(); i++ {
-					if existing.Pool.Name(i) == name {
+					n, _ := existing.Pool.Name(i)
+					if n == name {
 						_ = existing.Pool.Disable(i)
 						break
 					}

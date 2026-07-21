@@ -49,6 +49,15 @@ func NewKeyPool(keys []string, names []string) *KeyPool {
 	}
 }
 
+// validateIndex checks that the given index is within the valid range of keys.
+// Returns an error if the index is out of range.
+func (p *KeyPool) validateIndex(idx int) error {
+	if idx < 0 || idx >= len(p.keys) {
+		return fmt.Errorf("key index %d out of range (0-%d)", idx, len(p.keys)-1)
+	}
+	return nil
+}
+
 // Keys returns a copy of all keys in the pool.
 func (p *KeyPool) Keys() []string {
 	p.mu.RLock()
@@ -65,14 +74,15 @@ func (p *KeyPool) Len() int {
 	return len(p.keys)
 }
 
-// Name returns the name of a key by index, or empty string if index is out of range.
-func (p *KeyPool) Name(idx int) string {
+// Name returns the name of a key by index.
+// Returns an error if the index is out of range.
+func (p *KeyPool) Name(idx int) (string, error) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	if idx < 0 || idx >= len(p.names) {
-		return ""
+	if err := p.validateIndex(idx); err != nil {
+		return "", err
 	}
-	return p.names[idx]
+	return p.names[idx], nil
 }
 
 // TimeUntilAvailable returns the shortest duration until any key becomes available,
@@ -168,8 +178,8 @@ func (p *KeyPool) CleanupOldRequests(idx int) {
 func (p *KeyPool) Cooldown(idx int, d time.Duration) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if idx < 0 || idx >= len(p.keys) {
-		return fmt.Errorf("key index %d out of range (0-%d)", idx, len(p.keys)-1)
+	if err := p.validateIndex(idx); err != nil {
+		return err
 	}
 	p.cbs[idx].ForceCooldown(d)
 	name := ""
@@ -189,8 +199,8 @@ func (p *KeyPool) Cooldown(idx int, d time.Duration) error {
 func (p *KeyPool) Disable(idx int) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if idx < 0 || idx >= len(p.keys) {
-		return fmt.Errorf("key index %d out of range (0-%d)", idx, len(p.keys)-1)
+	if err := p.validateIndex(idx); err != nil {
+		return err
 	}
 	p.cbs[idx].RecordPerma("manual")
 	name := ""
@@ -209,8 +219,8 @@ func (p *KeyPool) Disable(idx int) error {
 func (p *KeyPool) Enable(idx int) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if idx < 0 || idx >= len(p.keys) {
-		return fmt.Errorf("key index %d out of range (0-%d)", idx, len(p.keys)-1)
+	if err := p.validateIndex(idx); err != nil {
+		return err
 	}
 					p.cbs[idx].Reset()
 		
@@ -430,8 +440,8 @@ func (p *KeyPool) AddKey(key string, name string) int {
 func (p *KeyPool) RemoveKey(idx int) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if idx < 0 || idx >= len(p.keys) {
-		return fmt.Errorf("key index %d out of range (0-%d)", idx, len(p.keys)-1)
+	if err := p.validateIndex(idx); err != nil {
+		return err
 	}
 	name := ""
 	if idx < len(p.names) {
