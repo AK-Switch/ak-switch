@@ -44,7 +44,7 @@ var statusCmd = &cobra.Command{
 			return fmt.Errorf("failed to parse health response: %w", err)
 		}
 
-		fmt.Printf("Server: http://127.0.0.1:%d\n", port)
+		fmt.Printf("Server: http://%s:%d\n", detectServerHost(), port)
 		fmt.Printf("Status: %s\n", healthData["status"])
 
 		if providers, ok := healthData["providers"]; ok {
