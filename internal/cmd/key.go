@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"strings"
 
 	"akswitch/internal/keypool"
 	"akswitch/internal/utils"
@@ -155,7 +156,7 @@ Example:
 }
 var keyImportCmd = &cobra.Command{
 	Use:   "import <provider> [keys...]",
-	Short: "Import API keys from a file, stdin, or command line",
+	Short: "Import API keys from a file, stdin, or command line (with dedup and auto-numbering)",
 	Long: `Import one or more API keys for the specified provider.
 
 Keys can be provided as command-line arguments, from a JSON file, or from stdin.
@@ -165,10 +166,17 @@ JSON file format:
   or
   [{"key": "key1", "name": "name1"}, {"key": "key2"}]
 
+	JSONL file format (one JSON object per line):
+	  {"key": "sk-xxx", "name": "my-key"}
+	  {"api_key": "sk-xxx", "api_key_name": "my-key"}
+	  {"api_key_plain": "sk-xxx"}
+
 Examples:
   akswitch key import nvidia sk-1 sk-2 sk-3
   akswitch key import nvidia --file keys.json
-  cat keys.json | akswitch key import nvidia`,
+  cat keys.json | akswitch key import nvidia
+  akswitch key import nvidia --file credentials.jsonl
+  cat keys.jsonl | akswitch key import nvidia`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		provider := args[0]
@@ -232,7 +240,12 @@ Examples:
 			store = &keypool.KeyStore{Keys: []keypool.KeyEntry{}}
 		}
 
-		store.Keys = append(store.Keys, entries...)
+		// Auto-number duplicate names before dedup
+			entries = autoNumberNames(entries)
+
+			// Dedup against existing keys
+			newEntries, skipped := dedupEntries(entries, store)
+			store.Keys = append(store.Keys, newEntries...)
 
 		if insecure {
 			if err := keypool.SaveKeysInsecure(provider, store); err != nil {
@@ -244,7 +257,25 @@ Examples:
 			}
 		}
 
-					fmt.Printf("Imported %d key(s) to provider %q (total: %d keys)\n", len(entries), provider, len(store.Keys))
+			// Build stats output
+			added := len(newEntries)
+			total := len(store.Keys)
+			names := make([]string, 0, added)
+			for _, e := range newEntries {
+				if e.Name != "" {
+					names = append(names, e.Name)
+				}
+			}
+			nameList := ""
+			if len(names) > 0 {
+				nameList = fmt.Sprintf(" (%s)", strings.Join(names, ", "))
+			}
+			fmt.Printf("Imported %d key(s) to provider %q\n", len(entries), provider)
+			fmt.Printf("  ✅ Added: %d%s\n", added, nameList)
+			if skipped > 0 {
+			fmt.Printf("  ⏭️  Skipped: %d (already exists)\n", skipped)
+			}
+			fmt.Printf("  Total: %d keys\n", total)
 		triggerReload()
 		return nil
 	},
@@ -488,10 +519,91 @@ func findKeyIndexByName(store *keypool.KeyStore, name string) (int, error) {
 	return matches[0], nil
 }
 
-// parseKeyEntries parses JSON key data into KeyEntry slices.
-// Supports: ["key1", "key2"] or [{"key": "key1", "name": "n1"}, ...]
+// parseJSONL parses newline-delimited JSON (JSONL) data into KeyEntry slices.
+// Each line must be a JSON object with "key" (or "api_key" / "api_key_plain") and
+// optionally "name" (or "api_key_name").
+// Supports: {"key": "sk-xxx", "name": "my-key"} or {"api_key": "sk-xxx", "api_key_name": "my-key"}
+func parseJSONL(data []byte) ([]keypool.KeyEntry, error) {
+	lines := strings.Split(string(data), "\n")
+	var entries []keypool.KeyEntry
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		// Try {"key": "xxx", "name": "yyy"} format
+		var entry keypool.KeyEntry
+		if err := json.Unmarshal([]byte(line), &entry); err == nil && entry.Key != "" {
+			entries = append(entries, entry)
+			continue
+		}
+		// Try {"api_key": "xxx", "api_key_name": "yyy"} format
+		var jsonlEntry struct {
+			Key    string `json:"api_key"`
+			KeyAlt string `json:"api_key_plain"`
+			Name   string `json:"api_key_name"`
+		}
+		if err := json.Unmarshal([]byte(line), &jsonlEntry); err != nil {
+			return nil, fmt.Errorf("failed to parse JSONL line: %w", err)
+		}
+		key := jsonlEntry.Key
+		if key == "" {
+			key = jsonlEntry.KeyAlt
+		}
+		if key == "" {
+			return nil, fmt.Errorf("JSONL line missing key field (no 'key', 'api_key', or 'api_key_plain'): %s", line)
+		}
+		entries = append(entries, keypool.KeyEntry{Key: key, Name: jsonlEntry.Name})
+	}
+	if len(entries) == 0 {
+		return nil, fmt.Errorf("no valid key entries found in JSONL data")
+	}
+	return entries, nil
+}
+
+// dedupEntries filters out entries whose keys already exist in the store.
+// Returns the deduplicated entries and the count of skipped duplicates.
+func dedupEntries(entries []keypool.KeyEntry, store *keypool.KeyStore) ([]keypool.KeyEntry, int) {
+	existing := make(map[string]bool, len(store.Keys))
+	for _, e := range store.Keys {
+		existing[e.Key] = true
+	}
+	var newEntries []keypool.KeyEntry
+	skipped := 0
+	for _, e := range entries {
+		if existing[e.Key] {
+			skipped++
+			continue
+		}
+		newEntries = append(newEntries, e)
+		existing[e.Key] = true
+	}
+	return newEntries, skipped
+}
+
+// autoNumberNames appends a sequential suffix (-1, -2, ...) to every named entry
+// so that keys sharing the same name get unique numbered names.
+// Entries with empty names are left unchanged.
+func autoNumberNames(entries []keypool.KeyEntry) []keypool.KeyEntry {
+	nameCount := make(map[string]int)
+	for i, e := range entries {
+		if e.Name == "" {
+			continue
+		}
+		nameCount[e.Name]++
+		count := nameCount[e.Name]
+		entries[i].Name = fmt.Sprintf("%s-%d", e.Name, count)
+	}
+	return entries
+}
+
+// parseKeyEntries parses key data into KeyEntry slices.
+// Supports:
+//   - JSON array of strings: ["key1", "key2"]
+//   - JSON array of objects: [{"key": "key1", "name": "n1"}, ...]
+//   - JSONL (newline-delimited JSON): {"key": "key1", "name": "n1"}\n{"key": "key2"}
 func parseKeyEntries(data []byte) ([]keypool.KeyEntry, error) {
-	// Try array of strings first
+	// Try JSON array of strings first
 	var keys []string
 	if err := json.Unmarshal(data, &keys); err == nil {
 		entries := make([]keypool.KeyEntry, len(keys))
@@ -501,10 +613,19 @@ func parseKeyEntries(data []byte) ([]keypool.KeyEntry, error) {
 		return entries, nil
 	}
 
-	// Try array of objects
+	// Try JSON array of objects
 	var entries []keypool.KeyEntry
-	if err := json.Unmarshal(data, &entries); err != nil {
-		return nil, fmt.Errorf("expected JSON array of strings or key objects: %w", err)
+	if err := json.Unmarshal(data, &entries); err == nil {
+		return entries, nil
 	}
-	return entries, nil
+
+	// Try JSONL (data starts with '{')
+	if len(data) > 0 && data[0] == '{' {
+		jsonlEntries, jsonlErr := parseJSONL(data)
+		if jsonlErr == nil {
+			return jsonlEntries, nil
+		}
+	}
+
+	return nil, fmt.Errorf("expected JSON array of strings, key objects, or JSONL format")
 }
