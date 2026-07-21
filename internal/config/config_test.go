@@ -204,6 +204,120 @@ func TestConfig_HealthCheckTimeoutTooSmall(t *testing.T) {
 
 
 // ============================================================
+// mergeDefaults 测试
+// ============================================================
+
+func TestMergeDefaults_EmptyConfig(t *testing.T) {
+	cfg := &Config{}
+	mergeDefaults(cfg)
+	def := DefaultConfig()
+
+	if cfg.Port != def.Port {
+		t.Errorf("Port = %d, want %d", cfg.Port, def.Port)
+	}
+	if cfg.Host != def.Host {
+		t.Errorf("Host = %q, want %q", cfg.Host, def.Host)
+	}
+	if cfg.MaxRetries != def.MaxRetries {
+		t.Errorf("MaxRetries = %d, want %d", cfg.MaxRetries, def.MaxRetries)
+	}
+	if cfg.LogLevel != def.LogLevel {
+		t.Errorf("LogLevel = %q, want %q", cfg.LogLevel, def.LogLevel)
+	}
+	if cfg.CooldownSec != def.CooldownSec {
+		t.Errorf("CooldownSec = %d, want %d", cfg.CooldownSec, def.CooldownSec)
+	}
+	if cfg.HTTPTimeoutSec != def.HTTPTimeoutSec {
+		t.Errorf("HTTPTimeoutSec = %d, want %d", cfg.HTTPTimeoutSec, def.HTTPTimeoutSec)
+	}
+	if cfg.KeysFile != def.KeysFile {
+		t.Errorf("KeysFile = %q, want %q", cfg.KeysFile, def.KeysFile)
+	}
+	if cfg.BackoffCapSec != def.BackoffCapSec {
+		t.Errorf("BackoffCapSec = %d, want %d", cfg.BackoffCapSec, def.BackoffCapSec)
+	}
+	if cfg.BackoffMultiplier != def.BackoffMultiplier {
+		t.Errorf("BackoffMultiplier = %g, want %g", cfg.BackoffMultiplier, def.BackoffMultiplier)
+	}
+	if cfg.CBResetSec != def.CBResetSec {
+		t.Errorf("CBResetSec = %d, want %d", cfg.CBResetSec, def.CBResetSec)
+	}
+	if cfg.UpstreamCBThreshold != def.UpstreamCBThreshold {
+		t.Errorf("UpstreamCBThreshold = %d, want %d", cfg.UpstreamCBThreshold, def.UpstreamCBThreshold)
+	}
+	if cfg.HealthCheckIntervalSec != def.HealthCheckIntervalSec {
+		t.Errorf("HealthCheckIntervalSec = %d, want %d", cfg.HealthCheckIntervalSec, def.HealthCheckIntervalSec)
+	}
+	if cfg.HealthCheckPath != def.HealthCheckPath {
+		t.Errorf("HealthCheckPath = %q, want %q", cfg.HealthCheckPath, def.HealthCheckPath)
+	}
+	if cfg.HealthCheckTimeoutSec != def.HealthCheckTimeoutSec {
+		t.Errorf("HealthCheckTimeoutSec = %d, want %d", cfg.HealthCheckTimeoutSec, def.HealthCheckTimeoutSec)
+	}
+	if cfg.LogMaxSize != def.LogMaxSize {
+		t.Errorf("LogMaxSize = %d, want %d", cfg.LogMaxSize, def.LogMaxSize)
+	}
+	if cfg.LogMaxAge != def.LogMaxAge {
+		t.Errorf("LogMaxAge = %d, want %d", cfg.LogMaxAge, def.LogMaxAge)
+	}
+}
+
+func TestMergeDefaults_PreservesSetValues(t *testing.T) {
+	cfg := &Config{
+		Port:            9090,
+		Host:            "0.0.0.0",
+		CooldownSec:     45,
+		MaxRetries:      7,
+		BackoffCapSec:   300,
+		BackoffMultiplier: 3.5,
+	}
+	mergeDefaults(cfg)
+
+	if cfg.Port != 9090 {
+		t.Errorf("Port should be preserved, got %d", cfg.Port)
+	}
+	if cfg.Host != "0.0.0.0" {
+		t.Errorf("Host should be preserved, got %q", cfg.Host)
+	}
+	if cfg.CooldownSec != 45 {
+		t.Errorf("CooldownSec should be preserved, got %d", cfg.CooldownSec)
+	}
+	if cfg.MaxRetries != 7 {
+		t.Errorf("MaxRetries should be preserved, got %d", cfg.MaxRetries)
+	}
+	if cfg.BackoffCapSec != 300 {
+		t.Errorf("BackoffCapSec should be preserved, got %d", cfg.BackoffCapSec)
+	}
+	if cfg.BackoffMultiplier != 3.5 {
+		t.Errorf("BackoffMultiplier should be preserved, got %g", cfg.BackoffMultiplier)
+	}
+	// Unset fields should still get defaults
+	if cfg.LogLevel != "info" {
+		t.Errorf("LogLevel should be default, got %q", cfg.LogLevel)
+	}
+}
+
+func TestMergeDefaults_SkipsFieldsWithoutDefaultTag(t *testing.T) {
+	cfg := &Config{
+		TargetBase: "https://api.example.com",
+		GenaiBase:  "https://ai.example.com",
+		AdminToken: "my-token",
+	}
+	mergeDefaults(cfg)
+
+	// Fields without default tag should be preserved
+	if cfg.TargetBase != "https://api.example.com" {
+		t.Errorf("TargetBase should be preserved, got %q", cfg.TargetBase)
+	}
+	if cfg.GenaiBase != "https://ai.example.com" {
+		t.Errorf("GenaiBase should be preserved, got %q", cfg.GenaiBase)
+	}
+	if cfg.AdminToken != "my-token" {
+		t.Errorf("AdminToken should be preserved, got %q", cfg.AdminToken)
+	}
+}
+
+// ============================================================
 // TOML 配置测试
 // ============================================================
 
