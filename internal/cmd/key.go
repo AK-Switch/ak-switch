@@ -79,12 +79,15 @@ func init() {
 	keyCmd.AddCommand(keyDisableCmd)
 	keyCmd.AddCommand(keyEnableCmd)
 	keyCmd.AddCommand(keyUpdateCmd)
+	keyCmd.AddCommand(keyRenameCmd)
 	keyCmd.AddCommand(keyImportCmd)
 	keyImportCmd.Flags().StringP("file", "f", "", "Import keys from a JSON file")
 	keyImportCmd.Flags().StringP("name", "n", "", "Display name for imported keys")
 	keyImportCmd.Flags().Bool("insecure-storage", false, "Store keys in plaintext (WARNING: not encrypted)")
 
 	keyUpdateCmd.Flags().StringP("name", "n", "", "New display name for the key")
+	keyUpdateCmd.Flags().Bool("by-name", false, "Look up key by name instead of index")
+	keyRenameCmd.Flags().Bool("by-name", false, "Look up key by name instead of index")
 
 	keyAddCmd.Flags().StringP("name", "n", "", "Display name for the key")
 	keyAddCmd.Flags().Bool("insecure-storage", false, "Store keys in plaintext (WARNING: not encrypted)")
@@ -93,7 +96,7 @@ func init() {
 var keyCmd = &cobra.Command{
 	Use:   "key",
 	Short: "Manage API keys",
-	Long:  `Add, list, remove, update, disable, and enable API keys for a provider.`,
+	Long:  `Add, list, remove, update, rename, disable, and enable API keys for a provider.`,
 }
 
 var keyAddCmd = &cobra.Command{
@@ -257,14 +260,11 @@ Use --name to optionally rename the key.
 
 Examples:
   akswitch key update sensenova 0 sk-xxxxxxxxxxxxxxxx
-  akswitch key update sensenova 0 sk-xxxxxxxxxxxxxxxx --name d1-2`,
+  akswitch key update sensenova 0 sk-xxxxxxxxxxxxxxxx --name d1-2
+  akswitch key update sensenova d1-2 sk-xxxxxxxxxxxxxxxx --by-name`,
 	Args: cobra.ExactArgs(3),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		provider := args[0]
-		idx, err := strconv.Atoi(args[1])
-		if err != nil {
-			return fmt.Errorf("invalid index %q: must be a non-negative integer", args[1])
-		}
 		newKey := args[2]
 
 		store, err := keypool.LoadKeys(provider)
@@ -274,6 +274,20 @@ Examples:
 		if store == nil {
 			return fmt.Errorf("no keys found for provider %q", provider)
 		}
+
+		var idx int
+		if byName, _ := cmd.Flags().GetBool("by-name"); byName {
+			idx, err = findKeyIndexByName(store, args[1])
+			if err != nil {
+				return err
+			}
+		} else {
+			idx, err = strconv.Atoi(args[1])
+			if err != nil {
+				return fmt.Errorf("invalid index %q: must be a non-negative integer", args[1])
+			}
+		}
+
 		if idx < 0 || idx >= len(store.Keys) {
 			return fmt.Errorf("index %d out of range: provider %q has %d keys (valid: 0-%d)",
 				idx, provider, len(store.Keys), len(store.Keys)-1)
@@ -293,6 +307,62 @@ Examples:
 
 		fmt.Printf("Updated key [%d] %s -> %s for provider %q\n",
 			idx, oldMasked, utils.MaskKey(newKey), provider)
+		triggerReload()
+		return nil
+	},
+}
+
+var keyRenameCmd = &cobra.Command{
+	Use:   "rename <provider> <index> <new-name>",
+	Short: "Rename an API key",
+	Long: `Change the display name of an API key at the specified index or matching name.
+
+By default, the second argument is treated as an index.
+Use --by-name to treat it as a name to match.
+
+Examples:
+  akswitch key rename sensenova 0 d1-2
+  akswitch key rename sensenova d1-2 d1-3 --by-name`,
+	Args: cobra.ExactArgs(3),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		provider := args[0]
+		newName := args[2]
+
+		store, err := keypool.LoadKeys(provider)
+		if err != nil {
+			return fmt.Errorf("failed to load keys for %q: %w", provider, err)
+		}
+		if store == nil {
+			return fmt.Errorf("no keys found for provider %q", provider)
+		}
+
+		var idx int
+		if byName, _ := cmd.Flags().GetBool("by-name"); byName {
+			idx, err = findKeyIndexByName(store, args[1])
+			if err != nil {
+				return err
+			}
+		} else {
+			idx, err = strconv.Atoi(args[1])
+			if err != nil {
+				return fmt.Errorf("invalid index %q: must be a non-negative integer", args[1])
+			}
+		}
+
+		if idx < 0 || idx >= len(store.Keys) {
+			return fmt.Errorf("index %d out of range: provider %q has %d keys (valid: 0-%d)",
+				idx, provider, len(store.Keys), len(store.Keys)-1)
+		}
+
+		oldName := store.Keys[idx].Name
+		store.Keys[idx].Name = newName
+
+		if err := keypool.SaveKeys(provider, store); err != nil {
+			return fmt.Errorf("failed to save keys for %q: %w", provider, err)
+		}
+
+		fmt.Printf("Renamed key [%d] from %q to %q for provider %q\n",
+			idx, oldName, newName, provider)
 		triggerReload()
 		return nil
 	},
@@ -398,6 +468,24 @@ Example:
 		}
 		return updateKey(args[0], idx, KeyEnable)
 	},
+}
+
+// findKeyIndexByName searches a KeyStore for a key with the given name.
+// Returns an error if the name is not found or if multiple keys share the name.
+func findKeyIndexByName(store *keypool.KeyStore, name string) (int, error) {
+	matches := []int{}
+	for i, entry := range store.Keys {
+		if entry.Name == name {
+			matches = append(matches, i)
+		}
+	}
+	if len(matches) == 0 {
+		return 0, fmt.Errorf("no key found with name %q", name)
+	}
+	if len(matches) > 1 {
+		return 0, fmt.Errorf("multiple keys (%d) found with name %q, use index instead", len(matches), name)
+	}
+	return matches[0], nil
 }
 
 // parseKeyEntries parses JSON key data into KeyEntry slices.
