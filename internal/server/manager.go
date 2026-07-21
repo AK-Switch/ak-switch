@@ -104,6 +104,12 @@ type ProviderRouter struct {
 	mux             *http.ServeMux // cached mux for Handler()
 	muxOnce         sync.Once
 	calibrator      *tracker.Calibrator // per-model token estimation calibration
+
+	// Key operation handlers (initialized via keyOperationHandler factory)
+	disableKeyHandler  http.HandlerFunc
+	enableKeyHandler   http.HandlerFunc
+	cooldownKeyHandler http.HandlerFunc
+	deleteKeyHandler   http.HandlerFunc
 }
 
 // NewProviderRouter creates a new ProviderRouter.
@@ -126,6 +132,20 @@ func NewProviderRouter(dashboardHTML string) *ProviderRouter {
 		}
 		pr.metrics.LogStoreFillRatio.Set(float64(newLen) / float64(maxLen))
 	}
+
+	// Initialize key operation handlers via factory function
+	pr.disableKeyHandler = pr.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
+		return pool.Disable(idx)
+	})
+	pr.enableKeyHandler = pr.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
+		return pool.Enable(idx)
+	})
+	pr.cooldownKeyHandler = pr.keyOperationHandler(func(pool *keypool.KeyPool, cfg *config.Config, idx int) error {
+		return pool.Cooldown(idx, time.Duration(cfg.CooldownSec)*time.Second)
+	})
+	pr.deleteKeyHandler = pr.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
+		return pool.RemoveKey(idx)
+	})
 	return pr
 }
 
