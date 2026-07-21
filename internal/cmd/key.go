@@ -260,7 +260,8 @@ Use --name to optionally rename the key.
 
 Examples:
   akswitch key update sensenova 0 sk-xxxxxxxxxxxxxxxx
-  akswitch key update sensenova 0 sk-xxxxxxxxxxxxxxxx --name d1-2`,
+  akswitch key update sensenova 0 sk-xxxxxxxxxxxxxxxx --name d1-2
+  akswitch key update sensenova d1-2 sk-xxxxxxxxxxxxxxxx --by-name`,
 	Args: cobra.ExactArgs(3),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		provider := args[0]
@@ -311,9 +312,8 @@ Examples:
 	},
 }
 
-
 var keyRenameCmd = &cobra.Command{
-	Use:   "rename <provider> <index|name> <new-name>",
+	Use:   "rename <provider> <index> <new-name>",
 	Short: "Rename an API key",
 	Long: `Change the display name of an API key at the specified index or matching name.
 

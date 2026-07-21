@@ -4,6 +4,8 @@ package cmd
 
 import (
 	"testing"
+
+	"akswitch/internal/keypool"
 )
 
 func TestKeyAddCmd_HasNameFlag(t *testing.T) {
@@ -92,5 +94,47 @@ func TestKeyRenameCmd_HasByNameFlag(t *testing.T) {
 	flag := keyRenameCmd.Flags().Lookup("by-name")
 	if flag == nil {
 		t.Fatal("expected --by-name flag to be registered on key rename command")
+	}
+}
+
+func TestFindKeyIndexByName_Found(t *testing.T) {
+	store := &keypool.KeyStore{
+		Keys: []keypool.KeyEntry{
+			{Key: "sk-111", Name: "alpha"},
+			{Key: "sk-222", Name: "beta"},
+			{Key: "sk-333", Name: "gamma"},
+		},
+	}
+	idx, err := findKeyIndexByName(store, "beta")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if idx != 1 {
+		t.Fatalf("expected index 1, got %d", idx)
+	}
+}
+
+func TestFindKeyIndexByName_NotFound(t *testing.T) {
+	store := &keypool.KeyStore{
+		Keys: []keypool.KeyEntry{
+			{Key: "sk-111", Name: "alpha"},
+		},
+	}
+	_, err := findKeyIndexByName(store, "nonexistent")
+	if err == nil {
+		t.Fatal("expected error for nonexistent name")
+	}
+}
+
+func TestFindKeyIndexByName_Duplicate(t *testing.T) {
+	store := &keypool.KeyStore{
+		Keys: []keypool.KeyEntry{
+			{Key: "sk-111", Name: "dup"},
+			{Key: "sk-222", Name: "dup"},
+		},
+	}
+	_, err := findKeyIndexByName(store, "dup")
+	if err == nil {
+		t.Fatal("expected error for duplicate name")
 	}
 }
