@@ -49,7 +49,7 @@ func SetupSelfRestart(exePath string, sigCh chan os.Signal) {
 			if mod.After(lastMod) {
 				slog.Info("检测到二进制更新，正在热重启...")
 				// 先删除 PID 文件，让新进程能正常启动
-				_ = os.Remove(pidFilePath())
+				_ = os.Remove(pidFilePath(false))
 				binaryUpdated = true
 				// 通知主 goroutine 执行优雅关闭
 				// 缓冲区大小为 1，不会阻塞
