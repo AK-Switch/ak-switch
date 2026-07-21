@@ -184,14 +184,14 @@ func TestAutoNumberNames_UniqueNames(t *testing.T) {
 	if len(result) != 3 {
 		t.Fatalf("expected 3 entries, got %d", len(result))
 	}
-	if result[0].Name != "alpha-1" {
-		t.Errorf("entry 0 name = %q, want %q", result[0].Name, "alpha-1")
+	if result[0].Name != "alpha" {
+		t.Errorf("entry 0 name = %q, want %q", result[0].Name, "alpha")
 	}
-	if result[1].Name != "beta-1" {
-		t.Errorf("entry 1 name = %q, want %q", result[1].Name, "beta-1")
+	if result[1].Name != "beta" {
+		t.Errorf("entry 1 name = %q, want %q", result[1].Name, "beta")
 	}
-	if result[2].Name != "gamma-1" {
-		t.Errorf("entry 2 name = %q, want %q", result[2].Name, "gamma-1")
+	if result[2].Name != "gamma" {
+		t.Errorf("entry 2 name = %q, want %q", result[2].Name, "gamma")
 	}
 }
 
@@ -242,7 +242,7 @@ func TestAutoNumberNames_SingleEntry(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 entry, got %d", len(result))
 	}
-	if result[0].Name != "only-one-1" {
-		t.Errorf("name = %q, want %q", result[0].Name, "only-one-1")
+	if result[0].Name != "only-one" {
+		t.Errorf("name = %q, want %q", result[0].Name, "only-one")
 	}
 }

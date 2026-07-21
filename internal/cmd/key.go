@@ -586,13 +586,22 @@ func dedupEntries(entries []keypool.KeyEntry, store *keypool.KeyStore) ([]keypoo
 // Entries with empty names are left unchanged.
 func autoNumberNames(entries []keypool.KeyEntry) []keypool.KeyEntry {
 	nameCount := make(map[string]int)
-	for i, e := range entries {
+	for _, e := range entries {
 		if e.Name == "" {
 			continue
 		}
 		nameCount[e.Name]++
-		count := nameCount[e.Name]
-		entries[i].Name = fmt.Sprintf("%s-%d", e.Name, count)
+	}
+	// Only add suffix if the name appears more than once
+	nameIndex := make(map[string]int)
+	for i, e := range entries {
+		if e.Name == "" {
+			continue
+		}
+		if nameCount[e.Name] > 1 {
+			nameIndex[e.Name]++
+			entries[i].Name = fmt.Sprintf("%s-%d", e.Name, nameIndex[e.Name])
+		}
 	}
 	return entries
 }
