@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 )
@@ -14,14 +15,18 @@ func respondJSON(w http.ResponseWriter, status int, data interface{}) {
 }
 
 // parseKeyIndex extracts and validates a key index from the request path.
-// Returns the 0-based index and true on success.
-func parseKeyIndex(r *http.Request) (int, bool) {
+// The API uses 1-based indices (user-facing), returns 0-based for internal use.
+// Returns an error if the index is missing, non-numeric, or < 1.
+func parseKeyIndex(r *http.Request) (int, error) {
 	raw := r.PathValue("index")
 	idx, err := strconv.Atoi(raw)
-	if err != nil || idx < 1 {
-		return 0, false
+	if err != nil {
+		return 0, fmt.Errorf("invalid key index %q: must be a positive integer", raw)
 	}
-	return idx - 1, true // convert to 0-based
+	if idx < 1 {
+		return 0, fmt.Errorf("invalid key index %d: must be >= 1", idx)
+	}
+	return idx - 1, nil // convert to 0-based
 }
 
 // filterEmpty removes empty strings from a slice.

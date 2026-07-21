@@ -393,96 +393,40 @@ func loadKeysFromConfig(name string, cfg *config.Config) (keys, names []string) 
 	return keys, names
 }
 
-// ── Key CRUD Handlers ─────────────────────────────────
+// ── Key CRUD Handler Factory ──────────────────────────
 
-func (pr *ProviderRouter) disableKeyHandler(w http.ResponseWriter, r *http.Request) {
-	ps, errMsg := pr.resolveProvider(r)
-	if ps == nil {
-		respondJSON(w, http.StatusNotFound, map[string]string{"error": errMsg})
-		return
-	}
-	if !pr.checkAdminToken(w, r, ps.Name) {
-		return
-	}
+// keyOperationHandler creates a handler for key operations (disable/enable/cooldown/delete).
+// operation is a function that performs the actual key operation on the resolved provider's pool.
+// The factory handles provider resolution, admin token check, key index parsing, persistence, and response.
+//
+// API uses 1-based indices (from URL path), converted to 0-based internally.
+// In contrast, CLI commands use 0-based indices directly.
+func (pr *ProviderRouter) keyOperationHandler(operation func(*keypool.KeyPool, *config.Config, int) error) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ps, errMsg := pr.resolveProvider(r)
+		if ps == nil {
+			respondJSON(w, http.StatusNotFound, map[string]string{"error": errMsg})
+			return
+		}
+		if !pr.checkAdminToken(w, r, ps.Name) {
+			return
+		}
 
-	idx, ok := parseKeyIndex(r)
-	if !ok || idx >= len(ps.Pool.Keys()) {
-		respondJSON(w, http.StatusNotFound, map[string]string{"error": "key not found"})
-		return
-	}
+		idx, err := parseKeyIndex(r)
+		if err != nil {
+			respondJSON(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if idx >= len(ps.Pool.Keys()) {
+			respondJSON(w, http.StatusNotFound, map[string]string{"error": "key not found"})
+			return
+		}
 
-	if err := ps.Pool.Disable(idx); err != nil {
-		respondJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
-		return
+		if err := operation(ps.Pool, ps.Config, idx); err != nil {
+			respondJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		ps.PersistKeys()
+		respondJSON(w, http.StatusOK, map[string]bool{"success": true})
 	}
-	ps.PersistKeys()
-	respondJSON(w, http.StatusOK, map[string]bool{"success": true})
-}
-
-func (pr *ProviderRouter) enableKeyHandler(w http.ResponseWriter, r *http.Request) {
-	ps, errMsg := pr.resolveProvider(r)
-	if ps == nil {
-		respondJSON(w, http.StatusNotFound, map[string]string{"error": errMsg})
-		return
-	}
-	if !pr.checkAdminToken(w, r, ps.Name) {
-		return
-	}
-
-	idx, ok := parseKeyIndex(r)
-	if !ok || idx >= len(ps.Pool.Keys()) {
-		respondJSON(w, http.StatusNotFound, map[string]string{"error": "key not found"})
-		return
-	}
-
-	if err := ps.Pool.Enable(idx); err != nil {
-		respondJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
-		return
-	}
-	ps.PersistKeys()
-	respondJSON(w, http.StatusOK, map[string]bool{"success": true})
-}
-
-func (pr *ProviderRouter) cooldownKeyHandler(w http.ResponseWriter, r *http.Request) {
-	ps, errMsg := pr.resolveProvider(r)
-	if ps == nil {
-		respondJSON(w, http.StatusNotFound, map[string]string{"error": errMsg})
-		return
-	}
-	if !pr.checkAdminToken(w, r, ps.Name) {
-		return
-	}
-
-	idx, ok := parseKeyIndex(r)
-	if !ok || idx >= len(ps.Pool.Keys()) {
-		respondJSON(w, http.StatusNotFound, map[string]string{"error": "key not found"})
-		return
-	}
-
-	if err := ps.Pool.Cooldown(idx, time.Duration(ps.Config.CooldownSec)*time.Second); err != nil {
-		respondJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-		return
-	}
-	respondJSON(w, http.StatusOK, map[string]bool{"success": true})
-}
-
-func (pr *ProviderRouter) deleteKeyHandler(w http.ResponseWriter, r *http.Request) {
-	ps, errMsg := pr.resolveProvider(r)
-	if ps == nil {
-		respondJSON(w, http.StatusNotFound, map[string]string{"error": errMsg})
-		return
-	}
-	if !pr.checkAdminToken(w, r, ps.Name) {
-		return
-	}
-
-	idx, ok := parseKeyIndex(r)
-	if !ok || idx >= len(ps.Pool.Keys()) {
-		respondJSON(w, http.StatusNotFound, map[string]string{"error": "key not found"})
-		return
-	}
-
-	ps.Pool.RemoveKey(idx)
-	ps.PersistKeys()
-	respondJSON(w, http.StatusOK, map[string]bool{"success": true})
 }

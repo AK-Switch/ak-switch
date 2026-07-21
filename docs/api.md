@@ -35,6 +35,15 @@
 | `GET` | `/metrics` | 否 | Prometheus 指标 |
 | `GET` | `/dashboard` | 否 | Web Dashboard |
 
+### 索引说明
+
+API 管理端点的 Key 索引使用 **1 基**索引（从 1 开始），而 CLI 命令（如 `akswitch key disable`）使用 **0 基**索引（从 0 开始）。例如：
+
+- `akswitch key list` 显示的第一个 Key 索引为 `[0]`，对应 API 路径 `/api/keys/1/disable`
+- `akswitch key list` 显示的第二个 Key 索引为 `[1]`，对应 API 路径 `/api/keys/2/disable`
+
+这种差异是设计使然：API 端点面向人类使用者（1 基更自然），CLI 直接映射底层数据结构（0 基与 Go 切片一致）。
+
 ### 鉴权
 
 当配置了 `admin_token` 后，标记为"是"的端点需在请求头中提供 `X-Admin-Token`。未设置时所有端点无鉴权。
