@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"akswitch/internal/cmd"
+	"akswitch/internal/cli"
 
 	"akswitch/internal/config"
 	"akswitch/internal/keypool"
@@ -20,7 +20,7 @@ import (
 // TestKeyAdd_AddsKey verifies that "akswitch key add <provider> <key>"
 // adds a key to the provider's encrypted key store.
 func TestKeyAdd_AddsKey(t *testing.T) {
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
@@ -30,15 +30,15 @@ func TestKeyAdd_AddsKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
-	cmd.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+	cli.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
 	keypool.RemoveKeys("keytest")
-	cmd.RunCommand(t, "akswitch", "provider", "add", "keytest",
+	cli.RunCommand(t, "akswitch", "provider", "add", "keytest",
 		"--target", "https://keytest.api.com/v1",
 		"--port", "9501",
 	)
 
 	// Add a key
-	cmd.RunCommand(t, "akswitch", "key", "add", "keytest", "sk-test-key-12345")
+	cli.RunCommand(t, "akswitch", "key", "add", "keytest", "sk-test-key-12345")
 
 	// Verify key was added via keyring
 	store, err := keypool.LoadKeys("keytest")
@@ -56,7 +56,7 @@ func TestKeyAdd_AddsKey(t *testing.T) {
 // TestKeyList_ShowsKeys verifies that "akswitch key list <provider>"
 // displays the correct key information.
 func TestKeyList_ShowsKeys(t *testing.T) {
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
@@ -65,16 +65,16 @@ func TestKeyList_ShowsKeys(t *testing.T) {
 	if err != nil {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
-	cmd.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+	cli.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
 	keypool.RemoveKeys("listtest")
-	cmd.RunCommand(t, "akswitch", "provider", "add", "listtest",
+	cli.RunCommand(t, "akswitch", "provider", "add", "listtest",
 		"--target", "https://listtest.api.com/v1",
 		"--port", "9502",
 	)
 
 	// Add two keys
-	cmd.RunCommand(t, "akswitch", "key", "add", "listtest", "sk-list-key-aaaa")
-	cmd.RunCommand(t, "akswitch", "key", "add", "listtest", "sk-list-key-bbbb")
+	cli.RunCommand(t, "akswitch", "key", "add", "listtest", "sk-list-key-aaaa")
+	cli.RunCommand(t, "akswitch", "key", "add", "listtest", "sk-list-key-bbbb")
 
 	// Capture list output
 	var stdout bytes.Buffer
@@ -82,7 +82,7 @@ func TestKeyList_ShowsKeys(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	cmd.RunCommand(t, "akswitch", "key", "list", "listtest")
+	cli.RunCommand(t, "akswitch", "key", "list", "listtest")
 
 	w.Close()
 	os.Stdout = oldStdout
@@ -103,7 +103,7 @@ func TestKeyList_ShowsKeys(t *testing.T) {
 // TestKeyRemove_RemovesKey verifies that "akswitch key remove <provider> <index>"
 // removes the key at the given index.
 func TestKeyRemove_RemovesKey(t *testing.T) {
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
@@ -112,17 +112,17 @@ func TestKeyRemove_RemovesKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
-	cmd.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+	cli.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
 	keypool.RemoveKeys("removetest")
-	cmd.RunCommand(t, "akswitch", "provider", "add", "removetest",
+	cli.RunCommand(t, "akswitch", "provider", "add", "removetest",
 		"--target", "https://removetest.api.com/v1",
 		"--port", "9503",
 	)
 
 	// Add two keys, then remove the first
-	cmd.RunCommand(t, "akswitch", "key", "add", "removetest", "sk-remove-key-1")
-	cmd.RunCommand(t, "akswitch", "key", "add", "removetest", "sk-remove-key-2")
-	cmd.RunCommand(t, "akswitch", "key", "remove", "removetest", "0")
+	cli.RunCommand(t, "akswitch", "key", "add", "removetest", "sk-remove-key-1")
+	cli.RunCommand(t, "akswitch", "key", "add", "removetest", "sk-remove-key-2")
+	cli.RunCommand(t, "akswitch", "key", "remove", "removetest", "0")
 
 	// Verify key[0] was removed (should now be "sk-remove-key-2")
 	store, err := keypool.LoadKeys("removetest")
@@ -140,7 +140,7 @@ func TestKeyRemove_RemovesKey(t *testing.T) {
 // TestKeyDisable_DisablesKey verifies that "akswitch key disable <provider> <index>"
 // marks the key as disabled.
 func TestKeyDisable_DisablesKey(t *testing.T) {
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
@@ -149,16 +149,16 @@ func TestKeyDisable_DisablesKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
-	cmd.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+	cli.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
 	keypool.RemoveKeys("disabletest")
-	cmd.RunCommand(t, "akswitch", "provider", "add", "disabletest",
+	cli.RunCommand(t, "akswitch", "provider", "add", "disabletest",
 		"--target", "https://disabletest.api.com/v1",
 		"--port", "9504",
 	)
 
 	// Add a key and disable it
-	cmd.RunCommand(t, "akswitch", "key", "add", "disabletest", "sk-disable-key-1")
-	cmd.RunCommand(t, "akswitch", "key", "disable", "disabletest", "0")
+	cli.RunCommand(t, "akswitch", "key", "add", "disabletest", "sk-disable-key-1")
+	cli.RunCommand(t, "akswitch", "key", "disable", "disabletest", "0")
 
 	// Verify key is disabled
 	store, err := keypool.LoadKeys("disabletest")
@@ -176,7 +176,7 @@ func TestKeyDisable_DisablesKey(t *testing.T) {
 // TestKeyEnable_EnablesKey verifies that "akswitch key enable <provider> <index>"
 // re-enables a previously disabled key.
 func TestKeyEnable_EnablesKey(t *testing.T) {
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
@@ -185,17 +185,17 @@ func TestKeyEnable_EnablesKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
-	cmd.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+	cli.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
 	keypool.RemoveKeys("enabletest")
-	cmd.RunCommand(t, "akswitch", "provider", "add", "enabletest",
+	cli.RunCommand(t, "akswitch", "provider", "add", "enabletest",
 		"--target", "https://enabletest.api.com/v1",
 		"--port", "9506",
 	)
 
 	// Add a key, disable it, then enable it
-	cmd.RunCommand(t, "akswitch", "key", "add", "enabletest", "sk-enable-key-1")
-	cmd.RunCommand(t, "akswitch", "key", "disable", "enabletest", "0")
-	cmd.RunCommand(t, "akswitch", "key", "enable", "enabletest", "0")
+	cli.RunCommand(t, "akswitch", "key", "add", "enabletest", "sk-enable-key-1")
+	cli.RunCommand(t, "akswitch", "key", "disable", "enabletest", "0")
+	cli.RunCommand(t, "akswitch", "key", "enable", "enabletest", "0")
 
 	// Verify key is enabled again
 	store, err := keypool.LoadKeys("enabletest")
@@ -213,7 +213,7 @@ func TestKeyEnable_EnablesKey(t *testing.T) {
 // TestKeyEnable_InvalidIndex verifies that enabling with an out-of-range
 // index returns an error.
 func TestKeyEnable_InvalidIndex(t *testing.T) {
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
@@ -222,15 +222,15 @@ func TestKeyEnable_InvalidIndex(t *testing.T) {
 	if err != nil {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
-	cmd.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+	cli.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
 	keypool.RemoveKeys("enableerrtest")
-	cmd.RunCommand(t, "akswitch", "provider", "add", "enableerrtest",
+	cli.RunCommand(t, "akswitch", "provider", "add", "enableerrtest",
 		"--target", "https://enableerrtest.api.com/v1",
 		"--port", "9507",
 	)
-	cmd.RunCommand(t, "akswitch", "key", "add", "enableerrtest", "sk-enable-err-key-1")
+	cli.RunCommand(t, "akswitch", "key", "add", "enableerrtest", "sk-enable-err-key-1")
 
-	err = cmd.RunCommand(t, "akswitch", "key", "enable", "enableerrtest", "999")
+	err = cli.RunCommand(t, "akswitch", "key", "enable", "enableerrtest", "999")
 	if err == nil {
 		t.Fatal("expected error for out-of-range index, got nil")
 	}
@@ -242,7 +242,7 @@ func TestKeyEnable_InvalidIndex(t *testing.T) {
 // TestKeyRemove_InvalidIndex verifies that removing with an out-of-range
 // index returns an error.
 func TestKeyRemove_InvalidIndex(t *testing.T) {
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
@@ -251,15 +251,15 @@ func TestKeyRemove_InvalidIndex(t *testing.T) {
 	if err != nil {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
-	cmd.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+	cli.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
 	keypool.RemoveKeys("errtest")
-	cmd.RunCommand(t, "akswitch", "provider", "add", "errtest",
+	cli.RunCommand(t, "akswitch", "provider", "add", "errtest",
 		"--target", "https://errtest.api.com/v1",
 		"--port", "9505",
 	)
-	cmd.RunCommand(t, "akswitch", "key", "add", "errtest", "sk-err-key-1")
+	cli.RunCommand(t, "akswitch", "key", "add", "errtest", "sk-err-key-1")
 
-	err = cmd.RunCommand(t, "akswitch", "key", "remove", "errtest", "999")
+	err = cli.RunCommand(t, "akswitch", "key", "remove", "errtest", "999")
 	if err == nil {
 		t.Fatal("expected error for out-of-range index, got nil")
 	}
@@ -271,7 +271,7 @@ func TestKeyRemove_InvalidIndex(t *testing.T) {
 // TestKeyAdd_InsecureStorage verifies that "akswitch key add <provider> <key> --insecure-storage"
 // stores the key as plaintext JSON and prints a warning.
 func TestKeyAdd_InsecureStorage(t *testing.T) {
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
@@ -280,8 +280,8 @@ func TestKeyAdd_InsecureStorage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
-	cmd.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
-	cmd.RunCommand(t, "akswitch", "provider", "add", "insecurtest",
+	cli.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+	cli.RunCommand(t, "akswitch", "provider", "add", "insecurtest",
 		"--target", "https://insecurtest.api.com/v1",
 		"--port", "9510",
 	)
@@ -295,7 +295,7 @@ func TestKeyAdd_InsecureStorage(t *testing.T) {
 	os.Stdout = wOut
 	os.Stderr = wErr
 
-	cmd.RunCommand(t, "akswitch", "key", "add", "insecurtest", "sk-insecure-test-key", "--insecure-storage")
+	cli.RunCommand(t, "akswitch", "key", "add", "insecurtest", "sk-insecure-test-key", "--insecure-storage")
 
 	wOut.Close()
 	wErr.Close()
@@ -329,7 +329,7 @@ func TestKeyAdd_InsecureStorage(t *testing.T) {
 // TestKeyImport_FromArgs verifies that "akswitch key import <provider> <key1> <key2>"
 // imports multiple keys from command line arguments.
 func TestKeyImport_FromArgs(t *testing.T) {
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
@@ -338,15 +338,15 @@ func TestKeyImport_FromArgs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
-	cmd.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+	cli.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
 	keypool.RemoveKeys("importtest")
-	cmd.RunCommand(t, "akswitch", "provider", "add", "importtest",
+	cli.RunCommand(t, "akswitch", "provider", "add", "importtest",
 		"--target", "https://importtest.api.com/v1",
 		"--port", "9520",
 	)
 
 	// Import three keys from args
-	cmd.RunCommand(t, "akswitch", "key", "import", "importtest", "sk-import-1", "sk-import-2", "sk-import-3")
+	cli.RunCommand(t, "akswitch", "key", "import", "importtest", "sk-import-1", "sk-import-2", "sk-import-3")
 
 	// Verify all keys were imported
 	store, err := keypool.LoadKeys("importtest")
@@ -364,7 +364,7 @@ func TestKeyImport_FromArgs(t *testing.T) {
 // TestKeyImport_FromFile verifies that "akswitch key import <provider> --file <path>"
 // imports keys from a JSON file.
 func TestKeyImport_FromFile(t *testing.T) {
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
@@ -373,9 +373,9 @@ func TestKeyImport_FromFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
-	cmd.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+	cli.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
 	keypool.RemoveKeys("fileimporttest")
-	cmd.RunCommand(t, "akswitch", "provider", "add", "fileimporttest",
+	cli.RunCommand(t, "akswitch", "provider", "add", "fileimporttest",
 		"--target", "https://fileimporttest.api.com/v1",
 		"--port", "9521",
 	)
@@ -388,7 +388,7 @@ func TestKeyImport_FromFile(t *testing.T) {
 	}
 
 	// Import from file
-	cmd.RunCommand(t, "akswitch", "key", "import", "fileimporttest", "--file", keysFile)
+	cli.RunCommand(t, "akswitch", "key", "import", "fileimporttest", "--file", keysFile)
 
 	// Verify all keys were imported
 	store, err := keypool.LoadKeys("fileimporttest")
@@ -405,7 +405,7 @@ func TestKeyImport_FromFile(t *testing.T) {
 
 // TestKeyImport_FromFileWithObjects verifies that the JSON format with key objects works.
 func TestKeyImport_FromFileWithObjects(t *testing.T) {
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
@@ -414,9 +414,9 @@ func TestKeyImport_FromFileWithObjects(t *testing.T) {
 	if err != nil {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
-	cmd.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+	cli.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
 	keypool.RemoveKeys("objimporttest")
-	cmd.RunCommand(t, "akswitch", "provider", "add", "objimporttest",
+	cli.RunCommand(t, "akswitch", "provider", "add", "objimporttest",
 		"--target", "https://objimporttest.api.com/v1",
 		"--port", "9522",
 	)
@@ -429,7 +429,7 @@ func TestKeyImport_FromFileWithObjects(t *testing.T) {
 	}
 
 	// Import from file
-	cmd.RunCommand(t, "akswitch", "key", "import", "objimporttest", "--file", keysFile)
+	cli.RunCommand(t, "akswitch", "key", "import", "objimporttest", "--file", keysFile)
 
 	// Verify keys were imported with names
 	store, err := keypool.LoadKeys("objimporttest")
@@ -454,7 +454,7 @@ func TestKeyImport_FromFileWithObjects(t *testing.T) {
 
 // TestKeyImport_EmptyInput verifies that importing with no keys returns an error.
 func TestKeyImport_EmptyInput(t *testing.T) {
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
@@ -463,9 +463,9 @@ func TestKeyImport_EmptyInput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
-	cmd.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+	cli.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
 	keypool.RemoveKeys("emptyimporttest")
-	cmd.RunCommand(t, "akswitch", "provider", "add", "emptyimporttest",
+	cli.RunCommand(t, "akswitch", "provider", "add", "emptyimporttest",
 		"--target", "https://emptyimporttest.api.com/v1",
 		"--port", "9523",
 	)
@@ -478,7 +478,7 @@ func TestKeyImport_EmptyInput(t *testing.T) {
 	}
 
 	// Import empty file should succeed but add no keys
-	cmd.RunCommand(t, "akswitch", "key", "import", "emptyimporttest", "--file", keysFile)
+	cli.RunCommand(t, "akswitch", "key", "import", "emptyimporttest", "--file", keysFile)
 
 	store, err := keypool.LoadKeys("emptyimporttest")
 	if err != nil {

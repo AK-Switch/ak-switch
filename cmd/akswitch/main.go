@@ -3,7 +3,7 @@ package main
 import (
 	_ "embed"
 
-	"akswitch/internal/cmd"
+	"akswitch/internal/cli"
 )
 
 //go:embed dashboard.html
