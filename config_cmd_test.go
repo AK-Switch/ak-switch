@@ -8,14 +8,14 @@ import (
 	"strings"
 	"testing"
 
-	"akswitch/internal/cmd"
+	"akswitch/internal/cli"
 	"akswitch/internal/config"
 )
 
 // TestConfigInit_CreatesFile verifies that "akswitch config init -p <path>"
 // creates a valid TOML config file at the specified path.
 func TestConfigInit_CreatesFile(t *testing.T) {
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	configPath := tmpDir + "/config.toml"
 
@@ -23,7 +23,7 @@ func TestConfigInit_CreatesFile(t *testing.T) {
 	t.Cleanup(func() { os.Args = oldArgs })
 	os.Args = []string{"akswitch", "config", "init", "-p", configPath}
 
-	err := cmd.Execute("")
+	err := cli.Execute("")
 	if err != nil {
 		t.Fatalf("config init failed: %v", err)
 	}
@@ -47,7 +47,7 @@ func TestConfigInit_CreatesFile(t *testing.T) {
 // TestConfigView_ShowsConfig verifies that "akswitch config view" prints
 // the current configuration from config.toml.
 func TestConfigView_ShowsConfig(t *testing.T) {
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
@@ -60,7 +60,7 @@ func TestConfigView_ShowsConfig(t *testing.T) {
 	oldArgs := os.Args
 	t.Cleanup(func() { os.Args = oldArgs })
 	os.Args = []string{"akswitch", "config", "init", "-p", xdgPath}
-	if err := cmd.Execute(""); err != nil {
+	if err := cli.Execute(""); err != nil {
 		t.Fatalf("config init failed: %v", err)
 	}
 
@@ -70,7 +70,7 @@ func TestConfigView_ShowsConfig(t *testing.T) {
 	os.Stdout = w
 
 	os.Args = []string{"akswitch", "config", "view"}
-	err = cmd.Execute("")
+	err = cli.Execute("")
 	w.Close()
 	os.Stdout = oldStdout
 
