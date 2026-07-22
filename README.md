@@ -55,7 +55,7 @@ akswitch start
 
 | 文档 | 说明 |
 |------|------|
-| [CLI 参考](docs/cli-reference.md) | 所有子命令、标志位、使用示例 |
+| [CLI 参考](docs/cli-reference.md) | 所有子命令、标志位、使用示例（自动生成） |
 | [配置说明](docs/configuration.md) | TOML 配置、所有可用字段 |
 | [API 文档](docs/api.md) | 代理端点、管理 API、错误码 |
 | [熔断器架构](docs/architecture.md) | 两层熔断器状态转移、响应矩阵 |

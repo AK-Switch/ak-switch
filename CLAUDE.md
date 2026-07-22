@@ -127,7 +127,8 @@ internal/
 docs/
   api.md                       # API 端点文档
   architecture.md              # 熔断器架构设计文档
-  cli-reference.md             # CLI 命令参考
+  cli-reference.md             # CLI 命令参考（入口，指向自动生成文档）
+  cli/                         # 从代码自动生成的 CLI 命令文档
   configuration.md             # 配置说明
   deployment.md                # Docker 部署与监控栈
   internal/                    # 归档设计文档、测试计划、审查报告（已移入 archive）
