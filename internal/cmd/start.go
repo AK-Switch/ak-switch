@@ -54,15 +54,20 @@ func startServer(dashboardHTML string, providerFilter string, startAll bool, log
 	router, providers, port, host, shouldStart := resolveProviders(dashboardHTML, providerFilter, startAll)
 
 	// ── Dev mode: find available port ──────────────────
+	var devListener net.Listener
 	if devMode {
 		for i := 0; i < 10; i++ {
 			addr := fmt.Sprintf("%s:%d", host, port+i)
 			ln, err := net.Listen("tcp", addr)
 			if err == nil {
-				ln.Close()
+				devListener = ln
 				port = port + i
 				break
 			}
+		}
+		if devListener == nil {
+			slog.Error("dev mode: no available port found (tried 10 ports)")
+			os.Exit(1)
 		}
 		fmt.Printf("🚧 Dev mode on port %d\n", port)
 	}
@@ -82,8 +87,14 @@ func startServer(dashboardHTML string, providerFilter string, startAll bool, log
 		slog.Error("no providers configured, exiting")
 		os.Exit(1)
 	}
-	if err := router.Start(host, port); err != nil {
-		slog.Error("failed to start server", "error", err)
+	var startErr error
+	if devMode {
+		startErr = router.StartWithListener(devListener)
+	} else {
+		startErr = router.Start(host, port)
+	}
+	if startErr != nil {
+		slog.Error("failed to start server", "error", startErr)
 		os.Exit(1)
 	}
 

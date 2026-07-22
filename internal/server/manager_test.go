@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"testing"
 	"time"
@@ -138,6 +139,51 @@ func TestProviderRouter_Accessors(t *testing.T) {
 	missing := pr.Provider("nonexistent")
 	if missing != nil {
 		t.Error("Provider() should return nil for missing name")
+	}
+}
+
+func TestProviderRouter_StartWithListener(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Port = 19107
+	cfg.TargetBase = "http://localhost:18999"
+	cfg.GenaiBase = "http://localhost:18999"
+	cfg.Keys = []string{"sk-test-listener"}
+
+	pr := NewProviderRouter("")
+	pool := keypool.NewKeyPool(cfg.Keys, nil)
+	pr.AddProvider("listener-test", cfg, pool)
+
+	// Pre-acquire a listener
+	listener, err := net.Listen("tcp", "127.0.0.1:19107")
+	if err != nil {
+		t.Fatalf("failed to create listener: %v", err)
+	}
+
+	if err := pr.StartWithListener(listener); err != nil {
+		t.Fatalf("StartWithListener failed: %v", err)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify server responds
+	resp, err := http.Get("http://127.0.0.1:19107/health")
+	if err != nil {
+		t.Fatalf("server not reachable: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("health returned %d, want 200", resp.StatusCode)
+	}
+
+	// Verify shutdown
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	pr.Shutdown(ctx)
+	pr.Stop()
+
+	_, err = http.Get("http://127.0.0.1:19107/health")
+	if err == nil {
+		t.Error("server still reachable after shutdown")
 	}
 }
 
