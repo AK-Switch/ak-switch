@@ -5,28 +5,25 @@ package cmd
 import (
 	"strings"
 	"testing"
-
-	"github.com/spf13/cobra"
 )
 
 func TestStartCmd_Flags(t *testing.T) {
 	tests := []struct {
 		name     string
-		cmd      *cobra.Command
 		flag     string
 		defValue string // expected default, empty to skip
 		usage    string // expected substring in usage, empty to skip
 	}{
-		{name: "log-format", cmd: startCmd, flag: "log-format", defValue: "compact", usage: "compact"},
-		{name: "provider", cmd: startCmd, flag: "provider"},
-		{name: "all", cmd: startCmd, flag: "all", defValue: "false"},
-		{name: "dev", cmd: startCmd, flag: "dev", defValue: "false"},
+		{name: "log-format", flag: "log-format", defValue: "compact", usage: "compact"},
+		{name: "provider", flag: "provider"},
+		{name: "all", flag: "all", defValue: "false"},
+		{name: "dev", flag: "dev", defValue: "false"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			flag := tc.cmd.Flags().Lookup(tc.flag)
+			flag := startCmd.Flags().Lookup(tc.flag)
 			if flag == nil {
-				t.Fatalf("expected --%s flag on %s command", tc.flag, tc.cmd.Name())
+				t.Fatalf("expected --%s flag on start command", tc.flag)
 			}
 			if tc.usage != "" && !strings.Contains(flag.Usage, tc.usage) {
 				t.Errorf("--%s flag usage should mention %q, got: %s", tc.flag, tc.usage, flag.Usage)
