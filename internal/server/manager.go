@@ -189,6 +189,33 @@ func (pr *ProviderRouter) Start(host string, port int) error {
 	return nil
 }
 
+// StartWithListener starts the HTTP server with an already-acquired listener.
+// This avoids the Listen→Close→Listen race condition that can occur in dev mode
+// when probing for an available port, since the listener is immediately handed
+// to the server without any time window for another process to grab the port.
+func (pr *ProviderRouter) StartWithListener(listener net.Listener) error {
+	mux := pr.Handler()
+
+	pr.mu.Lock()
+	defer pr.mu.Unlock()
+
+	pr.listener = listener
+	pr.proxy = &http.Server{Handler: mux}
+
+	pr.wg.Add(1)
+	go func() {
+		defer pr.wg.Done()
+		slog.Info("server started",
+			"addr", listener.Addr().String(),
+			"providers", len(pr.providers))
+		if err := pr.proxy.Serve(listener); err != http.ErrServerClosed {
+			slog.Error("server error", "error", err)
+		}
+	}()
+
+	return nil
+}
+
 // registerRoutes builds the combined mux with all routes.
 func (pr *ProviderRouter) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/health", pr.healthHandler)
