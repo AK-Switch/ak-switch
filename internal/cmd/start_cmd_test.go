@@ -5,58 +5,57 @@ package cmd
 import (
 	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
 
-func TestStartCmd_HasLogFormatFlag(t *testing.T) {
-	flag := startCmd.Flags().Lookup("log-format")
-	if flag == nil {
-		t.Fatal("expected --log-format flag to be registered on start command")
+func TestStartCmd_Flags(t *testing.T) {
+	tests := []struct {
+		name     string
+		cmd      *cobra.Command
+		flag     string
+		defValue string // expected default, empty to skip
+		usage    string // expected substring in usage, empty to skip
+	}{
+		{name: "log-format", cmd: startCmd, flag: "log-format", defValue: "compact", usage: "compact"},
+		{name: "provider", cmd: startCmd, flag: "provider"},
+		{name: "all", cmd: startCmd, flag: "all", defValue: "false"},
+		{name: "dev", cmd: startCmd, flag: "dev", defValue: "false"},
 	}
-	if !strings.Contains(flag.Usage, "compact") {
-		t.Errorf("--log-format flag usage should mention compact, got: %s", flag.Usage)
-	}
-	if flag.DefValue != "compact" {
-		t.Errorf("--log-format flag default should be \"compact\", got: %q", flag.DefValue)
-	}
-}
-
-func TestStartCmd_HasProviderFlag(t *testing.T) {
-	flag := startCmd.Flags().Lookup("provider")
-	if flag == nil {
-		t.Fatal("expected --provider flag to be registered on start command")
-	}
-	if flag.DefValue != "" {
-		t.Errorf("--provider flag default should be empty, got: %q", flag.DefValue)
-	}
-}
-
-func TestStartCmd_HasAllFlag(t *testing.T) {
-	flag := startCmd.Flags().Lookup("all")
-	if flag == nil {
-		t.Fatal("expected --all flag to be registered on start command")
-	}
-	if flag.DefValue != "false" {
-		t.Errorf("--all flag default should be false, got: %q", flag.DefValue)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			flag := tc.cmd.Flags().Lookup(tc.flag)
+			if flag == nil {
+				t.Fatalf("expected --%s flag on %s command", tc.flag, tc.cmd.Name())
+			}
+			if tc.usage != "" && !strings.Contains(flag.Usage, tc.usage) {
+				t.Errorf("--%s flag usage should mention %q, got: %s", tc.flag, tc.usage, flag.Usage)
+			}
+			if tc.defValue != "" && flag.DefValue != tc.defValue {
+				t.Errorf("--%s flag default should be %q, got: %q", tc.flag, tc.defValue, flag.DefValue)
+			}
+		})
 	}
 }
 
-func TestStartCmd_HasDevFlag(t *testing.T) {
-	flag := startCmd.Flags().Lookup("dev")
-	if flag == nil {
-		t.Fatal("expected --dev flag to be registered on start command")
+func TestStopCmd_Flags(t *testing.T) {
+	tests := []struct {
+		name     string
+		flag     string
+		defValue string
+	}{
+		{name: "dev", flag: "dev", defValue: "false"},
 	}
-	if flag.DefValue != "false" {
-		t.Errorf("--dev flag default should be false, got: %q", flag.DefValue)
-	}
-}
-
-func TestStopCmd_HasDevFlag(t *testing.T) {
-	flag := stopCmd.Flags().Lookup("dev")
-	if flag == nil {
-		t.Fatal("expected --dev flag to be registered on stop command")
-	}
-	if flag.DefValue != "false" {
-		t.Errorf("--dev flag default should be false, got: %q", flag.DefValue)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			flag := stopCmd.Flags().Lookup(tc.flag)
+			if flag == nil {
+				t.Fatalf("expected --%s flag on stop command", tc.flag)
+			}
+			if tc.defValue != "" && flag.DefValue != tc.defValue {
+				t.Errorf("--%s flag default should be %q, got: %q", tc.flag, tc.defValue, flag.DefValue)
+			}
+		})
 	}
 }
 
