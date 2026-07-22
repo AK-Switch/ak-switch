@@ -7,24 +7,28 @@ import (
 	"testing"
 )
 
-func TestLogsCmd_HasSinceFlag(t *testing.T) {
-	// Verify the --since flag is registered on the logs command
-	flag := logsCmd.Flags().Lookup("since")
-	if flag == nil {
-		t.Fatal("expected --since flag to be registered on logs command")
+func TestLogsCmd_Flags(t *testing.T) {
+	tests := []struct {
+		name     string
+		flag     string
+		defValue string // expected default, empty to skip
+		usage    string // expected substring in usage, empty to skip
+	}{
+		{name: "since", flag: "since", usage: "RFC3339"},
+		{name: "last", flag: "last"},
 	}
-	if !strings.Contains(flag.Usage, "RFC3339") {
-		t.Errorf("--since flag usage should mention RFC3339 format, got: %s", flag.Usage)
-	}
-	if flag.DefValue != "" {
-		t.Errorf("--since flag default should be empty string, got: %q", flag.DefValue)
-	}
-}
-
-func TestLogsCmd_HasLastFlag(t *testing.T) {
-	// Verify the existing --last flag is still registered
-	flag := logsCmd.Flags().Lookup("last")
-	if flag == nil {
-		t.Fatal("expected --last flag to be registered on logs command")
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			flag := logsCmd.Flags().Lookup(tc.flag)
+			if flag == nil {
+				t.Fatalf("expected --%s flag on logs command", tc.flag)
+			}
+			if tc.usage != "" && !strings.Contains(flag.Usage, tc.usage) {
+				t.Errorf("--%s flag usage should mention %q, got: %s", tc.flag, tc.usage, flag.Usage)
+			}
+			if tc.defValue != "" && flag.DefValue != tc.defValue {
+				t.Errorf("--%s flag default should be %q, got: %q", tc.flag, tc.defValue, flag.DefValue)
+			}
+		})
 	}
 }

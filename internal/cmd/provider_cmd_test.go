@@ -9,59 +9,25 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func TestKeyAddCmd_HasNameFlag(t *testing.T) {
-	flag := keyAddCmd.Flags().Lookup("name")
-	if flag == nil {
-		t.Fatal("expected --name flag to be registered on key add command")
+func TestKeyAddCmd_Flags(t *testing.T) {
+	flags := []string{"name", "insecure-storage"}
+	for _, f := range flags {
+		t.Run(f, func(t *testing.T) {
+			if keyAddCmd.Flags().Lookup(f) == nil {
+				t.Fatalf("expected --%s flag on key add command", f)
+			}
+		})
 	}
 }
 
-func TestKeyAddCmd_HasInsecureStorageFlag(t *testing.T) {
-	flag := keyAddCmd.Flags().Lookup("insecure-storage")
-	if flag == nil {
-		t.Fatal("expected --insecure-storage flag to be registered on key add command")
-	}
-}
-
-func TestProviderAddCmd_HasTargetFlag(t *testing.T) {
-	flag := providerAddCmd.Flags().Lookup("target")
-	if flag == nil {
-		t.Fatal("expected --target flag to be registered on provider add command")
-	}
-}
-
-func TestProviderAddCmd_HasPortFlag(t *testing.T) {
-	flag := providerAddCmd.Flags().Lookup("port")
-	if flag == nil {
-		t.Fatal("expected --port flag to be registered on provider add command")
-	}
-}
-
-func TestProviderAddCmd_HasGenaiFlag(t *testing.T) {
-	flag := providerAddCmd.Flags().Lookup("genai")
-	if flag == nil {
-		t.Fatal("expected --genai flag to be registered on provider add command")
-	}
-}
-
-func TestProviderAddCmd_HasCooldownSecFlag(t *testing.T) {
-	flag := providerAddCmd.Flags().Lookup("cooldown-sec")
-	if flag == nil {
-		t.Fatal("expected --cooldown-sec flag to be registered on provider add command")
-	}
-}
-
-func TestProviderAddCmd_HasMaxRetriesFlag(t *testing.T) {
-	flag := providerAddCmd.Flags().Lookup("max-retries")
-	if flag == nil {
-		t.Fatal("expected --max-retries flag to be registered on provider add command")
-	}
-}
-
-func TestProviderAddCmd_HasDefaultFlag(t *testing.T) {
-	flag := providerAddCmd.Flags().Lookup("default")
-	if flag == nil {
-		t.Fatal("expected --default flag to be registered on provider add command")
+func TestProviderAddCmd_Flags(t *testing.T) {
+	flags := []string{"target", "port", "genai", "cooldown-sec", "max-retries", "default"}
+	for _, f := range flags {
+		t.Run(f, func(t *testing.T) {
+			if providerAddCmd.Flags().Lookup(f) == nil {
+				t.Fatalf("expected --%s flag on provider add command", f)
+			}
+		})
 	}
 }
 
@@ -71,17 +37,14 @@ func TestKeyUpdateCmd_Exists(t *testing.T) {
 	}
 }
 
-func TestKeyUpdateCmd_HasNameFlag(t *testing.T) {
-	flag := keyUpdateCmd.Flags().Lookup("name")
-	if flag == nil {
-		t.Fatal("expected --name flag to be registered on key update command")
-	}
-}
-
-func TestKeyUpdateCmd_HasByNameFlag(t *testing.T) {
-	flag := keyUpdateCmd.Flags().Lookup("by-name")
-	if flag == nil {
-		t.Fatal("expected --by-name flag to be registered on key update command")
+func TestKeyUpdateCmd_Flags(t *testing.T) {
+	flags := []string{"name", "by-name"}
+	for _, f := range flags {
+		t.Run(f, func(t *testing.T) {
+			if keyUpdateCmd.Flags().Lookup(f) == nil {
+				t.Fatalf("expected --%s flag on key update command", f)
+			}
+		})
 	}
 }
 
@@ -91,10 +54,14 @@ func TestKeyRenameCmd_Exists(t *testing.T) {
 	}
 }
 
-func TestKeyRenameCmd_HasByNameFlag(t *testing.T) {
-	flag := keyRenameCmd.Flags().Lookup("by-name")
-	if flag == nil {
-		t.Fatal("expected --by-name flag to be registered on key rename command")
+func TestKeyRenameCmd_Flags(t *testing.T) {
+	flags := []string{"by-name"}
+	for _, f := range flags {
+		t.Run(f, func(t *testing.T) {
+			if keyRenameCmd.Flags().Lookup(f) == nil {
+				t.Fatalf("expected --%s flag on key rename command", f)
+			}
+		})
 	}
 }
 
