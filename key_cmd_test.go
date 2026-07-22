@@ -439,11 +439,16 @@ func TestKeyImport_FromFileWithObjects(t *testing.T) {
 	if store == nil || len(store.Keys) != 2 {
 		t.Fatalf("expected 2 keys, got %d", len(store.Keys))
 	}
-	if store.Keys[0].Key != "sk-obj-1" || store.Keys[0].Name != "key-one" {
-		t.Errorf("entry 0 mismatch: %+v", store.Keys[0])
+	// Build a lookup by key to avoid order dependency from LoadKeys
+	got := make(map[string]string)
+	for _, entry := range store.Keys {
+		got[entry.Key] = entry.Name
 	}
-	if store.Keys[1].Key != "sk-obj-2" || store.Keys[1].Name != "key-two" {
-		t.Errorf("entry 1 mismatch: %+v", store.Keys[1])
+	if got["sk-obj-1"] != "key-one" {
+		t.Errorf("key sk-obj-1: expected name %q, got %q", "key-one", got["sk-obj-1"])
+	}
+	if got["sk-obj-2"] != "key-two" {
+		t.Errorf("key sk-obj-2: expected name %q, got %q", "key-two", got["sk-obj-2"])
 	}
 }
 
