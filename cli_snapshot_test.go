@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"akswitch/internal/cmd"
+	"akswitch/internal/cli"
 	"akswitch/internal/config"
 )
 
@@ -27,7 +27,7 @@ func TestCLI_Root_NoArgs(t *testing.T) {
 //
 // "akswitch --help" 应显示完整的命令列表和用法。
 func TestCLI_Root_Help(t *testing.T) {
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
@@ -62,7 +62,7 @@ func TestCLI_Root_Help(t *testing.T) {
 //
 // "akswitch version" 应输出版本信息。
 func TestCLI_VersionSubcommand(t *testing.T) {
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
@@ -92,7 +92,7 @@ func TestCLI_VersionSubcommand(t *testing.T) {
 //
 // "akswitch provider list" 应以表格形式列出 provider。
 func TestCLI_ProviderList_Format(t *testing.T) {
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
@@ -143,7 +143,7 @@ func TestCLI_ProviderList_Format(t *testing.T) {
 //
 // "akswitch config view" 应显示配置详情。
 func TestCLI_ConfigView(t *testing.T) {
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
@@ -202,7 +202,7 @@ func TestCLI_ProviderAdd_MissingPort(t *testing.T) {
 //
 // 移除不存在的 provider 应报错。
 func TestCLI_ProviderRemove_NotFound(t *testing.T) {
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
@@ -226,7 +226,7 @@ func TestCLI_ProviderRemove_NotFound(t *testing.T) {
 //
 // 将默认 provider 设为不存在的名称应报错。
 func TestCLI_ProviderDefault_NotFound(t *testing.T) {
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
@@ -250,7 +250,7 @@ func TestCLI_ProviderDefault_NotFound(t *testing.T) {
 //
 // 添加重名的 provider 应报错。
 func TestCLI_ProviderAdd_Duplicate(t *testing.T) {
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
@@ -281,7 +281,7 @@ func TestCLI_ProviderAdd_Duplicate(t *testing.T) {
 //
 // "akswitch provider add <name> --default" 应设置 DefaultProvider。
 func TestCLI_ProviderAdd_DefaultFlag(t *testing.T) {
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
@@ -313,7 +313,7 @@ func TestCLI_ProviderAdd_DefaultFlag(t *testing.T) {
 //
 // "akswitch provider default <name>" 应设置默认 provider。
 func TestCLI_ProviderDefault_SetsDefault(t *testing.T) {
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
@@ -346,7 +346,7 @@ func TestCLI_ProviderDefault_SetsDefault(t *testing.T) {
 // 移除当前默认 provider 时，config 中的 default_provider 应被清除。
 // 当前行为：不移除（已知 bug P0-3）。
 func TestCLI_ProviderRemove_DefaultProvider(t *testing.T) {
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
@@ -389,7 +389,7 @@ func TestCLI_ProviderRemove_DefaultProvider(t *testing.T) {
 //
 // "akswitch nonexistent" 应给出友好提示。
 func TestCLI_InvalidCommand(t *testing.T) {
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 
 	var stderr bytes.Buffer
 	var stdout bytes.Buffer
@@ -425,7 +425,7 @@ func TestCLI_InvalidCommand(t *testing.T) {
 
 // runAkswitch 是 cmd.RunCommand 的别名，用于本文件。
 func runAkswitch(t testing.TB, args ...string) error {
-	return cmd.RunCommand(t, args...)
+	return cli.RunCommand(t, args...)
 }
 
 // assertOutputContains 断言 output 包含所有 fragments。

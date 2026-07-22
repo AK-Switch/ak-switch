@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"akswitch/internal/cmd"
+	"akswitch/internal/cli"
 	"akswitch/internal/config"
 )
 
@@ -26,21 +26,21 @@ import (
 func TestStartCmd_TOMLMode(t *testing.T) {
 	if os.Getenv("ALVUS_TEST_START_CHILD") == "1" {
 		os.Args = []string{"akswitch", "start"}
-		cmd.Execute("")
+		cli.Execute("")
 		return
 	}
 
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
 
-	cmd.RunCommand(t, "akswitch", "provider", "add", "testp",
+	cli.RunCommand(t, "akswitch", "provider", "add", "testp",
 		"--target", "http://localhost:18999/v1",
 		"--genai", "http://localhost:18999",
 		"--port", "19301",
 	)
-	cmd.RunCommand(t, "akswitch", "key", "add", "testp", "sk-test-key-12345")
+	cli.RunCommand(t, "akswitch", "key", "add", "testp", "sk-test-key-12345")
 
 	testExe, err := os.Executable()
 	if err != nil {
@@ -83,16 +83,16 @@ func TestStartCmd_TOMLMode(t *testing.T) {
 func TestStartCmd_NoKeys(t *testing.T) {
 	if os.Getenv("ALVUS_TEST_START_CHILD") == "1" {
 		os.Args = []string{"akswitch", "start"}
-		cmd.Execute("")
+		cli.Execute("")
 		return
 	}
 
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
 
-	cmd.RunCommand(t, "akswitch", "provider", "add", "nokey",
+	cli.RunCommand(t, "akswitch", "provider", "add", "nokey",
 		"--target", "http://localhost:18999/v1",
 		"--genai", "http://localhost:18999",
 		"--port", "19302",
@@ -126,28 +126,28 @@ func TestStartCmd_NoKeys(t *testing.T) {
 func TestStartCmd_ProviderFilter(t *testing.T) {
 	if os.Getenv("ALVUS_TEST_START_CHILD") == "1" {
 		os.Args = []string{"akswitch", "start", "--provider", "test-a"}
-		cmd.Execute("")
+		cli.Execute("")
 		return
 	}
 
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
 
-	cmd.RunCommand(t, "akswitch", "provider", "add", "test-a",
+	cli.RunCommand(t, "akswitch", "provider", "add", "test-a",
 		"--target", "http://localhost:18999/v1",
 		"--genai", "http://localhost:18999",
 		"--port", "19305",
 	)
-	cmd.RunCommand(t, "akswitch", "key", "add", "test-a", "sk-test-key-aaa")
+	cli.RunCommand(t, "akswitch", "key", "add", "test-a", "sk-test-key-aaa")
 
-	cmd.RunCommand(t, "akswitch", "provider", "add", "test-b",
+	cli.RunCommand(t, "akswitch", "provider", "add", "test-b",
 		"--target", "http://localhost:18999/v1",
 		"--genai", "http://localhost:18999",
 		"--port", "19306",
 	)
-	cmd.RunCommand(t, "akswitch", "key", "add", "test-b", "sk-test-key-bbb")
+	cli.RunCommand(t, "akswitch", "key", "add", "test-b", "sk-test-key-bbb")
 
 	testExe, err := os.Executable()
 	if err != nil {
@@ -190,30 +190,30 @@ func TestStartCmd_ProviderFilter(t *testing.T) {
 func TestStartCmd_AllFlag(t *testing.T) {
 	if os.Getenv("ALVUS_TEST_START_CHILD") == "1" {
 		os.Args = []string{"akswitch", "start", "--all"}
-		cmd.Execute("")
+		cli.Execute("")
 		return
 	}
 
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
 
 	sharedPort := "19308"
 
-	cmd.RunCommand(t, "akswitch", "provider", "add", "test-a",
+	cli.RunCommand(t, "akswitch", "provider", "add", "test-a",
 		"--target", "http://localhost:18999/v1",
 		"--genai", "http://localhost:18999",
 		"--port", sharedPort,
 	)
-	cmd.RunCommand(t, "akswitch", "key", "add", "test-a", "sk-test-key-aaa")
+	cli.RunCommand(t, "akswitch", "key", "add", "test-a", "sk-test-key-aaa")
 
-	cmd.RunCommand(t, "akswitch", "provider", "add", "test-b",
+	cli.RunCommand(t, "akswitch", "provider", "add", "test-b",
 		"--target", "http://localhost:18999/v1",
 		"--genai", "http://localhost:18999",
 		"--port", sharedPort,
 	)
-	cmd.RunCommand(t, "akswitch", "key", "add", "test-b", "sk-test-key-bbb")
+	cli.RunCommand(t, "akswitch", "key", "add", "test-b", "sk-test-key-bbb")
 
 	testExe, err := os.Executable()
 	if err != nil {
@@ -271,30 +271,30 @@ func TestStartCmd_AllFlag(t *testing.T) {
 func TestStartCmd_DefaultProvider(t *testing.T) {
 	if os.Getenv("ALVUS_TEST_START_CHILD") == "1" {
 		os.Args = []string{"akswitch", "start"}
-		cmd.Execute("")
+		cli.Execute("")
 		return
 	}
 
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
 
 	sharedPort := "19309"
 
-	cmd.RunCommand(t, "akswitch", "provider", "add", "default-a",
+	cli.RunCommand(t, "akswitch", "provider", "add", "default-a",
 		"--target", "http://localhost:18999/v1",
 		"--genai", "http://localhost:18999",
 		"--port", sharedPort,
 	)
-	cmd.RunCommand(t, "akswitch", "key", "add", "default-a", "sk-test-key-aaa")
+	cli.RunCommand(t, "akswitch", "key", "add", "default-a", "sk-test-key-aaa")
 
-	cmd.RunCommand(t, "akswitch", "provider", "add", "other-b",
+	cli.RunCommand(t, "akswitch", "provider", "add", "other-b",
 		"--target", "http://localhost:18999/v1",
 		"--genai", "http://localhost:18999",
 		"--port", sharedPort,
 	)
-	cmd.RunCommand(t, "akswitch", "key", "add", "other-b", "sk-test-key-bbb")
+	cli.RunCommand(t, "akswitch", "key", "add", "other-b", "sk-test-key-bbb")
 
 	// Add default_provider to config.toml
 	configPath := filepath.Join(tmpDir, "config.toml")
