@@ -52,7 +52,7 @@ func NewKeyPool(keys []string, names []string) *KeyPool {
 // validateIndex checks that the given index is within the valid range of keys.
 // Returns an error if the index is out of range.
 func (p *KeyPool) validateIndex(idx int) error {
-	if idx < 0 || idx >= len(p.keys) {
+	if idx < 0 || idx >= len(p.keys) || idx >= len(p.names) {
 		return fmt.Errorf("key index %d out of range (0-%d)", idx, len(p.keys)-1)
 	}
 	return nil

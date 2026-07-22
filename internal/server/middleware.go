@@ -21,7 +21,7 @@ func parseKeyIndex(r *http.Request) (int, error) {
 	raw := r.PathValue("index")
 	idx, err := strconv.Atoi(raw)
 	if err != nil {
-		return 0, fmt.Errorf("invalid key index %q: must be a positive integer", raw)
+		return 0, fmt.Errorf("invalid key index %q: %w", raw, err)
 	}
 	if idx < 1 {
 		return 0, fmt.Errorf("invalid key index %d: must be >= 1", idx)

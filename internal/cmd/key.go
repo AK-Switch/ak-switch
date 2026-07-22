@@ -465,25 +465,9 @@ var keyRemoveCmd = &cobra.Command{
 	  akswitch key remove nvidia my-key --by-name`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		var idx int
-		if byName, _ := cmd.Flags().GetBool("by-name"); byName {
-			store, err := keypool.LoadKeys(args[0])
-			if err != nil {
-				return fmt.Errorf("failed to load keys for %q: %w", args[0], err)
-			}
-			if store == nil {
-				return fmt.Errorf("no keys found for provider %q", args[0])
-			}
-			idx, err = findKeyIndexByName(store, args[1])
-			if err != nil {
-				return err
-			}
-		} else {
-			var err error
-			idx, err = strconv.Atoi(args[1])
-			if err != nil {
-				return fmt.Errorf("invalid index %q: must be a non-negative integer", args[1])
-			}
+		idx, err := resolveKeyIndex(cmd, args)
+		if err != nil {
+			return err
 		}
 		return updateKey(args[0], idx, KeyRemove)
 	},
@@ -503,25 +487,9 @@ var keyDisableCmd = &cobra.Command{
 	  akswitch key disable nvidia my-key --by-name`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		var idx int
-		if byName, _ := cmd.Flags().GetBool("by-name"); byName {
-			store, err := keypool.LoadKeys(args[0])
-			if err != nil {
-				return fmt.Errorf("failed to load keys for %q: %w", args[0], err)
-			}
-			if store == nil {
-				return fmt.Errorf("no keys found for provider %q", args[0])
-			}
-			idx, err = findKeyIndexByName(store, args[1])
-			if err != nil {
-				return err
-			}
-		} else {
-			var err error
-			idx, err = strconv.Atoi(args[1])
-			if err != nil {
-				return fmt.Errorf("invalid index %q: must be a non-negative integer", args[1])
-			}
+		idx, err := resolveKeyIndex(cmd, args)
+		if err != nil {
+			return err
 		}
 		return updateKey(args[0], idx, KeyDisable)
 	},
@@ -541,28 +509,32 @@ var keyEnableCmd = &cobra.Command{
 	  akswitch key enable nvidia my-key --by-name`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		var idx int
-		if byName, _ := cmd.Flags().GetBool("by-name"); byName {
-			store, err := keypool.LoadKeys(args[0])
-			if err != nil {
-				return fmt.Errorf("failed to load keys for %q: %w", args[0], err)
-			}
-			if store == nil {
-				return fmt.Errorf("no keys found for provider %q", args[0])
-			}
-			idx, err = findKeyIndexByName(store, args[1])
-			if err != nil {
-				return err
-			}
-		} else {
-			var err error
-			idx, err = strconv.Atoi(args[1])
-			if err != nil {
-				return fmt.Errorf("invalid index %q: must be a non-negative integer", args[1])
-			}
+		idx, err := resolveKeyIndex(cmd, args)
+		if err != nil {
+			return err
 		}
 		return updateKey(args[0], idx, KeyEnable)
 	},
+}
+
+// resolveKeyIndex resolves a key index from command arguments.
+// If --by-name is set, looks up the index by name; otherwise parses it as an integer.
+func resolveKeyIndex(cmd *cobra.Command, args []string) (int, error) {
+	if byName, _ := cmd.Flags().GetBool("by-name"); byName {
+		store, err := keypool.LoadKeys(args[0])
+		if err != nil {
+			return 0, fmt.Errorf("failed to load keys for %q: %w", args[0], err)
+		}
+		if store == nil {
+			return 0, fmt.Errorf("no keys found for provider %q", args[0])
+		}
+		return findKeyIndexByName(store, args[1])
+	}
+	idx, err := strconv.Atoi(args[1])
+	if err != nil {
+		return 0, fmt.Errorf("invalid index %q: must be a non-negative integer", args[1])
+	}
+	return idx, nil
 }
 
 // findKeyIndexByName searches a KeyStore for a key with the given name.

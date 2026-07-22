@@ -6,6 +6,7 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"reflect"
 	"strconv"
 
@@ -167,7 +168,11 @@ func mergeDefaults(cfg *Config) {
 		switch f.Kind() {
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 			if f.Int() == 0 {
-				val, _ := strconv.ParseInt(defaultVal, 10, 64)
+				val, err := strconv.ParseInt(defaultVal, 10, 64)
+				if err != nil {
+					slog.Warn("mergeDefaults: invalid int default tag value", "field", field.Name, "default", defaultVal, "error", err)
+					continue
+				}
 				f.SetInt(val)
 			}
 		case reflect.String:
@@ -176,7 +181,11 @@ func mergeDefaults(cfg *Config) {
 			}
 		case reflect.Float32, reflect.Float64:
 			if f.Float() == 0 {
-				val, _ := strconv.ParseFloat(defaultVal, 64)
+				val, err := strconv.ParseFloat(defaultVal, 64)
+				if err != nil {
+					slog.Warn("mergeDefaults: invalid float default tag value", "field", field.Name, "default", defaultVal, "error", err)
+					continue
+				}
 				f.SetFloat(val)
 			}
 		case reflect.Bool:
