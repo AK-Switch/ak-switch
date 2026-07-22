@@ -54,3 +54,4 @@ grafana-data/
 
 # Private skills - not tracked
 .claude/skills/remote-monitoring/
+internal/server/keys.json
