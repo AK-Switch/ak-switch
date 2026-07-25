@@ -13,7 +13,7 @@ import (
 	"log"
 	"os"
 
-	"akswitch/internal/cmd"
+	"akswitch/internal/cli"
 )
 
 func main() {
@@ -30,7 +30,7 @@ func main() {
 		log.Fatalf("failed to create output directory %q: %v", outDir, err)
 	}
 
-	if err := cmd.GenerateDocs(outDir); err != nil {
+	if err := cli.GenerateDocs(outDir); err != nil {
 		log.Fatalf("failed to generate docs: %v", err)
 	}
 

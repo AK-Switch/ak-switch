@@ -1791,7 +1791,7 @@ func TestLogEntry_CLIFormat(t *testing.T) {
 	}
 
 	entry := entries[0]
-	// All fields the CLI display code in internal/cmd/logs.go reads
+	// All fields the CLI display code in internal/cli/logs.go reads
 	for _, field := range []string{"method", "url", "status", "timestamp", "provider", "duration_ms", "retry", "key_name"} {
 		if _, ok := entry[field]; !ok {
 			t.Errorf("CLI display needs field %q, but log entry missing it", field)
