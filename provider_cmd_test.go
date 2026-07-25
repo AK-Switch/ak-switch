@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"akswitch/internal/cmd"
+	"akswitch/internal/cli"
 	"akswitch/internal/config"
 )
 
@@ -19,7 +19,7 @@ import (
 // "akswitch provider add <name> --target <url> --port <port>
 // creates a valid entry in the config.toml.
 func TestProviderAdd_CreatesProviderEntry(t *testing.T) {
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
@@ -38,7 +38,7 @@ func TestProviderAdd_CreatesProviderEntry(t *testing.T) {
 		"--cooldown-sec", "30",
 		"--max-retries", "5",
 	}
-	cmd.RunCommand(t, addArgs...)
+	cli.RunCommand(t, addArgs...)
 
 	// Verify the config file now contains the provider
 	tc, err := config.LoadTomlConfig(xdgPath)
@@ -69,7 +69,7 @@ func TestProviderAdd_CreatesProviderEntry(t *testing.T) {
 // TestProviderAdd_DuplicateRejected verifies that adding
 // a provider with a duplicate name is rejected.
 func TestProviderAdd_DuplicateRejected(t *testing.T) {
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
@@ -78,16 +78,16 @@ func TestProviderAdd_DuplicateRejected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
-	cmd.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+	cli.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
 
 	// First add succeeds
-	cmd.RunCommand(t, "akswitch", "provider", "add", "dup-test",
+	cli.RunCommand(t, "akswitch", "provider", "add", "dup-test",
 		"--target", "https://test1.com/v1",
 		"--port", "9101",
 	)
 
 	// Second add should fail
-	err = cmd.RunCommand(t, "akswitch", "provider", "add", "dup-test",
+	err = cli.RunCommand(t, "akswitch", "provider", "add", "dup-test",
 		"--target", "https://test2.com/v1",
 		"--port", "9102",
 	)
@@ -102,7 +102,7 @@ func TestProviderAdd_DuplicateRejected(t *testing.T) {
 // TestProviderList_ShowsProviders verifies that
 // "akswitch provider list" correctly lists configured providers.
 func TestProviderList_ShowsProviders(t *testing.T) {
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
@@ -111,14 +111,14 @@ func TestProviderList_ShowsProviders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
-	cmd.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+	cli.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
 
 	// Add two providers
-	cmd.RunCommand(t, "akswitch", "provider", "add", "alpha",
+	cli.RunCommand(t, "akswitch", "provider", "add", "alpha",
 		"--target", "https://alpha.test/v1",
 		"--port", "9101",
 	)
-	cmd.RunCommand(t, "akswitch", "provider", "add", "beta",
+	cli.RunCommand(t, "akswitch", "provider", "add", "beta",
 		"--target", "https://beta.test/v1",
 		"--port", "9102",
 	)
@@ -129,7 +129,7 @@ func TestProviderList_ShowsProviders(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	err = cmd.RunCommand(t, "akswitch", "provider", "list")
+	err = cli.RunCommand(t, "akswitch", "provider", "list")
 
 	w.Close()
 	os.Stdout = oldStdout
@@ -154,7 +154,7 @@ func TestProviderList_ShowsProviders(t *testing.T) {
 // TestProviderRemove_RemovesEntry verifies that
 // "akswitch provider remove <name>" correctly removes a provider.
 func TestProviderRemove_RemovesEntry(t *testing.T) {
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
@@ -163,14 +163,14 @@ func TestProviderRemove_RemovesEntry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
-	cmd.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
-	cmd.RunCommand(t, "akswitch", "provider", "add", "remove-me",
+	cli.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+	cli.RunCommand(t, "akswitch", "provider", "add", "remove-me",
 		"--target", "https://remove.test/v1",
 		"--port", "9201",
 	)
 
 	// Remove it
-	cmd.RunCommand(t, "akswitch", "provider", "remove", "remove-me")
+	cli.RunCommand(t, "akswitch", "provider", "remove", "remove-me")
 
 	// Verify it's gone
 	tc, err := config.LoadTomlConfig(xdgPath)
@@ -185,7 +185,7 @@ func TestProviderRemove_RemovesEntry(t *testing.T) {
 // TestProviderRemove_NotFound verifies that removing a
 // nonexistent provider returns an error.
 func TestProviderRemove_NotFound(t *testing.T) {
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
@@ -194,9 +194,9 @@ func TestProviderRemove_NotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
-	cmd.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+	cli.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
 
-	err = cmd.RunCommand(t, "akswitch", "provider", "remove", "nonexistent")
+	err = cli.RunCommand(t, "akswitch", "provider", "remove", "nonexistent")
 	if err == nil {
 		t.Fatal("expected error for removing nonexistent provider, got nil")
 	}
@@ -206,7 +206,7 @@ func TestProviderRemove_NotFound(t *testing.T) {
 //
 // "akswitch provider add <name> --default" 应将 DefaultProvider 设为该 provider。
 func TestProviderAdd_DefaultFlag(t *testing.T) {
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
@@ -216,7 +216,7 @@ func TestProviderAdd_DefaultFlag(t *testing.T) {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
 
-	cmd.RunCommand(t, "akswitch", "provider", "add", "primary",
+	cli.RunCommand(t, "akswitch", "provider", "add", "primary",
 		"--target", "https://primary.test/v1",
 		"--port", "9501",
 		"--default",
@@ -235,7 +235,7 @@ func TestProviderAdd_DefaultFlag(t *testing.T) {
 //
 // "akswitch provider default <name>" 应正确设置 default_provider。
 func TestProviderDefault_SetsDefault(t *testing.T) {
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
@@ -245,15 +245,15 @@ func TestProviderDefault_SetsDefault(t *testing.T) {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
 
-	cmd.RunCommand(t, "akswitch", "provider", "add", "alpha",
+	cli.RunCommand(t, "akswitch", "provider", "add", "alpha",
 		"--target", "https://alpha.test/v1",
 		"--port", "9501",
 	)
-	cmd.RunCommand(t, "akswitch", "provider", "add", "beta",
+	cli.RunCommand(t, "akswitch", "provider", "add", "beta",
 		"--target", "https://beta.test/v1",
 	)
 
-	cmd.RunCommand(t, "akswitch", "provider", "default", "beta")
+	cli.RunCommand(t, "akswitch", "provider", "default", "beta")
 
 	tc, err := config.LoadTomlConfig(xdgPath)
 	if err != nil {
@@ -268,7 +268,7 @@ func TestProviderDefault_SetsDefault(t *testing.T) {
 //
 // "akswitch provider default <name>" 对不存在的 provider 应报错。
 func TestProviderDefault_NotFound(t *testing.T) {
-	cmd.ResetConfigEnv()
+	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
 	config.ConfigDir = tmpDir
 	t.Cleanup(func() { config.ConfigDir = "" })
@@ -277,9 +277,9 @@ func TestProviderDefault_NotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
-	cmd.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
+	cli.RunCommand(t, "akswitch", "config", "init", "-p", xdgPath)
 
-	err = cmd.RunCommand(t, "akswitch", "provider", "default", "nonexistent")
+	err = cli.RunCommand(t, "akswitch", "provider", "default", "nonexistent")
 	if err == nil {
 		t.Fatal("expected error for default with nonexistent provider, got nil")
 	}

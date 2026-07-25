@@ -12,7 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **单一测试执行：**
 ```bash
-go test -tags=unit -run TestName ./internal/cmd/          # 单元
+go test -tags=unit -run TestName ./internal/cli/          # 单元
 go test -tags=integration -run TestName -race .             # 集成
 go test -tags=e2e -run TestName -timeout=5m -race .         # E2E
 ```
@@ -223,7 +223,7 @@ main 分支受保护，禁止直接推送。遵循 GitHub Flow + 原子 commit�
 3. **写测试** — 在 `provider_cmd_test.go`（或对应文件）中按上述模式添加测试：
    - 新增命令 → 加 `TestXxxCmd_Exists`
    - 新增标志 → 加 `TestXxxCmd_HasYyyFlag`
-4. **验证新测试** — `go test -tags=unit -run TestXxx ./internal/cmd/` 确认新测试通过
+4. **验证新测试** — `go test -tags=unit -run TestXxx ./internal/cli/` 确认新测试通过
 5. **验证全量** — `make test-all`
 6. **手动验收** — `go install` 编译后按改动类型运行对应验证：
 

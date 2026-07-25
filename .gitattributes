@@ -9,3 +9,6 @@ CLAUDE.md text eol=lf
 
 # HTML dashboard: force LF
 cmd/akswitch/dashboard.html text eol=lf
+
+# Auto-generated CLI docs: force LF to prevent CRLF diff in CI
+docs/cli/*.md text eol=lf

@@ -1,6 +1,6 @@
 //go:build integration
 
-package cmd
+package cli
 
 import (
 	"os"
