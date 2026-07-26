@@ -89,7 +89,7 @@ go test -tags=e2e -run TestName -timeout=5m -race .         # E2E
 ```
 cmd/akswitch/main.go           # 入口，ldflags 注入 version，嵌入 dashboard.html
 internal/
-  cmd/                         # Cobra CLI 命令层
+  cli/                         # Cobra CLI 命令层
     root.go                    #   根命令 + version 子命令 + detectServerPort()
     start.go                   #   start -> 解析配置 -> 初始化 provider -> 启动代理
     logs.go                    #   logs 命令（formatLogLine 纯函数，--verbose/--since/--last 标志）
@@ -100,10 +100,12 @@ internal/
   server/                      # HTTP 代理 + 管理 API
     proxy.go                   #   错误码/分类定义（categorizeError/writeProxyError）
     proxy_handler.go           #   反向代理 + key 轮转 + 重试 + Token 计量
-    handlers.go                #   管理 API handler（config/key/log-level...）
+    proxy_executor.go          #   ProxyEngine 执行层（从 proxy_handler 提取）
+    provider_lookup.go         #   管理 API handler（config/key/log-level...）
     admin.go                   #   admin token 鉴权
     router.go                  #   ProviderRouter: 单端口 /{provider}/... 路径路由
-    middleware.go              #   敏感 header 过滤、日志
+    helpers.go                 #   敏感 header 过滤、日志
+    logmanager.go              #   日志双写管理（stderr + 文件）
     colorhandler.go            #   slog.ColorHandler（ANSI 彩色 + compact 模式）
     crash.go                   #   panic 恢复
     lifecycle.go               #   后台任务（metric ticker、健康检查、启动 key 探针）
@@ -112,7 +114,7 @@ internal/
     manager.go                 #   InstanceManager（旧多端口模式，已废弃但保留）
   keypool/                     # API Key 池
     keypool.go                 #   轮转策略（round-robin + cooldown + 禁用）
-        store.go                   #   持久化（keyring + JSON 文件读写）
+    store.go                   #   持久化（keyring + JSON 文件读写）
   circuitbreaker/              # 两层熔断器
     key.go                     #   Key 级熔断（限流退避）
     upstream.go                #   上游级熔断（502/503 -> open -> half-open -> close）
@@ -123,6 +125,8 @@ internal/
     config_exports.go          #   测试导出（公开 Config 字段供测试包使用）
   logstore/                    # 请求日志环形缓冲区（线程安全，固定容量，支持 SnapshotSince）
   metrics/                     # Prometheus 指标（所有指标统一注册到 router 级 registry）
+  tokenestimator/              # Token 计量估算（从 proxy_handler 提取）
+  tracker/                     # 校准跟踪（从 proxy_handler 提取）
   utils/                       # LogEntry 结构体 + MaskKey + CopyHeaders
 docs/
   api.md                       # API 端点文档
