@@ -8,9 +8,10 @@ import (
 	"testing"
 )
 
-// ── ApplyLogLevel ─────────────────────────────────
+// ── ApplyLevel ─────────────────────────────────
 
 func TestApplyLogLevel_ValidLevels(t *testing.T) {
+	lm := NewLogManager()
 	levels := []struct {
 		input string
 		want  slog.Level
@@ -27,31 +28,33 @@ func TestApplyLogLevel_ValidLevels(t *testing.T) {
 
 	for _, tc := range levels {
 		t.Run(tc.input, func(t *testing.T) {
-			ApplyLogLevel(tc.input)
+			lm.ApplyLevel(tc.input)
 			// Verify the level is set correctly by checking Enabled()
 			if !slog.Default().Enabled(nil, tc.want) {
-				t.Errorf("ApplyLogLevel(%q): expected level %v to be enabled", tc.input, tc.want)
+				t.Errorf("ApplyLevel(%q): expected level %v to be enabled", tc.input, tc.want)
 			}
 		})
 	}
 }
 
 func TestApplyLogLevel_InvalidLevelFallsBackToInfo(t *testing.T) {
-	ApplyLogLevel("verbose")
+	lm := NewLogManager()
+	lm.ApplyLevel("verbose")
 
 	if !slog.Default().Enabled(nil, slog.LevelInfo) {
-		t.Error("ApplyLogLevel(\"verbose\"): expected Info to be enabled")
+		t.Error("ApplyLevel(\"verbose\"): expected Info to be enabled")
 	}
 	if slog.Default().Enabled(nil, slog.LevelDebug) {
-		t.Error("ApplyLogLevel(\"verbose\"): expected Debug NOT to be enabled")
+		t.Error("ApplyLevel(\"verbose\"): expected Debug NOT to be enabled")
 	}
 }
 
 func TestApplyLogLevel_EmptyLevelFallsBackToInfo(t *testing.T) {
-	ApplyLogLevel("")
+	lm := NewLogManager()
+	lm.ApplyLevel("")
 
 	if !slog.Default().Enabled(nil, slog.LevelInfo) {
-		t.Error("ApplyLogLevel(\"\"): expected Info to be enabled")
+		t.Error("ApplyLevel(\"\"): expected Info to be enabled")
 	}
 }
 

@@ -34,9 +34,13 @@ func TestConfigInit_CreatesFile(t *testing.T) {
 	}
 
 	// Verify file is loadable as valid TOML config
-	cfg, err := config.LoadToml(configPath)
+	providersMap, err := config.LoadAllTomlProviders(configPath)
 	if err != nil {
 		t.Fatalf("created config.toml is not valid: %v", err)
+	}
+	cfg, ok := providersMap["example-a"]
+	if !ok {
+		t.Fatal("example-a provider not found in config")
 	}
 	// Generated config should have example placeholder providers
 	if cfg.TargetBase != "https://api.example-a.com/v1" {

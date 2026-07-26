@@ -74,7 +74,7 @@ func startServer(dashboardHTML string, providerFilter string, startAll bool, log
 
 	// ── Initialize file logging (from first provider) ──
 	for _, cfg := range providers {
-		server.InitFileHandler(cfg.LogFile, cfg.LogMaxSize, cfg.LogMaxAge)
+		router.LogManager().InitFileHandler(cfg.LogFile, cfg.LogMaxSize, cfg.LogMaxAge)
 		break
 	}
 
@@ -166,14 +166,14 @@ func initProviders(router *server.ProviderRouter, providers map[string]*config.C
 			startedCount++
 		}
 	}
-	server.SetLogFormat(logCompact, startedCount <= 1)
+	router.LogManager().SetFormat(logCompact, startedCount <= 1)
 	for name, cfg := range providers {
 		if !shouldStart(name) {
 			slog.Debug("skipping provider", "name", name)
 			continue
 		}
 
-		server.ApplyLogLevel(cfg.LogLevel)
+		router.LogManager().ApplyLevel(cfg.LogLevel)
 
 		// Load API keys from encrypted store or env
 		keys, keyNames := loadKeysForProvider(name, cfg)
@@ -240,7 +240,7 @@ func waitForShutdown(router *server.ProviderRouter) {
 	slog.Info("shutting down")
 
 	// ── Close file logger ────────────────────────────
-	server.CloseFileHandler()
+	router.LogManager().CloseFileHandler()
 
 	// ── Graceful shutdown ─────────────────────────────
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
