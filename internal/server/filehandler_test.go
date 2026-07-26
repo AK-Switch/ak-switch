@@ -40,25 +40,26 @@ func TestNewFileHandler_CreatesFile(t *testing.T) {
 }
 
 func TestInitFileHandler_EmptyPath(t *testing.T) {
-	InitFileHandler("", 100, 7)
+	lm := NewLogManager()
+	lm.InitFileHandler("", 100, 7)
 }
 
 func TestInitFileHandler_LevelSync(t *testing.T) {
-	logLevel.Set(slog.LevelInfo)
+	lm := NewLogManager()
 
-	ApplyLogLevel("debug")
-	if logLevel.Level() != slog.LevelDebug {
-		t.Errorf("logLevel = %v, want %v", logLevel.Level(), slog.LevelDebug)
+	lm.ApplyLevel("debug")
+	if lm.level.Level() != slog.LevelDebug {
+		t.Errorf("logLevel = %v, want %v", lm.level.Level(), slog.LevelDebug)
 	}
 
-	ApplyLogLevel("error")
-	if logLevel.Level() != slog.LevelError {
-		t.Errorf("logLevel = %v, want %v", logLevel.Level(), slog.LevelError)
+	lm.ApplyLevel("error")
+	if lm.level.Level() != slog.LevelError {
+		t.Errorf("logLevel = %v, want %v", lm.level.Level(), slog.LevelError)
 	}
 
-	ApplyLogLevel("invalid")
-	if logLevel.Level() != slog.LevelInfo {
-		t.Errorf("logLevel = %v, want %v", logLevel.Level(), slog.LevelInfo)
+	lm.ApplyLevel("invalid")
+	if lm.level.Level() != slog.LevelInfo {
+		t.Errorf("logLevel = %v, want %v", lm.level.Level(), slog.LevelInfo)
 	}
 }
 

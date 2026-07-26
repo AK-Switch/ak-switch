@@ -104,6 +104,8 @@ type ProviderRouter struct {
 	mux             *http.ServeMux // cached mux for Handler()
 	muxOnce         sync.Once
 	calibrator      *tracker.Calibrator // per-model token estimation calibration
+	logManager      *LogManager
+	proxyExecutor   *ProxyExecutor
 
 	// Key operation handlers (initialized via keyOperationHandler factory)
 	disableKeyHandler  http.HandlerFunc
@@ -124,6 +126,7 @@ func NewProviderRouter(dashboardHTML string) *ProviderRouter {
 		dashboardHTML:   dashboardHTML,
 		stop:            make(chan struct{}),
 		calibrator:      tracker.NewCalibrator(15),
+			logManager:      NewLogManager(),
 	}
 	pr.logs.OnAppend = func(prevLen, newLen, maxLen int) {
 		pr.metrics.LogStoreEntries.Inc()
@@ -132,6 +135,9 @@ func NewProviderRouter(dashboardHTML string) *ProviderRouter {
 		}
 		pr.metrics.LogStoreFillRatio.Set(float64(newLen) / float64(maxLen))
 	}
+
+	// Initialize proxy executor with shared dependencies
+	pr.proxyExecutor = NewProxyExecutor(m, pr.logs, pr.calibrator)
 
 	// Initialize key operation handlers via factory function
 	pr.disableKeyHandler = pr.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
@@ -294,6 +300,11 @@ func (pr *ProviderRouter) Provider(name string) *ProviderState {
 // Metrics returns the router-level Prometheus metrics collector.
 func (pr *ProviderRouter) Metrics() *akswitchmetrics.Metrics {
 	return pr.metrics
+}
+
+// LogManager returns the router-level logging configuration manager.
+func (pr *ProviderRouter) LogManager() *LogManager {
+	return pr.logManager
 }
 
 // StartBackgroundTasks launches background goroutines (metrics refresh, active health check)
