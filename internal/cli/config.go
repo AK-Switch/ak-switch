@@ -107,6 +107,7 @@ var configViewCmd = &cobra.Command{
 		for name, cfg := range providers {
 			sanitized := cfg.Sanitized()
 			fmt.Printf("\n--- Provider: %s ---\n", name)
+			fmt.Printf("  Port: %d\n", sanitized.Port)
 			fmt.Printf("  Target base URL: %s\n", sanitized.TargetBase)
 			fmt.Printf("  GenAI base URL: %s\n", sanitized.GenaiBase)
 			if sanitized.AdminToken != "" {
