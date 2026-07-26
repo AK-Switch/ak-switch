@@ -344,7 +344,6 @@ func TestCLI_ProviderDefault_SetsDefault(t *testing.T) {
 // ── Test: provider remove 默认 provider ─────────
 //
 // 移除当前默认 provider 时，config 中的 default_provider 应被清除。
-// 当前行为：不移除（已知 bug P0-3）。
 func TestCLI_ProviderRemove_DefaultProvider(t *testing.T) {
 	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
@@ -375,13 +374,13 @@ func TestCLI_ProviderRemove_DefaultProvider(t *testing.T) {
 	// 删除
 	runAkswitch(t, "akswitch", "provider", "remove", "primary")
 
-	// 验证 default_provider 已被清除（已知 bug P0-3，期待修复）
+	// 验证 default_provider 已被清除
 	tc, err = config.LoadTomlConfig(xdgPath)
 	if err != nil {
 		t.Fatalf("LoadTomlConfig after remove failed: %v", err)
 	}
 	if tc.DefaultProvider != "" {
-		t.Logf("BUG P0-3: DefaultProvider (%q) not cleared after removing default provider", tc.DefaultProvider)
+		t.Errorf("DefaultProvider (%q) should have been cleared after removing the default provider", tc.DefaultProvider)
 	}
 }
 
