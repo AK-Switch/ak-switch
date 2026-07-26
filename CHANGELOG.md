@@ -4,6 +4,55 @@
 
 ---
 
+## v0.2.0（2026-07-27）
+
+### 架构重构（PR #131）
+- 重构 ProxyHandler：提取 `ProxyExecutor` 独立处理代理请求全流程（构建、发送、重试、响应）
+- 提取 `TokenEstimator` 为独立子包，支持独立的 Token 估算和校准
+- 提取 `LogManager` 封装日志环形缓冲区管理，简化 Server 状态管理
+- 移除 `manager.go` 旧多端口模式代码，`ProviderRouter` 全面接管路由
+- 合并 `errorclassifier.go` 等零散文件，减少 internal/server 文件数量
+- 新增 `helpers.go` 统一辅助函数
+
+### 项目结构规范化（PR #129）
+- 重命名 `internal/cmd/` → `internal/cli/`，避免与根目录 `cmd/` 混淆
+- 重命名 `alvus-dashboard/` → `web/`，符合 Go 标准布局
+- 合并 `grafana/` + `prometheus/` → `deployments/`，统一部署配置
+- 审查报告移入 `docs/internal/` 归档
+- 修复 `release.yml` 中 ldflags 路径引用
+
+### CLI 文档自动生成（PR #130）
+- 新增 `tools/gen-cli-docs/` 工具，从 Cobra 命令树自动生成 Markdown 文档
+- `docs/cli/` 下每个命令独立文档，CI 中 `docs-check` 作业验证文档最新
+- 删除手写维护的 `docs/cli-reference.md`，从源头消除文档过期
+
+### 开发者模式
+- `akswitch start --dev`：端口自动递增 + 独立 PID 文件（`akswitch-dev.pid`）
+- 启动时打印 `🚧 Dev mode` 标识
+
+### Key 管理增强
+- `key rename` 命令：支持重命名 provider 内的 key
+- `key update` 命令：支持原位替换 API key（`--by-name` 标志）
+- `key remove/disable/enable` 支持 `--by-name` 标志，统一命令工厂模式
+- `key import` 增加 JSONL 支持、去重功能、自动编号和统计输出
+- 提取 `KeyPool.validateIndex()` 共享方法，统一 `Name()` 越界行为
+
+### 代码质量
+- 修复端口扫描竞态条件：`StartWithListener` 预持有 listener 避免 `Listen→Close→再 Listen`
+- 修复审查遗留的 6 个代码质量问题（nil deref、硬编码 host、过时注释等）
+- `Config.mergeConfig()` 用反射 + default tag 自动化，新增字段不再遗漏
+- 参数化测试替代逐一手写的 flag 注册测试（4 文件 +105/-136 行）
+- 移除 `SilenceUsage`，CLI 参数错误时显示用法提示
+- 修复 `TestKeyImport_FromFileWithObjects` 顺序依赖
+- 修复 `default_provider` 删除时不清除配置的遗留注释（P0-3，已确认修复）
+
+### 依赖与 CI
+- 升级 `github.com/pkoukk/tiktoken-go` 从 v0.1.6 到 v0.1.8
+- 并行化 CI 管线，去除 e2e 和 docker 对 test 的串行依赖（PR #99）
+- 新增 `.github/workflows/go.yml` 独立 CI 工作流
+
+---
+
 ## v0.1.2（2026-07-19）
 
 ### Windows 图标修复
