@@ -7,19 +7,10 @@ import (
 	"time"
 )
 
-// KeyState represents the state of a KeyCircuitBreaker.
-type KeyState int
-
-const (
-	StateClosed    KeyState = iota // Key is available
-	StateOpen                      // Key is cooling (backoff)
-	StatePermanent                 // Key is permanently disabled
-)
-
 // KeyCircuitBreaker tracks per-key retry state with exponential backoff.
 type KeyCircuitBreaker struct {
 	mu            sync.Mutex
-	state         KeyState
+	state         State
 	attempt       int
 	cooldownUntil time.Time
 	trippedReason string
@@ -57,7 +48,7 @@ func (k *KeyCircuitBreaker) RecordFailure() time.Duration {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 
-	if k.state == StatePermanent {
+	if k.state == Permanent {
 		return 0
 	}
 
@@ -67,7 +58,7 @@ func (k *KeyCircuitBreaker) RecordFailure() time.Duration {
 	// If raw cooldown reaches or exceeds backoffCap, use a long cooldown
 	// at the cap duration instead of permanent disable.
 	if raw >= k.backoffCap {
-		k.state = StateOpen
+		k.state = Open
 		k.cooldownUntil = time.Now().Add(k.backoffCap)
 		k.attempt = 0
 		return k.backoffCap
@@ -86,7 +77,7 @@ func (k *KeyCircuitBreaker) RecordFailure() time.Duration {
 		cooldown = k.backoffCap
 	}
 
-	k.state = StateOpen
+	k.state = Open
 	k.cooldownUntil = time.Now().Add(cooldown)
 	k.attempt++
 	return cooldown
@@ -99,7 +90,7 @@ func (k *KeyCircuitBreaker) RecordAuthFailure() bool {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 
-	if k.state == StatePermanent {
+	if k.state == Permanent {
 		return false
 	}
 	k.authFailCount++
@@ -107,7 +98,7 @@ func (k *KeyCircuitBreaker) RecordAuthFailure() bool {
 		return true
 	}
 	// Not yet at threshold; apply a brief cooldown so the key is skipped for a bit
-	k.state = StateOpen
+	k.state = Open
 	k.cooldownUntil = time.Now().Add(10 * time.Second)
 	return false
 }
@@ -116,24 +107,24 @@ func (k *KeyCircuitBreaker) RecordAuthFailure() bool {
 func (k *KeyCircuitBreaker) RecordPerma(reason string) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
-	k.state = StatePermanent
+	k.state = Permanent
 	k.trippedReason = reason
 }
 
-// ForceCooldown sets the key into StateOpen with a cooldown of the given duration.
+// ForceCooldown sets the key into Open with a cooldown of the given duration.
 // No-op if the key is already permanently disabled.
 // If the key already has a longer cooldown, the existing cooldown is preserved.
 func (k *KeyCircuitBreaker) ForceCooldown(d time.Duration) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
-	if k.state == StatePermanent {
+	if k.state == Permanent {
 		return
 	}
 	until := time.Now().Add(d)
 	if until.After(k.cooldownUntil) {
 		k.cooldownUntil = until
 	}
-	k.state = StateOpen
+	k.state = Open
 }
 
 // RecordSuccess resets the breaker to closed state and zeroes the attempt count.
@@ -142,10 +133,10 @@ func (k *KeyCircuitBreaker) RecordSuccess() {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 
-	if k.state == StatePermanent {
+	if k.state == Permanent {
 		return
 	}
-	k.state = StateClosed
+	k.state = Closed
 	k.attempt = 0
 	k.authFailCount = 0
 	k.cooldownUntil = time.Time{}
@@ -153,11 +144,11 @@ func (k *KeyCircuitBreaker) RecordSuccess() {
 
 // Reset fully resets the breaker to closed state, clearing any cooldown
 // or permanent failure. Unlike RecordSuccess, this also works on keys
-// in the StatePermanent state.
+// in the Permanent state.
 func (k *KeyCircuitBreaker) Reset() {
 	k.mu.Lock()
 	defer k.mu.Unlock()
-	k.state = StateClosed
+	k.state = Closed
 	k.attempt = 0
 	k.authFailCount = 0
 	k.cooldownUntil = time.Time{}
@@ -170,11 +161,11 @@ func (k *KeyCircuitBreaker) Allow() bool {
 	defer k.mu.Unlock()
 
 	switch k.state {
-	case StatePermanent:
+	case Permanent:
 		return false
-	case StateClosed:
+	case Closed:
 		return true
-	case StateOpen:
+	case Open:
 		return time.Now().After(k.cooldownUntil)
 	default:
 		return false
@@ -182,7 +173,7 @@ func (k *KeyCircuitBreaker) Allow() bool {
 }
 
 // State returns the current state.
-func (k *KeyCircuitBreaker) State() KeyState {
+func (k *KeyCircuitBreaker) State() State {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	return k.state
@@ -215,10 +206,10 @@ func (k *KeyCircuitBreaker) CooldownRemaining() time.Duration {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 
-	if k.state == StatePermanent {
+	if k.state == Permanent {
 		return -1
 	}
-	if k.state == StateClosed {
+	if k.state == Closed {
 		return 0
 	}
 

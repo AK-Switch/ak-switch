@@ -109,7 +109,7 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 			if remaining < 0 {
 				allPerma := true
 				for i := range pool.Keys() {
-					if pool.CB(i).State() != circuitbreaker.StatePermanent {
+					if pool.CB(i).State() != circuitbreaker.Permanent {
 						allPerma = false
 						break
 					}
@@ -235,7 +235,7 @@ func (px *ProxyExecutor) handleRateLimited(w http.ResponseWriter, ps *ProviderSt
 	slog.Warn("key rate limited", "provider", ps.Name, "key_index", idx, "key_name", keyName, "status", resp.StatusCode, "cb_state", fmt.Sprintf("%d", pool.CB(idx).State()), "cb_retry", pool.CB(idx).Attempt(), "body_preview", MaskSensitiveData(string(body), 1024))
 	px.metrics.UpstreamErrors.WithLabelValues("rate_limited").Inc()
 
-	if pool.CB(idx).State() == circuitbreaker.StatePermanent {
+	if pool.CB(idx).State() == circuitbreaker.Permanent {
 		slog.Warn("key quota exhausted, disabling permanently", "provider", ps.Name, "key_index", idx, "key_name", keyName)
 		pool.Disable(idx)
 		if pool.ActiveCount() == 0 {

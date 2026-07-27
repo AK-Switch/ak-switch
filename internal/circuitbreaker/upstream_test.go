@@ -10,8 +10,8 @@ import (
 // TestUpstreamBreakerNew verifies initial state: CLOSED, Allow=true, FailureCount=0.
 func TestUpstreamBreakerNew(t *testing.T) {
 	u := NewUpstreamCircuitBreaker(3, time.Minute)
-	if s := u.State(); s != UpstreamClosed {
-		t.Errorf("initial state = %d, want %d (Closed)", s, UpstreamClosed)
+	if s := u.State(); s != Closed {
+		t.Errorf("initial state = %d, want %d (Closed)", s, Closed)
 	}
 	if !u.Allow() {
 		t.Error("Allow() = false, want true (initial closed state)")
@@ -30,8 +30,8 @@ func TestUpstreamNotTrippedBelowThreshold(t *testing.T) {
 		if n := u.FailureCount(); n != i {
 			t.Errorf("FailureCount after %d failures = %d, want %d", i, n, i)
 		}
-		if s := u.State(); s != UpstreamClosed {
-			t.Errorf("state after %d failures = %d, want %d (Closed)", i, s, UpstreamClosed)
+		if s := u.State(); s != Closed {
+			t.Errorf("state after %d failures = %d, want %d (Closed)", i, s, Closed)
 		}
 		if !u.Allow() {
 			t.Errorf("Allow() = false after %d failures, want true", i)
@@ -46,36 +46,36 @@ func TestUpstreamTripsAtThreshold(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		u.RecordFailure()
 	}
-	if s := u.State(); s != UpstreamOpen {
-		t.Errorf("state after threshold = %d, want %d (Open)", s, UpstreamOpen)
+	if s := u.State(); s != Open {
+		t.Errorf("state after threshold = %d, want %d (Open)", s, Open)
 	}
 	if u.Allow() {
 		t.Error("Allow() = true when Open, want false")
 	}
 }
 
-// TestUpstreamOpenRejectsBeforeTimeout verifies that in OPEN state, Allow returns false
+// TestOpenRejectsBeforeTimeout verifies that in OPEN state, Allow returns false
 // before the reset timeout elapses.
-func TestUpstreamOpenRejectsBeforeTimeout(t *testing.T) {
+func TestOpenRejectsBeforeTimeout(t *testing.T) {
 	u := NewUpstreamCircuitBreaker(2, time.Hour) // long timeout
 	u.RecordFailure()
 	u.RecordFailure()
-	if s := u.State(); s != UpstreamOpen {
-		t.Fatalf("state = %d, want %d (Open)", s, UpstreamOpen)
+	if s := u.State(); s != Open {
+		t.Fatalf("state = %d, want %d (Open)", s, Open)
 	}
 	if u.Allow() {
 		t.Error("Allow() = true before timeout, want false")
 	}
 }
 
-// TestUpstreamHalfOpenAfterTimeout verifies that in OPEN state, once the reset timeout
+// TestHalfOpenAfterTimeout verifies that in OPEN state, once the reset timeout
 // elapses, Allow returns true and transitions the state to HALF_OPEN.
-func TestUpstreamHalfOpenAfterTimeout(t *testing.T) {
+func TestHalfOpenAfterTimeout(t *testing.T) {
 	u := NewUpstreamCircuitBreaker(2, 50*time.Millisecond)
 	u.RecordFailure()
 	u.RecordFailure()
-	if s := u.State(); s != UpstreamOpen {
-		t.Fatalf("state = %d, want %d after tripping", s, UpstreamOpen)
+	if s := u.State(); s != Open {
+		t.Fatalf("state = %d, want %d after tripping", s, Open)
 	}
 	// Should reject before timeout
 	if u.Allow() {
@@ -86,14 +86,14 @@ func TestUpstreamHalfOpenAfterTimeout(t *testing.T) {
 	if !u.Allow() {
 		t.Fatal("Allow() = false after timeout, want true (HalfOpen)")
 	}
-	if s := u.State(); s != UpstreamHalfOpen {
-		t.Errorf("state after timeout = %d, want %d (HalfOpen)", s, UpstreamHalfOpen)
+	if s := u.State(); s != HalfOpen {
+		t.Errorf("state after timeout = %d, want %d (HalfOpen)", s, HalfOpen)
 	}
 }
 
-// TestUpstreamHalfOpenSuccessRecovers verifies that a successful probe request in
+// TestHalfOpenSuccessRecovers verifies that a successful probe request in
 // HALF_OPEN state returns the breaker to CLOSED with failure count reset to 0.
-func TestUpstreamHalfOpenSuccessRecovers(t *testing.T) {
+func TestHalfOpenSuccessRecovers(t *testing.T) {
 	u := NewUpstreamCircuitBreaker(2, 50*time.Millisecond)
 	u.RecordFailure()
 	u.RecordFailure()
@@ -104,8 +104,8 @@ func TestUpstreamHalfOpenSuccessRecovers(t *testing.T) {
 	}
 	// Probe success
 	u.RecordSuccess()
-	if s := u.State(); s != UpstreamClosed {
-		t.Errorf("state after probe success = %d, want %d (Closed)", s, UpstreamClosed)
+	if s := u.State(); s != Closed {
+		t.Errorf("state after probe success = %d, want %d (Closed)", s, Closed)
 	}
 	if n := u.FailureCount(); n != 0 {
 		t.Errorf("FailureCount after probe success = %d, want 0", n)
@@ -115,9 +115,9 @@ func TestUpstreamHalfOpenSuccessRecovers(t *testing.T) {
 	}
 }
 
-// TestUpstreamHalfOpenFailureReopens verifies that a failed probe request in HALF_OPEN
+// TestHalfOpenFailureReopens verifies that a failed probe request in HALF_OPEN
 // state returns the breaker to OPEN with failure count set to 1.
-func TestUpstreamHalfOpenFailureReopens(t *testing.T) {
+func TestHalfOpenFailureReopens(t *testing.T) {
 	u := NewUpstreamCircuitBreaker(2, 50*time.Millisecond)
 	u.RecordFailure()
 	u.RecordFailure()
@@ -128,8 +128,8 @@ func TestUpstreamHalfOpenFailureReopens(t *testing.T) {
 	}
 	// Probe fails
 	u.RecordFailure()
-	if s := u.State(); s != UpstreamOpen {
-		t.Errorf("state after probe failure = %d, want %d (Open)", s, UpstreamOpen)
+	if s := u.State(); s != Open {
+		t.Errorf("state after probe failure = %d, want %d (Open)", s, Open)
 	}
 	if n := u.FailureCount(); n != 1 {
 		t.Errorf("FailureCount after probe failure = %d, want 1", n)
@@ -140,9 +140,9 @@ func TestUpstreamHalfOpenFailureReopens(t *testing.T) {
 	}
 }
 
-// TestUpstreamHalfOpenSingleProbe verifies that only the first Allow() call in HALF_OPEN
+// TestHalfOpenSingleProbe verifies that only the first Allow() call in HALF_OPEN
 // state returns true; subsequent calls return false until the state transitions.
-func TestUpstreamHalfOpenSingleProbe(t *testing.T) {
+func TestHalfOpenSingleProbe(t *testing.T) {
 	u := NewUpstreamCircuitBreaker(2, 50*time.Millisecond)
 	u.RecordFailure()
 	u.RecordFailure()
@@ -176,7 +176,7 @@ func TestUpstreamSuccessResetsCounter(t *testing.T) {
 	u.RecordFailure()
 	u.RecordFailure()
 	u.RecordFailure()
-	if s := u.State(); s != UpstreamOpen {
-		t.Errorf("state after 3 failures post-reset = %d, want %d (Open)", s, UpstreamOpen)
+	if s := u.State(); s != Open {
+		t.Errorf("state after 3 failures post-reset = %d, want %d (Open)", s, Open)
 	}
 }
