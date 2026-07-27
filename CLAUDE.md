@@ -89,7 +89,7 @@ go test -tags=e2e -run TestName -timeout=5m -race .         # E2E
 ```
 cmd/akswitch/main.go           # 入口，ldflags 注入 version，嵌入 dashboard.html
 internal/
-  cmd/                         # Cobra CLI 命令层
+  cli/                         # Cobra CLI 命令层
     root.go                    #   根命令 + version 子命令 + detectServerPort()
     start.go                   #   start -> 解析配置 -> 初始化 provider -> 启动代理
     logs.go                    #   logs 命令（formatLogLine 纯函数，--verbose/--since/--last 标志）
@@ -99,22 +99,23 @@ internal/
     testhelper.go              #   runCommand() CLI 测试辅助函数
   server/                      # HTTP 代理 + 管理 API
     proxy.go                   #   错误码/分类定义（categorizeError/writeProxyError）
-    proxy_handler.go           #   反向代理 + key 轮转 + 重试 + Token 计量
-    handlers.go                #   管理 API handler（config/key/log-level...）
-    admin.go                   #   admin token 鉴权
+    proxy_handler.go           #   路径提取 + 请求分发（路由到 ProxyExecutor）
+    proxy_executor.go          #   ProxyExecutor: 代理请求全生命周期（Key 选择→上游转发→重试→Token 计量）
+    server.go                  #   ProxyEngine: HTTP 客户端 + 上游熔断器初始化
+    admin.go                   #   管理 API handler（health/logs/config/keys/stats/dashboard/reload/log-level）
+    provider_lookup.go         #   Admin token 鉴权 + provider 查找
     router.go                  #   ProviderRouter: 单端口 /{provider}/... 路径路由
-    middleware.go              #   敏感 header 过滤、日志
     colorhandler.go            #   slog.ColorHandler（ANSI 彩色 + compact 模式）
     crash.go                   #   panic 恢复
     lifecycle.go               #   后台任务（metric ticker、健康检查、启动 key 探针）
     multihandler.go            #   stderr + 文件双写 slog.Handler
-    server.go                  #   HTTP 服务器配置
+    logmanager.go              #   LogManager: 日志级别/格式/文件输出封装
     manager.go                 #   InstanceManager（旧多端口模式，已废弃但保留）
   keypool/                     # API Key 池
     keypool.go                 #   轮转策略（round-robin + cooldown + 禁用）
-        store.go                   #   持久化（keyring + JSON 文件读写）
+    store.go                   #   持久化（keyring + JSON 文件读写）
   circuitbreaker/              # 两层熔断器
-    key.go                     #   Key 级熔断（限流退避）
+    key.go                     #   Key 级熔断（429 退避）
     upstream.go                #   上游级熔断（502/503 -> open -> half-open -> close）
   config/                      # TOML 配置加载
     config_toml.go             #   TOML provider 定义 + XDGConfigPath + FindServerPort
@@ -123,6 +124,8 @@ internal/
     config_exports.go          #   测试导出（公开 Config 字段供测试包使用）
   logstore/                    # 请求日志环形缓冲区（线程安全，固定容量，支持 SnapshotSince）
   metrics/                     # Prometheus 指标（所有指标统一注册到 router 级 registry）
+  tracker/                     # Token 用量校准（Calibrator: 滑动窗口比较 tiktoken 估算 vs 实际值）
+  tokenestimator/              # Token 估算（tiktoken 包装 + 响应体 input/output_tokens 提取）
   utils/                       # LogEntry 结构体 + MaskKey + CopyHeaders
 docs/
   api.md                       # API 端点文档
@@ -135,14 +138,15 @@ docs/
 ```
 
 **关键模式：**
-- **ProviderRouter** — 单进程单端口管理多个 provider，`/{provider}/...` 路径路由
+- **ProviderRouter + ProxyExecutor** — 单进程单端口管理多个 provider，`/{provider}/...` 路径路由。请求到达后，proxy_handler 提取 provider 名，将请求转交给 ProxyExecutor 执行完整生命周期（Key 选择→上游转发→响应分发→重试→Token 计量）
 - **两层熔断** — Key 级（429 退避）-> 上游级（502/503 熔断），key 级先触发，上游级兜底
 - **配置热重载** — 监听 `.env` 变更 -> 计算 diff -> 热更新 key pool，不停机
 - **自监控重启** — 开发模式下监控 binary 文件变更，检测到更新后优雅重启
 - **双日志通道** — stdout（slog + ColorHandler/multiHandler，运维实时）与 `/logs` API（环形缓冲区，`akswitch logs` 回顾）解耦，互不影响
 - **config 子包** — config_toml 定义 TOML schema，config_loader 解析多源，config_diff 计算变更，config_exports 暴露类型给测试
 - **启动 key 探针** — 启动时对每个 key 发 `/models` 请求，检测到 401/403 自动禁用
-- **ProxyEngine** — 每个 ProviderState 持有独立 ProxyEngine（含 HTTP client + upstream CB），proxy_handler.go 驱动全流程
+- **ProxyEngine** — 每个 ProviderState 持有独立 ProxyEngine（含 HTTP client + upstream CB），proxy_handler.go + proxy_executor.go 驱动全流程
+- **Token 校准** — Calibrator 维护每模型滑动窗口，比较 tiktoken 估算 vs API 返回的实际值，补偿非流式→流式估算偏差
 
 ### 双数据通道
 
@@ -164,6 +168,12 @@ docs/
 | `akswitch_upstream_cb_state` | Gauge | `provider` | 上游熔断器（0=CLOSED/1=OPEN/2=HALF_OPEN） |
 | `akswitch_healthcheck_probes_total` | Counter | `provider, status` | 健康检查探针（ok/fail） |
 | `akswitch_healthcheck_duration_seconds` | Histogram | `provider` | 健康检查延迟 |
+| `akswitch_token_usage_total` | Counter | `provider, direction` | Token 用量统计（input/output） |
+| `akswitch_retries_total` | Counter | `provider` | 重试次数 |
+| `akswitch_logstore_entries_total` | Counter | (none) | 日志条目总数 |
+| `akswitch_logstore_dropped_total` | Counter | (none) | 因环形缓冲区溢出丢弃的日志条目 |
+| `akswitch_logstore_fill_ratio` | Gauge | (none) | 日志缓冲区填充率（0.0~1.0） |
+| `akswitch_uptime_seconds` | Gauge | (none) | 服务器运行时长 |
 
 **添加新指标的步骤：**
 1. 在 `internal/metrics/metrics.go` 的 `Metrics` 结构体加字段
@@ -185,6 +195,7 @@ type LogEntry struct {
     Status          int    `json:"status"`
     RequestBodySize int    `json:"request_body_size"`
     DurationMs      int64  `json:"duration_ms"`
+    TtfbMs          int64  `json:"ttfb_ms"`
     Retries         int    `json:"retry"`
     Provider        string `json:"provider,omitempty"`
     InputTokens     int    `json:"input_tokens,omitempty"`
@@ -199,7 +210,9 @@ type LogEntry struct {
 | `akswitch start` | `--log-format=default` | stdout 标准模式（默认 `compact`） |
 | `akswitch start` | `--provider=NAME` | 只启动指定 provider |
 | `akswitch start` | `--all` | 启动所有 provider（默认只启动一个） |
+| `akswitch start` | `--dev` | 开发模式（端口自增 + 二进制自监控重启） |
 | `akswitch logs` | `--verbose` | 显示完整 method/URL（默认隐藏） |
+| `akswitch logs` | `--compact` | 使用紧凑格式（TTFB, 总耗时, 请求/响应体大小） |
 | `akswitch logs` | `--since=RFC3339` | 只显示此时间后的条目 |
 | `akswitch logs` | `--last=N` | 只显示最后 N 条 |
 
