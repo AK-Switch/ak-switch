@@ -273,3 +273,23 @@ func TestStreamSSE_MessageDeltaTakesPrecedence(t *testing.T) {
 		t.Errorf("output_tokens = %d, want 50 (API output_tokens should take precedence)", output)
 	}
 }
+
+func TestStreamSSE_InputJsonDelta(t *testing.T) {
+	w := httptest.NewRecorder()
+	// Tool call: content_block_delta with input_json_delta (partial_json) instead of text_delta
+	sseData := "" +
+		"event: content_block_delta\n" +
+		"data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"key\\\":\\\"value\\\"}\"}}\n\n" +
+		"event: content_block_delta\n" +
+		"data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hello\"}}\n\n"
+
+	respBody := io.NopCloser(strings.NewReader(sseData))
+	resp := &http.Response{Body: respBody, Header: make(http.Header)}
+
+	_, output, _ := streamSSEAndEstimateTokens(w, resp, nil, "")
+
+	// Should accumulate text from both input_json_delta (partial_json) and text_delta (text)
+	if output <= 0 {
+		t.Errorf("output_tokens = %d, want > 0 (should accumulate both input_json_delta and text_delta)", output)
+	}
+}
