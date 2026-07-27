@@ -50,6 +50,8 @@ type Config struct {
 	LogFile    string `toml:"log_file,omitempty"`    // 日志文件路径（空 = 不启用文件日志）
 	LogMaxSize int    `toml:"log_max_size,omitempty" default:"100"`
 	LogMaxAge  int    `toml:"log_max_age,omitempty" default:"7"`
+
+	CalibrationIntervalSec int `toml:"calibration_interval_sec,omitempty" default:"3600"` // Token 校准间隔（秒，默认 1 小时）
 }
 
 // ConfigError carries a category tag for error classification.
@@ -86,6 +88,7 @@ func DefaultConfig() *Config {
 		KeysFile:            "keys.json",
 		LogMaxSize:          100,
 		LogMaxAge:           7,
+		CalibrationIntervalSec: 3600,
 	}
 }
 
