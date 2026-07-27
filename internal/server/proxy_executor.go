@@ -479,6 +479,15 @@ func streamSSEAndEstimateTokens(w http.ResponseWriter, resp *http.Response, body
 	for scanner.Scan() {
 		line := scanner.Text()
 
+		// Debug: log raw SSE lines for token estimation diagnosis
+		if strings.HasPrefix(line, "data:") {
+			preview := line
+			if len(preview) > 300 {
+				preview = preview[:300]
+			}
+			slog.Debug("sse raw line", "preview", preview, "len", len(line))
+		}
+
 		// Write to client immediately
 		if _, err := w.Write([]byte(line + "\n")); err != nil {
 			break
