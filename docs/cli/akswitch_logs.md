@@ -17,7 +17,7 @@ akswitch logs [flags]
   -h, --help           help for logs
       --last int       Show only the last N entries (0 = all)
       --since string   Show entries after this timestamp (RFC3339, e.g. 2026-07-14T00:00:00Z)
-      --verbose        Show full request details (method, URL, body size)
+      --verbose        Show full request details (method, URL, tokens, body size, TTFB)
 ```
 
 ### SEE ALSO
