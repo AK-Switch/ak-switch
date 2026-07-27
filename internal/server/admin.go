@@ -199,11 +199,11 @@ func (pr *ProviderRouter) healthHandler(w http.ResponseWriter, r *http.Request) 
 
 		var cbState string
 		switch upCB.State() {
-		case circuitbreaker.UpstreamClosed:
+		case circuitbreaker.Closed:
 			cbState = "closed"
-		case circuitbreaker.UpstreamOpen:
+		case circuitbreaker.Open:
 			cbState = "open"
-		case circuitbreaker.UpstreamHalfOpen:
+		case circuitbreaker.HalfOpen:
 			cbState = "half_open"
 		default:
 			cbState = "unknown"

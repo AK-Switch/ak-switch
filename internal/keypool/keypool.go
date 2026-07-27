@@ -92,7 +92,7 @@ func (p *KeyPool) TimeUntilAvailable() time.Duration {
 	defer p.mu.RUnlock()
 	var soonest time.Duration = -1
 	for _, cb := range p.cbs {
-		if cb.State() == circuitbreaker.StatePermanent {
+		if cb.State() == circuitbreaker.Permanent {
 			continue
 		}
 		if cb.Allow() {
@@ -242,7 +242,7 @@ func (p *KeyPool) IsDisabled(idx int) bool {
 	if idx < 0 || idx >= len(p.cbs) {
 		return false
 	}
-	return p.cbs[idx].State() == circuitbreaker.StatePermanent
+	return p.cbs[idx].State() == circuitbreaker.Permanent
 }
 // ConfigureCBs replaces all per-key circuit breakers with new ones configured
 // with the given base cooldown, backoff cap, and multiplier.
@@ -251,7 +251,7 @@ func (p *KeyPool) ConfigureCBs(base, backoffCap time.Duration, multiplier float6
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for i := range p.cbs {
-		wasPermanent := p.cbs[i].State() == circuitbreaker.StatePermanent
+		wasPermanent := p.cbs[i].State() == circuitbreaker.Permanent
 		p.cbs[i] = circuitbreaker.NewKeyCircuitBreaker(base, backoffCap, multiplier)
 		if wasPermanent {
 			p.cbs[i].RecordPerma("preserved")
@@ -315,7 +315,7 @@ func (p *KeyPool) ActiveCount() int {
 	defer p.mu.RUnlock()
 	n := 0
 	for i := range p.keys {
-		if p.cbs[i].State() != circuitbreaker.StatePermanent {
+		if p.cbs[i].State() != circuitbreaker.Permanent {
 			n++
 		}
 	}
@@ -328,7 +328,7 @@ func (p *KeyPool) DisabledCount() int {
 	defer p.mu.RUnlock()
 	n := 0
 	for _, cb := range p.cbs {
-		if cb.State() == circuitbreaker.StatePermanent {
+		if cb.State() == circuitbreaker.Permanent {
 			n++
 		}
 	}
@@ -342,7 +342,7 @@ func (p *KeyPool) CoolingCount() int {
 	n := 0
 	for i := range p.keys {
 		cb := p.cbs[i]
-		if cb.State() == circuitbreaker.StateOpen && !cb.Allow() {
+		if cb.State() == circuitbreaker.Open && !cb.Allow() {
 			n++
 		}
 	}
@@ -354,11 +354,11 @@ func (p *KeyPool) CoolingCount() int {
 func (p *KeyPool) KeyStatusLabel(i int, now time.Time) string {
 	cb := p.cbs[i]
 	switch cb.State() {
-	case circuitbreaker.StatePermanent:
+	case circuitbreaker.Permanent:
 		return "disabled"
-	case circuitbreaker.StateClosed:
+	case circuitbreaker.Closed:
 		return "ready"
-	case circuitbreaker.StateOpen:
+	case circuitbreaker.Open:
 		if cb.Allow() {
 			return "ready"
 		}
@@ -408,7 +408,7 @@ func (p *KeyPool) GetKeyDetails() []KeyDetail {
 			Index:             i,
 			Key:               logentry.MaskKey(p.keys[i]),
 			Name:              name,
-			Disabled:          p.cbs[i].State() == circuitbreaker.StatePermanent,
+			Disabled:          p.cbs[i].State() == circuitbreaker.Permanent,
 			Status:            p.KeyStatusLabel(i, now),
 			RequestsPerMinute: p.RequestsInLastMinute(i),
 			LastUsed:          p.lastUsed[i].Format(time.RFC3339),

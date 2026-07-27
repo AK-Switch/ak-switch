@@ -6,21 +6,12 @@ import (
 	"time"
 )
 
-// UpstreamState represents the state of the upstream circuit breaker.
-type UpstreamState int
-
-const (
-	UpstreamClosed   UpstreamState = iota // Normal, allow requests.
-	UpstreamOpen                          // Tripped, fail fast.
-	UpstreamHalfOpen                      // Probing, allow one probe request.
-)
-
 // UpstreamCircuitBreaker protects the upstream from request flooding when it is unhealthy.
 // It tracks consecutive failures and opens the circuit when a threshold is reached.
 // After a reset timeout, it allows a single probe request to test recovery.
 type UpstreamCircuitBreaker struct {
 	mu             sync.Mutex
-	state          UpstreamState
+	state          State
 	failureCount   int
 	threshold      int
 	resetTimeout   time.Duration
@@ -32,7 +23,7 @@ type UpstreamCircuitBreaker struct {
 // and reset timeout. Initial state is CLOSED.
 func NewUpstreamCircuitBreaker(threshold int, resetTimeout time.Duration) *UpstreamCircuitBreaker {
 	return &UpstreamCircuitBreaker{
-		state:        UpstreamClosed,
+		state:        Closed,
 		threshold:    threshold,
 		resetTimeout: resetTimeout,
 	}
@@ -42,23 +33,24 @@ func NewUpstreamCircuitBreaker(threshold int, resetTimeout time.Duration) *Upstr
 //   - In CLOSED state, it increments the consecutive failure counter. If the counter reaches the
 //     threshold, the circuit transitions to OPEN and the openedAt timestamp is recorded.
 //   - In HALF_OPEN state (failed probe), the circuit returns to OPEN with failureCount reset to 1.
-func (u *UpstreamCircuitBreaker) RecordFailure() {
+func (u *UpstreamCircuitBreaker) RecordFailure() time.Duration {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 
 	switch u.state {
-	case UpstreamClosed:
+	case Closed:
 		u.failureCount++
 		if u.failureCount >= u.threshold {
-			u.state = UpstreamOpen
+			u.state = Open
 			u.openedAt = time.Now()
 		}
-	case UpstreamHalfOpen:
+	case HalfOpen:
 		u.failureCount = 1
-		u.state = UpstreamOpen
+		u.state = Open
 		u.openedAt = time.Now()
 	}
-	// In UpstreamOpen state, RecordFailure is a no-op.
+	// In Open state, RecordFailure is a no-op.
+	return 0
 }
 
 // RecordSuccess records an upstream success.
@@ -68,7 +60,7 @@ func (u *UpstreamCircuitBreaker) RecordSuccess() {
 	defer u.mu.Unlock()
 
 	u.failureCount = 0
-	u.state = UpstreamClosed
+	u.state = Closed
 }
 
 // Allow checks whether a request should be allowed to pass through.
@@ -82,16 +74,16 @@ func (u *UpstreamCircuitBreaker) Allow() bool {
 	defer u.mu.Unlock()
 
 	switch u.state {
-	case UpstreamClosed:
+	case Closed:
 		return true
-	case UpstreamOpen:
+	case Open:
 		if time.Now().After(u.openedAt.Add(u.resetTimeout)) {
-			u.state = UpstreamHalfOpen
+			u.state = HalfOpen
 			u.halfOpenProbed = true
 			return true
 		}
 		return false
-	case UpstreamHalfOpen:
+	case HalfOpen:
 		if !u.halfOpenProbed {
 			u.halfOpenProbed = true
 			return true
@@ -103,7 +95,7 @@ func (u *UpstreamCircuitBreaker) Allow() bool {
 }
 
 // State returns the current circuit breaker state.
-func (u *UpstreamCircuitBreaker) State() UpstreamState {
+func (u *UpstreamCircuitBreaker) State() State {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	return u.state

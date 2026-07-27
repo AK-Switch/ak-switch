@@ -18,8 +18,8 @@ func newTestBreaker() *KeyCircuitBreaker {
 
 func TestKeyCircuitBreaker_InitialState(t *testing.T) {
 	cb := NewKeyCircuitBreaker(30*time.Second, 120*time.Second, 2)
-	if cb.State() != StateClosed {
-		t.Errorf("State() = %d, want %d", cb.State(), StateClosed)
+	if cb.State() != Closed {
+		t.Errorf("State() = %d, want %d", cb.State(), Closed)
 	}
 	if !cb.Allow() {
 		t.Error("Allow() = false, want true")
@@ -33,8 +33,8 @@ func TestKeyCircuitBreaker_RecordFailure(t *testing.T) {
 	cb := newTestBreaker()
 	cb.RecordFailure()
 
-	if cb.State() != StateOpen {
-		t.Errorf("State() = %d, want %d", cb.State(), StateOpen)
+	if cb.State() != Open {
+		t.Errorf("State() = %d, want %d", cb.State(), Open)
 	}
 	if cb.Allow() {
 		t.Error("Allow() = true, want false")
@@ -73,8 +73,8 @@ func TestKeyCircuitBreaker_ReachesCap(t *testing.T) {
 	// attempt=2 → raw=120s >= 120s → OPEN with long cooldown (not PERMANENT)
 	cb.RecordFailure()
 
-	if cb.State() != StateOpen {
-		t.Errorf("State() = %d, want %d (StateOpen)", cb.State(), StateOpen)
+	if cb.State() != Open {
+		t.Errorf("State() = %d, want %d (Open)", cb.State(), Open)
 	}
 	if cb.Allow() {
 		t.Error("Allow() = true, want false (key should still be cooling)")
@@ -94,8 +94,8 @@ func TestKeyCircuitBreaker_RecordPerma(t *testing.T) {
 	cb := newTestBreaker()
 	cb.RecordPerma("auth_rejected")
 
-	if cb.State() != StatePermanent {
-		t.Errorf("State() = %d, want %d", cb.State(), StatePermanent)
+	if cb.State() != Permanent {
+		t.Errorf("State() = %d, want %d", cb.State(), Permanent)
 	}
 	if cb.Allow() {
 		t.Error("Allow() = true, want false")
@@ -110,8 +110,8 @@ func TestKeyCircuitBreaker_RecordSuccess(t *testing.T) {
 	cb.RecordFailure() // attempt=1, OPEN
 	cb.RecordSuccess()
 
-	if cb.State() != StateClosed {
-		t.Errorf("State() = %d, want %d", cb.State(), StateClosed)
+	if cb.State() != Closed {
+		t.Errorf("State() = %d, want %d", cb.State(), Closed)
 	}
 	if cb.Attempt() != 0 {
 		t.Errorf("Attempt() = %d, want 0", cb.Attempt())
@@ -141,7 +141,7 @@ func TestKeyCircuitBreaker_PermaSuccessNoop(t *testing.T) {
 	cb.RecordPerma("quota_exhausted")
 	cb.RecordSuccess()
 
-	if cb.State() != StatePermanent {
+	if cb.State() != Permanent {
 		t.Error("RecordSuccess() should not transition from PERMA")
 	}
 	if cb.TrippedReason() != "quota_exhausted" {
@@ -170,8 +170,8 @@ func TestKeyCircuitBreaker_CooldownExpired(t *testing.T) {
 	}
 
 	// State should still be OPEN (Allow does not auto-transition).
-	if cb.State() != StateOpen {
-		t.Errorf("State() = %d, want %d after expired cooldown", cb.State(), StateOpen)
+	if cb.State() != Open {
+		t.Errorf("State() = %d, want %d after expired cooldown", cb.State(), Open)
 	}
 }
 
@@ -209,8 +209,8 @@ func TestKeyCircuitBreaker_RecordAuthFailure_Single(t *testing.T) {
 	if cb.RecordAuthFailure() {
 		t.Error("RecordAuthFailure() = true, want false (single failure below threshold)")
 	}
-	if cb.State() == StatePermanent {
-		t.Error("State() = StatePermanent, want StateOpen or StateClosed (single failure should not perma)")
+	if cb.State() == Permanent {
+		t.Error("State() = Permanent, want Open or Closed (single failure should not perma)")
 	}
 	if cb.AuthFailCount() != 1 {
 		t.Errorf("AuthFailCount() = %d, want 1", cb.AuthFailCount())
@@ -227,7 +227,7 @@ func TestKeyCircuitBreaker_RecordAuthFailure_Threshold(t *testing.T) {
 	if cb.RecordAuthFailure() {
 		t.Error("RecordAuthFailure #2 = true, want false")
 	}
-	if cb.State() == StatePermanent {
+	if cb.State() == Permanent {
 		t.Error("key should not be permanent after 2 failures")
 	}
 
@@ -238,8 +238,8 @@ func TestKeyCircuitBreaker_RecordAuthFailure_Threshold(t *testing.T) {
 
 	// Now permanently disable
 	cb.RecordPerma("auth_rejected")
-	if cb.State() != StatePermanent {
-		t.Errorf("State() = %d, want %d", cb.State(), StatePermanent)
+	if cb.State() != Permanent {
+		t.Errorf("State() = %d, want %d", cb.State(), Permanent)
 	}
 }
 
@@ -275,8 +275,8 @@ func TestKeyCircuitBreaker_RecordAuthFailure_PermaState(t *testing.T) {
 	if cb.RecordAuthFailure() {
 		t.Error("RecordAuthFailure on perma key = true, want false")
 	}
-	if cb.State() != StatePermanent {
-		t.Errorf("State() = %d, want %d", cb.State(), StatePermanent)
+	if cb.State() != Permanent {
+		t.Errorf("State() = %d, want %d", cb.State(), Permanent)
 	}
 }
 
