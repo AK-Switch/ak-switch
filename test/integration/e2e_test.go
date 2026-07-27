@@ -36,7 +36,7 @@ func TestFullE2E_RealUserSimulation(t *testing.T) {
 	// ── Build binary ─────────────────────────────────────
 	t.Log("Building akswitch binary...")
 	bin := filepath.Join(t.TempDir(), "akswitch-e2e.exe")
-	if out, err := exec.Command("go", "build", "-o", bin, "./cmd/akswitch/").CombinedOutput(); err != nil {
+	if out, err := exec.Command("go", "build", "-o", bin, "../../cmd/akswitch/").CombinedOutput(); err != nil {
 		t.Fatalf("build failed: %v\n%s", err, out)
 	}
 
