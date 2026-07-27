@@ -115,3 +115,19 @@ func (u *UpstreamCircuitBreaker) FailureCount() int {
 	defer u.mu.Unlock()
 	return u.failureCount
 }
+
+// SetThreshold updates the failure threshold at runtime.
+// The new threshold takes effect immediately; the current failure count is preserved.
+func (u *UpstreamCircuitBreaker) SetThreshold(t int) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.threshold = t
+}
+
+// SetResetTimeout updates the reset timeout at runtime.
+// The new timeout takes effect immediately; the next open→half-open transition uses it.
+func (u *UpstreamCircuitBreaker) SetResetTimeout(d time.Duration) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.resetTimeout = d
+}

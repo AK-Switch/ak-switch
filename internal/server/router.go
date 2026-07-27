@@ -237,6 +237,7 @@ func (pr *ProviderRouter) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/stats", pr.statsHandler)
 	mux.HandleFunc("POST /api/reload", pr.reloadHandler)
 	mux.HandleFunc("/api/log-level", pr.logLevelHandler)
+	mux.HandleFunc("/api/runtime-config", pr.runtimeConfigHandler)
 	mux.Handle("GET /metrics", promhttp.HandlerFor(pr.metricsRegistry, promhttp.HandlerOpts{}))
 	mux.HandleFunc("/sw.js", pr.swHandler)
 	mux.HandleFunc("/", pr.proxyHandler)

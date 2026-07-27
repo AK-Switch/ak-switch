@@ -5,9 +5,9 @@ Initialize default config.toml
 ### Synopsis
 
 Create a default configuration file at the XDG config directory
-(or a custom path via --path).
+	(or a custom path via --path).
 
-If the file already exists, the command refuses to overwrite it.
+	If the file already exists, the command refuses to overwrite it.
 
 ```
 akswitch config init [flags]

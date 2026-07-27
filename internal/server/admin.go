@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -387,6 +388,357 @@ func (pr *ProviderRouter) reloadHandler(w http.ResponseWriter, r *http.Request) 
 
 	slog.Info("config reloaded", "providers", len(pr.providers))
 	respondJSON(w, http.StatusOK, map[string]bool{"success": true})
+}
+
+// ── Runtime Config Handler ──────────────────────────────
+
+// runtimeConfigHandler handles GET and POST for runtime-configurable parameters.
+//   GET  /api/runtime-config?provider=xxx&key=yyy  — list params (key optional)
+//   POST /api/runtime-config?provider=xxx&persist=true — set a param
+func (pr *ProviderRouter) runtimeConfigHandler(w http.ResponseWriter, r *http.Request) {
+	if !pr.checkAnyAdminToken(w, r) {
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		pr.handleRuntimeConfigGet(w, r)
+	case http.MethodPost:
+		pr.handleRuntimeConfigSet(w, r)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (pr *ProviderRouter) handleRuntimeConfigGet(w http.ResponseWriter, r *http.Request) {
+	key := r.URL.Query().Get("key")
+	pName := r.URL.Query().Get("provider")
+
+	pr.mu.RLock()
+	defer pr.mu.RUnlock()
+
+	if pName != "" {
+		ps := pr.lookupProvider(pName)
+		if ps == nil {
+			respondJSON(w, http.StatusNotFound, map[string]string{"error": fmt.Sprintf("provider %q not found", pName)})
+			return
+		}
+		params := pr.getRuntimeParams(ps)
+		if key != "" {
+			val, ok := params[key]
+			if !ok {
+				respondJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("unknown key %q", key)})
+				return
+			}
+			respondJSON(w, http.StatusOK, map[string]interface{}{
+				"provider": ps.Name,
+				"key":      key,
+				"value":    val,
+			})
+			return
+		}
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"provider": ps.Name,
+			"params":   params,
+		})
+		return
+	}
+
+	// All providers
+	result := make(map[string]map[string]interface{})
+	for name, ps := range pr.providers {
+		result[name] = pr.getRuntimeParams(ps)
+	}
+
+	if key != "" {
+		// Key specified without provider — return from first provider
+		for name, ps := range pr.providers {
+			params := pr.getRuntimeParams(ps)
+			val, ok := params[key]
+			if !ok {
+				respondJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("unknown key %q", key)})
+				return
+			}
+			respondJSON(w, http.StatusOK, map[string]interface{}{
+				"provider": name,
+				"key":      key,
+				"value":    val,
+			})
+			return
+		}
+		respondJSON(w, http.StatusNotFound, map[string]string{"error": "no providers configured"})
+		return
+	}
+
+	respondJSON(w, http.StatusOK, result)
+}
+
+func (pr *ProviderRouter) handleRuntimeConfigSet(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Key   string      `json:"key"`
+		Value interface{} `json:"value"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	if body.Key == "" {
+		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "key is required"})
+		return
+	}
+
+	pName := r.URL.Query().Get("provider")
+	persist := r.URL.Query().Get("persist") == "true"
+
+	pr.mu.RLock()
+	ps, errMsg := pr.resolveProviderByName(pName)
+	pr.mu.RUnlock()
+	if ps == nil {
+		respondJSON(w, http.StatusNotFound, map[string]string{"error": errMsg})
+		return
+	}
+
+	var newValue interface{}
+	switch body.Key {
+	case "http_timeout_sec":
+		v, err := toInt(body.Value)
+		if err != nil || v < 1 {
+			respondJSON(w, http.StatusBadRequest, map[string]string{"error": "http_timeout_sec must be a positive integer"})
+			return
+		}
+		ps.Proxy.client.Timeout = time.Duration(v) * time.Second
+		ps.Config.HTTPTimeoutSec = v
+		newValue = v
+
+	case "max_retries":
+		v, err := toInt(body.Value)
+		if err != nil || v < 0 {
+			respondJSON(w, http.StatusBadRequest, map[string]string{"error": "max_retries must be a non-negative integer"})
+			return
+		}
+		ps.Config.MaxRetries = v
+		newValue = v
+
+	case "cooldown_sec":
+		v, err := toInt(body.Value)
+		if err != nil || v < 1 {
+			respondJSON(w, http.StatusBadRequest, map[string]string{"error": "cooldown_sec must be a positive integer"})
+			return
+		}
+		ps.Config.CooldownSec = v
+		ps.Pool.ConfigureCBs(
+			time.Duration(v)*time.Second,
+			time.Duration(ps.Config.BackoffCapSec)*time.Second,
+			ps.Config.BackoffMultiplier,
+		)
+		newValue = v
+
+	case "backoff_cap_sec":
+		v, err := toInt(body.Value)
+		if err != nil || v < 1 {
+			respondJSON(w, http.StatusBadRequest, map[string]string{"error": "backoff_cap_sec must be a positive integer"})
+			return
+		}
+		ps.Config.BackoffCapSec = v
+		ps.Pool.ConfigureCBs(
+			time.Duration(ps.Config.CooldownSec)*time.Second,
+			time.Duration(v)*time.Second,
+			ps.Config.BackoffMultiplier,
+		)
+		newValue = v
+
+	case "backoff_multiplier":
+		v, err := toFloat64(body.Value)
+		if err != nil || v < 1.0 {
+			respondJSON(w, http.StatusBadRequest, map[string]string{"error": "backoff_multiplier must be a number >= 1.0"})
+			return
+		}
+		ps.Config.BackoffMultiplier = v
+		ps.Pool.ConfigureCBs(
+			time.Duration(ps.Config.CooldownSec)*time.Second,
+			time.Duration(ps.Config.BackoffCapSec)*time.Second,
+			v,
+		)
+		newValue = v
+
+	case "cb_reset_sec":
+		v, err := toInt(body.Value)
+		if err != nil || v < 1 {
+			respondJSON(w, http.StatusBadRequest, map[string]string{"error": "cb_reset_sec must be a positive integer"})
+			return
+		}
+		ps.Proxy.upCB.SetResetTimeout(time.Duration(v) * time.Second)
+		ps.Config.CBResetSec = v
+		newValue = v
+
+	case "upstream_cb_threshold":
+		v, err := toInt(body.Value)
+		if err != nil || v < 1 {
+			respondJSON(w, http.StatusBadRequest, map[string]string{"error": "upstream_cb_threshold must be a positive integer"})
+			return
+		}
+		ps.Proxy.upCB.SetThreshold(v)
+		ps.Config.UpstreamCBThreshold = v
+		newValue = v
+
+	case "log_level":
+		v, ok := body.Value.(string)
+		if !ok {
+			respondJSON(w, http.StatusBadRequest, map[string]string{"error": "log_level must be a string"})
+			return
+		}
+		v = strings.TrimSpace(strings.ToLower(v))
+		switch v {
+		case "debug", "info", "warn", "error":
+			pr.logManager.ApplyLevel(v)
+			ps.Config.LogLevel = v
+			newValue = v
+		default:
+			respondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid log level, use: debug, info, warn, error"})
+			return
+		}
+
+	default:
+		respondJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("unknown key %q", body.Key)})
+		return
+	}
+
+	// Persist to config file if requested
+	persisted := false
+	if persist {
+		if err := pr.persistRuntimeConfigField(ps, body.Key, newValue); err != nil {
+			slog.Warn("failed to persist runtime config", "error", err)
+			respondJSON(w, http.StatusOK, map[string]interface{}{
+				"provider":  ps.Name,
+				"key":       body.Key,
+				"value":     newValue,
+				"persisted": false,
+				"warn":      "change applied but not persisted: " + err.Error(),
+			})
+			return
+		}
+		persisted = true
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"provider":  ps.Name,
+		"key":       body.Key,
+		"value":     newValue,
+		"persisted": persisted,
+	})
+}
+
+// getRuntimeParams returns all runtime-configurable parameters for a provider.
+func (pr *ProviderRouter) getRuntimeParams(ps *ProviderState) map[string]interface{} {
+	return map[string]interface{}{
+		"http_timeout_sec":     ps.Config.HTTPTimeoutSec,
+		"max_retries":           ps.Config.MaxRetries,
+		"cooldown_sec":          ps.Config.CooldownSec,
+		"backoff_cap_sec":       ps.Config.BackoffCapSec,
+		"backoff_multiplier":    ps.Config.BackoffMultiplier,
+		"cb_reset_sec":          ps.Config.CBResetSec,
+		"upstream_cb_threshold": ps.Config.UpstreamCBThreshold,
+	}
+}
+
+// resolveProviderByName resolves a provider by name, or returns the first provider if name is empty.
+func (pr *ProviderRouter) resolveProviderByName(name string) (*ProviderState, string) {
+	if name != "" {
+		ps := pr.lookupProvider(name)
+		if ps == nil {
+			return nil, fmt.Sprintf("provider %q not found", name)
+		}
+		return ps, ""
+	}
+	ps := pr.firstProvider()
+	if ps == nil {
+		return nil, "no providers configured"
+	}
+	return ps, ""
+}
+
+// persistRuntimeConfigField saves a single field change to the TOML config file.
+// Only the specified field is modified; other fields are preserved.
+func (pr *ProviderRouter) persistRuntimeConfigField(ps *ProviderState, key string, value interface{}) error {
+	xdgPath, err := config.XDGConfigPath()
+	if err != nil {
+		return fmt.Errorf("failed to determine config path: %w", err)
+	}
+
+	tc, err := config.LoadTomlConfig(xdgPath)
+	if err != nil {
+		return fmt.Errorf("failed to load config file: %w", err)
+	}
+
+	if tc.Provider == nil {
+		tc.Provider = make(map[string]*config.Config)
+	}
+
+	providerCfg, ok := tc.Provider[ps.Name]
+	if !ok {
+		providerCfg = &config.Config{}
+		tc.Provider[ps.Name] = providerCfg
+	}
+
+	// Only modify the specific field
+	switch key {
+	case "http_timeout_sec":
+		v, _ := toInt(value)
+		providerCfg.HTTPTimeoutSec = v
+	case "max_retries":
+		v, _ := toInt(value)
+		providerCfg.MaxRetries = v
+	case "cooldown_sec":
+		v, _ := toInt(value)
+		providerCfg.CooldownSec = v
+	case "backoff_cap_sec":
+		v, _ := toInt(value)
+		providerCfg.BackoffCapSec = v
+	case "backoff_multiplier":
+		v, _ := toFloat64(value)
+		providerCfg.BackoffMultiplier = v
+	case "cb_reset_sec":
+		v, _ := toInt(value)
+		providerCfg.CBResetSec = v
+	case "upstream_cb_threshold":
+		v, _ := toInt(value)
+		providerCfg.UpstreamCBThreshold = v
+	case "log_level":
+		v, _ := value.(string)
+		providerCfg.LogLevel = v
+	}
+
+	return config.SaveTomlConfig(tc, xdgPath)
+}
+
+// ── Helpers ─────────────────────────────────────────────
+
+// toInt converts a JSON-decoded value to int.
+func toInt(v interface{}) (int, error) {
+	switch val := v.(type) {
+	case float64:
+		return int(val), nil
+	case int:
+		return val, nil
+	case string:
+		return strconv.Atoi(val)
+	default:
+		return 0, fmt.Errorf("expected number, got %T", v)
+	}
+}
+
+// toFloat64 converts a JSON-decoded value to float64.
+func toFloat64(v interface{}) (float64, error) {
+	switch val := v.(type) {
+	case float64:
+		return val, nil
+	case int:
+		return float64(val), nil
+	case string:
+		return strconv.ParseFloat(val, 64)
+	default:
+		return 0, fmt.Errorf("expected number, got %T", v)
+	}
 }
 
 // loadKeysFromConfig loads API keys for a provider from the configured keys file
