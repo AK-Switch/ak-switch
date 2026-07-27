@@ -146,7 +146,8 @@ docs/
 - **config 子包** — config_toml 定义 TOML schema，config_loader 解析多源，config_diff 计算变更，config_exports 暴露类型给测试
 - **启动 key 探针** — 启动时对每个 key 发 `/models` 请求，检测到 401/403 自动禁用
 - **ProxyEngine** — 每个 ProviderState 持有独立 ProxyEngine（含 HTTP client + upstream CB），proxy_handler.go + proxy_executor.go 驱动全流程
-- **Token 校准** — Calibrator 维护每模型滑动窗口，比较 tiktoken 估算 vs API 返回的实际值，补偿非流式→流式估算偏差
+- **Token 计量** — 全部依赖 tiktoken 估算。sensenova 在 Anthropic 流式响应中不返回 `usage.output_tokens`（始终为 0），`message_delta` 事件中的 `usage` 字段永远为 0。`Calibrator`（滑动窗口校准）已实现但无训练数据，修正系数恒为 1.0。详见下方 Token 计量架构。
+- **SSE 流式解析** — `streamSSEAndEstimateTokens` 同时支持 Anthropic 和 OpenAI 两种流式格式。Anthropic 格式的 `content_block_delta` 有两种类型：`text_delta`（`delta.text`）和 `input_json_delta`（`delta.partial_json`，工具调用场景），两者都需要累积文本用于 tiktoken 估算。
 
 ### 双数据通道
 
@@ -218,6 +219,64 @@ type LogEntry struct {
 
 `--log-format=compact` 在 `start.go` 的 `init()` 注册（`startCmd.Flags().String(...)`），通过 `startServer` -> `ApplyLogLevel` 传入 `ColorHandler` 的 `compact` 字段控制日志行格式。
 
+### Debug 模式（`--dev`）
+
+`akswitch start --dev` 启动一个**完全独立**的服务器实例，设计用于调试和测试，不干扰生产实例：
+
+| 特性 | 说明 |
+|------|------|
+| 端口自增 | 从配置端口开始递增，找到第一个空闲端口 |
+| 独立 PID 文件 | `akswitch-dev.pid`，与生产实例互不干扰 |
+| 共享配置 | 使用同一份 `config.toml` 和 key 存储 |
+| 二进制自监控重启 | 检测到 binary 更新后优雅重启（`selfrestart.go`） |
+
+**典型用途：** 调试 SSE 流式数据、测试新功能、抓取 debug 日志——均不影响生产实例。
+
+**注意：** dev 实例与生产实例共享全局 `slog.Default()`。启动 dev 实例后，日志级别设置会互相影响。调试完成后记得恢复日志级别。
+
+### Token 计量架构
+
+AK Switch 的 token 计量全部基于 tiktoken 估算，上游（sensenova）在 Anthropic 流式响应中不返回实际 token 用量。
+
+**数据流：**
+
+```
+请求 → ProxyExecutor.handleSuccess()
+  → Content-Type 是否为 text/event-stream？
+    → 是：streamSSEAndEstimateTokens()
+      → 解析 SSE 事件，累积文本到 outputBuf
+      → 检查 message_delta.usage.output_tokens（始终为 0）
+      → 回退 tiktoken 估算：EstimateOutput(outputBuf.String(), model)
+    → 否：非流式路径
+      → ExtractTokenUsage(body) 尝试解析 usage 字段
+      → 如果 output_tokens=0，回退 tiktoken 估算
+```
+
+**SSE 事件解析覆盖的格式：**
+
+| 格式 | 事件类型 | 文本来源 | 状态 |
+|------|---------|---------|------|
+| Anthropic text_delta | `content_block_delta` | `delta.text` | ✅ |
+| Anthropic input_json_delta | `content_block_delta` | `delta.partial_json` | ✅ 已修复 #144 |
+| Anthropic content_block_start | `content_block_start` | `content_block.text` | ✅ |
+| OpenAI streaming | `choices[].delta.content` | `delta.content` | ✅ |
+| Anthropic message_delta | `message_delta` | `usage.output_tokens` | ❌ sensenova 始终返回 0 |
+
+**精度：** ±10-20%（Anthropic 官方数据，因其 tokenizer 与 OpenAI 的 BPE 不同）。`Calibrator` 已实现但未启用——sensenova 不返回实际值，无训练数据。
+
+### 架构关系：CC Switch
+
+AK Switch 通常作为 **CC Switch** 的一个 provider 嵌入运行：
+
+```
+客户端（Claude Code / Codex）
+  → CC Switch（第一层：整流、token 记录、provider 管理）
+    → AK Switch（第二层：API key 轮转）
+      → sensenova（上游）
+```
+
+AK Switch 只负责 API key 的轮转和熔断，不处理协议转换。CC Switch 负责 Provider 管理、MCP 服务器、系统提示词等上层功能。
+
 ## 工作流
 
 main 分支受保护，禁止直接推送。遵循 GitHub Flow + 原子 commit。
@@ -271,6 +330,52 @@ main 分支受保护，禁止直接推送。遵循 GitHub Flow + 原子 commit�
 - `akswitch logs --verbose` 显示完整 method/URL（默认精简 status + key + duration）
 - 首次分析不需要 `--since`（= 全量，建立基线）
 - 先看 `/metrics` 聚合数据再扫日志，减少 80% 的手动扫日志需求
+
+## 调试指南
+
+### 设置日志级别
+
+运行时通过 API 设置日志级别（无需重启）：
+
+```bash
+curl -X POST http://localhost:4000/api/log-level \
+  -H "Content-Type: application/json" \
+  -d '{"level":"debug"}'
+
+# 恢复为 info
+curl -X POST http://localhost:4000/api/log-level \
+  -H "Content-Type: application/json" \
+  -d '{"level":"info"}'
+```
+
+支持级别：`debug`、`info`、`warn`、`error`。当前没有 CLI 子命令，只能用 API。
+
+### 抓取 SSE 原始数据
+
+SSE 流式数据不暴露给 `/logs` API，需要用 debug 日志查看：
+
+1. 设置日志级别为 debug
+2. 发起一个请求到代理
+3. 查看服务器 stdout 或日志文件中的 `sse raw line` 日志
+
+或者启动 dev 实例（`--dev`），在终端直接查看 stdout。
+
+### Dev 模式调试
+
+```bash
+# 启动 dev 实例（端口自动递增，不会冲突）
+akswitch start --dev --provider=sensenova
+
+# 设置 debug 日志级别
+curl -X POST http://localhost:4001/api/log-level \
+  -H "Content-Type: application/json" \
+  -d '{"level":"debug"}'
+
+# 发起测试请求，查看 stdout 的 SSE 原始数据
+curl -N -X POST http://localhost:4001/sensenova/v1/messages?beta=true \
+  -H "Content-Type: application/json" \
+  -d '{"model":"sensenova-6.7-flash-lite","max_tokens":10,"stream":true,"messages":[{"role":"user","content":"Hi"}]}'
+```
 
 ## 项目定位
 
