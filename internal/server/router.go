@@ -99,8 +99,8 @@ type ProviderRouter struct {
 	metrics         *akswitchmetrics.Metrics
 	metricsRegistry *prometheus.Registry
 	dashboardHTML   string
-	stop            chan struct{}
-	wg              sync.WaitGroup
+	taskManager     *BackgroundTaskManager
+	wg              sync.WaitGroup // for HTTP server goroutine only
 	mux             *http.ServeMux // cached mux for Handler()
 	muxOnce         sync.Once
 	calibrator      *tracker.Calibrator // per-model token estimation calibration
@@ -124,10 +124,10 @@ func NewProviderRouter(dashboardHTML string) *ProviderRouter {
 		metrics:         m,
 		metricsRegistry: reg,
 		dashboardHTML:   dashboardHTML,
-		stop:            make(chan struct{}),
 		calibrator:      tracker.NewCalibrator(15),
-			logManager:      NewLogManager(),
+		logManager:      NewLogManager(),
 	}
+	pr.taskManager = NewBackgroundTaskManager(m)
 	pr.logs.OnAppend = func(prevLen, newLen, maxLen int) {
 		pr.metrics.LogStoreEntries.Inc()
 		if dropped := (prevLen + 1) - newLen; dropped > 0 {
@@ -275,7 +275,7 @@ func (pr *ProviderRouter) Shutdown(ctx context.Context) {
 
 // Stop signals all background tasks to stop and waits for all goroutines.
 func (pr *ProviderRouter) Stop() {
-	close(pr.stop)
+	pr.taskManager.Stop()
 	pr.wg.Wait()
 }
 
@@ -316,44 +316,18 @@ func (pr *ProviderRouter) StartBackgroundTasks() {
 
 	for _, ps := range pr.providers {
 		p := ps // capture
-		pr.wg.Add(1)
-		go func() {
-			defer pr.wg.Done()
-			RefreshKeyPoolMetrics(pr.metrics, p.Pool, p.Name, pr.stop)
-		}()
-
-		pr.wg.Add(1)
-		go func() {
-			defer pr.wg.Done()
-			ActiveHealthCheck(p.Config, p.Proxy, pr.metrics, p, pr.stop)
-		}()
+		pr.taskManager.StartKeyPoolMetrics(p.Pool, p.Name)
+		pr.taskManager.StartHealthCheck(p.Config, p.Proxy, p)
 
 		// Start per-provider calibration ticker (if model is configured)
 		if p.Config.GenaiModel != "" {
-			pr.wg.Add(1)
-			go func() {
-				defer pr.wg.Done()
-				interval := time.Duration(p.Config.CalibrationIntervalSec) * time.Second
-				PeriodicCalibrator(pr.calibrator, p.Pool, p.Config.TargetBase, p.Config.GenaiModel, interval, pr.stop)
-			}()
+			interval := time.Duration(p.Config.CalibrationIntervalSec) * time.Second
+			pr.taskManager.StartCalibrator(pr.calibrator, p.Pool, p.Config.TargetBase, p.Config.GenaiModel, interval)
 		}
 	}
 
 	// Router-level uptime gauge
-	pr.wg.Add(1)
-	go func() {
-		defer pr.wg.Done()
-		uptimeTicker := time.NewTicker(10 * time.Second)
-		defer uptimeTicker.Stop()
-		for {
-			select {
-			case <-pr.stop:
-				return
-			case <-uptimeTicker.C:
-				pr.metrics.UptimeSeconds.Set(time.Since(pr.startTime).Seconds())
-			}
-		}
-	}()
+	pr.taskManager.StartUptimeTicker(pr.startTime)
 }
 
 // extractProvider parses the first path segment as the provider name and returns the rest.
