@@ -501,7 +501,8 @@ func streamSSEAndEstimateTokens(w http.ResponseWriter, resp *http.Response, body
 			var anthropicData struct {
 				Type  string `json:"type"`
 				Delta *struct {
-					Text string `json:"text"`
+					Text        string `json:"text"`
+					PartialJSON string `json:"partial_json"`
 				} `json:"delta,omitempty"`
 				ContentBlock *struct {
 					Text string `json:"text"`
@@ -514,7 +515,9 @@ func streamSSEAndEstimateTokens(w http.ResponseWriter, resp *http.Response, body
 				switch anthropicData.Type {
 				case "content_block_delta":
 					if anthropicData.Delta != nil {
+						// Accumulate text from both text_delta and input_json_delta
 						outputBuf.WriteString(anthropicData.Delta.Text)
+						outputBuf.WriteString(anthropicData.Delta.PartialJSON)
 					}
 				case "content_block_start":
 					if anthropicData.ContentBlock != nil {
