@@ -415,32 +415,62 @@ func (pr *ProviderRouter) handleRuntimeConfigGet(w http.ResponseWriter, r *http.
 	pName := r.URL.Query().Get("provider")
 
 	pr.mu.RLock()
-	ps, errMsg := pr.resolveProviderByName(pName)
-	pr.mu.RUnlock()
-	if ps == nil {
-		respondJSON(w, http.StatusNotFound, map[string]string{"error": errMsg})
-		return
-	}
+	defer pr.mu.RUnlock()
 
-	params := pr.getRuntimeParams(ps)
-	if key != "" {
-		val, ok := params[key]
-		if !ok {
-			respondJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("unknown key %q", key)})
+	if pName != "" {
+		ps := pr.lookupProvider(pName)
+		if ps == nil {
+			respondJSON(w, http.StatusNotFound, map[string]string{"error": fmt.Sprintf("provider %q not found", pName)})
+			return
+		}
+		params := pr.getRuntimeParams(ps)
+		if key != "" {
+			val, ok := params[key]
+			if !ok {
+				respondJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("unknown key %q", key)})
+				return
+			}
+			respondJSON(w, http.StatusOK, map[string]interface{}{
+				"provider": ps.Name,
+				"key":      key,
+				"value":    val,
+			})
 			return
 		}
 		respondJSON(w, http.StatusOK, map[string]interface{}{
 			"provider": ps.Name,
-			"key":      key,
-			"value":    val,
+			"params":   params,
 		})
 		return
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
-		"provider": ps.Name,
-		"params":   params,
-	})
+	// All providers
+	result := make(map[string]map[string]interface{})
+	for name, ps := range pr.providers {
+		result[name] = pr.getRuntimeParams(ps)
+	}
+
+	if key != "" {
+		// Key specified without provider — return from first provider
+		for name, ps := range pr.providers {
+			params := pr.getRuntimeParams(ps)
+			val, ok := params[key]
+			if !ok {
+				respondJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("unknown key %q", key)})
+				return
+			}
+			respondJSON(w, http.StatusOK, map[string]interface{}{
+				"provider": name,
+				"key":      key,
+				"value":    val,
+			})
+			return
+		}
+		respondJSON(w, http.StatusNotFound, map[string]string{"error": "no providers configured"})
+		return
+	}
+
+	respondJSON(w, http.StatusOK, result)
 }
 
 func (pr *ProviderRouter) handleRuntimeConfigSet(w http.ResponseWriter, r *http.Request) {
@@ -576,7 +606,7 @@ func (pr *ProviderRouter) handleRuntimeConfigSet(w http.ResponseWriter, r *http.
 	// Persist to config file if requested
 	persisted := false
 	if persist {
-		if err := pr.persistRuntimeConfig(ps); err != nil {
+		if err := pr.persistRuntimeConfigField(ps, body.Key, newValue); err != nil {
 			slog.Warn("failed to persist runtime config", "error", err)
 			respondJSON(w, http.StatusOK, map[string]interface{}{
 				"provider":  ps.Name,
@@ -608,7 +638,6 @@ func (pr *ProviderRouter) getRuntimeParams(ps *ProviderState) map[string]interfa
 		"backoff_multiplier":    ps.Config.BackoffMultiplier,
 		"cb_reset_sec":          ps.Config.CBResetSec,
 		"upstream_cb_threshold": ps.Config.UpstreamCBThreshold,
-		"log_level":             pr.logManager.CurrentLevel(),
 	}
 }
 
@@ -628,8 +657,9 @@ func (pr *ProviderRouter) resolveProviderByName(name string) (*ProviderState, st
 	return ps, ""
 }
 
-// persistRuntimeConfig saves the current runtime config to the TOML config file.
-func (pr *ProviderRouter) persistRuntimeConfig(ps *ProviderState) error {
+// persistRuntimeConfigField saves a single field change to the TOML config file.
+// Only the specified field is modified; other fields are preserved.
+func (pr *ProviderRouter) persistRuntimeConfigField(ps *ProviderState, key string, value interface{}) error {
 	xdgPath, err := config.XDGConfigPath()
 	if err != nil {
 		return fmt.Errorf("failed to determine config path: %w", err)
@@ -643,12 +673,42 @@ func (pr *ProviderRouter) persistRuntimeConfig(ps *ProviderState) error {
 	if tc.Provider == nil {
 		tc.Provider = make(map[string]*config.Config)
 	}
-	tc.Provider[ps.Name] = ps.Config
 
-	if err := config.SaveTomlConfig(tc, xdgPath); err != nil {
-		return fmt.Errorf("failed to save config file: %w", err)
+	providerCfg, ok := tc.Provider[ps.Name]
+	if !ok {
+		providerCfg = &config.Config{}
+		tc.Provider[ps.Name] = providerCfg
 	}
-	return nil
+
+	// Only modify the specific field
+	switch key {
+	case "http_timeout_sec":
+		v, _ := toInt(value)
+		providerCfg.HTTPTimeoutSec = v
+	case "max_retries":
+		v, _ := toInt(value)
+		providerCfg.MaxRetries = v
+	case "cooldown_sec":
+		v, _ := toInt(value)
+		providerCfg.CooldownSec = v
+	case "backoff_cap_sec":
+		v, _ := toInt(value)
+		providerCfg.BackoffCapSec = v
+	case "backoff_multiplier":
+		v, _ := toFloat64(value)
+		providerCfg.BackoffMultiplier = v
+	case "cb_reset_sec":
+		v, _ := toInt(value)
+		providerCfg.CBResetSec = v
+	case "upstream_cb_threshold":
+		v, _ := toInt(value)
+		providerCfg.UpstreamCBThreshold = v
+	case "log_level":
+		v, _ := value.(string)
+		providerCfg.LogLevel = v
+	}
+
+	return config.SaveTomlConfig(tc, xdgPath)
 }
 
 // ── Helpers ─────────────────────────────────────────────

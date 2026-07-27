@@ -24,6 +24,12 @@ func TestConfigListCmd_Exists(t *testing.T) {
 	}
 }
 
+func TestConfigListCmd_HasAllFlag(t *testing.T) {
+	if configListCmd.Flags().Lookup("all") == nil {
+		t.Fatal("expected --all flag on config list command")
+	}
+}
+
 func TestConfigGetCmd_Exists(t *testing.T) {
 	if configGetCmd == nil {
 		t.Fatal("configGetCmd is nil")

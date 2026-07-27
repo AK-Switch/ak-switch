@@ -27,6 +27,7 @@ func init() {
 	configCmd.AddCommand(configSetCmd)
 
 	configInitCmd.Flags().StringP("path", "p", "", "Output path for config.toml (default: XDG config directory)")
+	configListCmd.Flags().Bool("all", false, "Show all providers")
 	configSetCmd.Flags().Bool("persist", false, "Persist the change to the config file")
 }
 
@@ -163,12 +164,14 @@ var configListCmd = &cobra.Command{
 	Long: `Display all runtime-configurable parameters and their current values.
 
 	If a provider name is given, shows parameters for that provider only.
+	Use --all to show parameters for all providers.
 	Otherwise, shows the first (or only) provider.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client := &http.Client{Timeout: 5 * time.Second}
-		baseURL := fmt.Sprintf("http://%s:%d/api/runtime-config", detectServerHost(), detectServerPort())
+		all, _ := cmd.Flags().GetBool("all")
 
+		baseURL := fmt.Sprintf("http://%s:%d/api/runtime-config", detectServerHost(), detectServerPort())
 		if len(args) > 0 {
 			baseURL += "?provider=" + url.QueryEscape(args[0])
 		}
@@ -180,39 +183,43 @@ var configListCmd = &cobra.Command{
 		defer resp.Body.Close()
 
 		body, _ := io.ReadAll(resp.Body)
-		var result struct {
-			Provider string                 `json:"provider"`
-			Params   map[string]interface{} `json:"params"`
-		}
-		if err := json.Unmarshal(body, &result); err != nil {
-			return fmt.Errorf("failed to parse response: %w", err)
-		}
 
-		fmt.Printf("Provider: %s\n", result.Provider)
-		fmt.Println()
-
-		// Sort keys for deterministic output
-		keys := make([]string, 0, len(result.Params))
-		for k := range result.Params {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-
-		for _, k := range keys {
-			v := result.Params[k]
-			switch val := v.(type) {
-			case float64:
-				if val == float64(int(val)) {
-					fmt.Printf("  %-25s %d\n", k+":", int(val))
-				} else {
-					fmt.Printf("  %-25s %.1f\n", k+":", val)
+		// Try to parse as multi-provider response first
+		var multiResult map[string]map[string]interface{}
+		if err := json.Unmarshal(body, &multiResult); err == nil && len(multiResult) > 0 {
+			// Check if single-provider response (from ?provider=xxx)
+			if _, hasProvider := multiResult["provider"]; hasProvider {
+				var single struct {
+					Provider string                 `json:"provider"`
+					Params   map[string]interface{} `json:"params"`
 				}
-			default:
-				fmt.Printf("  %-25s %v\n", k+":", v)
+				if json.Unmarshal(body, &single) == nil && single.Provider != "" {
+					printProviderParams(single.Provider, single.Params)
+					return nil
+				}
 			}
+
+			// Multi-provider: display all or first
+			names := make([]string, 0, len(multiResult))
+			for n := range multiResult {
+				names = append(names, n)
+			}
+			sort.Strings(names)
+
+			if all {
+				for i, n := range names {
+					if i > 0 {
+						fmt.Println()
+					}
+					printProviderParams(n, multiResult[n])
+				}
+			} else {
+				printProviderParams(names[0], multiResult[names[0]])
+			}
+			return nil
 		}
 
-		return nil
+		return fmt.Errorf("failed to parse response: %s", string(body))
 	},
 }
 
@@ -302,12 +309,15 @@ var configSetCmd = &cobra.Command{
 
 		baseURL := fmt.Sprintf("http://%s:%d/api/runtime-config?%s", detectServerHost(), detectServerPort(), params.Encode())
 
-		// Try to parse value as number first, fall back to string
-		payload := fmt.Sprintf(`{"key":"%s","value":%s}`, key, value)
-		if _, err := strconv.ParseFloat(value, 64); err != nil {
-			// Not a number, send as string
-			payload = fmt.Sprintf(`{"key":"%s","value":"%s"}`, key, value)
+		// Build payload using json.Marshal for proper escaping
+		payloadMap := map[string]interface{}{"key": key}
+		if v, err := strconv.ParseFloat(value, 64); err == nil {
+			payloadMap["value"] = v
+		} else {
+			payloadMap["value"] = value
 		}
+		payloadBytes, _ := json.Marshal(payloadMap)
+		payload := string(payloadBytes)
 
 		resp, err := client.Post(baseURL, "application/json", strings.NewReader(payload))
 		if err != nil {
@@ -354,4 +364,29 @@ var configSetCmd = &cobra.Command{
 
 		return nil
 	},
+}
+// printProviderParams prints a provider's runtime parameters.
+func printProviderParams(provider string, params map[string]interface{}) {
+	fmt.Printf("Provider: %s\n", provider)
+	fmt.Println()
+
+	keys := make([]string, 0, len(params))
+	for k := range params {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		v := params[k]
+		switch val := v.(type) {
+		case float64:
+			if val == float64(int(val)) {
+				fmt.Printf("  %-25s %d\n", k+":", int(val))
+			} else {
+				fmt.Printf("  %-25s %.1f\n", k+":", val)
+			}
+		default:
+			fmt.Printf("  %-25s %v\n", k+":", v)
+		}
+	}
 }

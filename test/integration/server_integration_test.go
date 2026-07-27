@@ -2689,26 +2689,28 @@ func TestRuntimeConfigHandler_GetList(t *testing.T) {
 		t.Errorf("expected status 200, got %d", resp.StatusCode)
 	}
 
-	var body map[string]interface{}
+	// No provider specified: returns all providers as a map
+	var body map[string]map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 
-	if provider, ok := body["provider"].(string); !ok || provider == "" {
-		t.Errorf("expected provider to be non-empty, got %v", body["provider"])
+	if len(body) == 0 {
+		t.Fatal("expected at least one provider in response")
 	}
-	params, ok := body["params"].(map[string]interface{})
-	if !ok {
-		t.Fatal("expected params object")
-	}
-	if _, ok := params["http_timeout_sec"]; !ok {
-		t.Errorf("expected http_timeout_sec in params")
-	}
-	if _, ok := params["max_retries"]; !ok {
-		t.Errorf("expected max_retries in params")
-	}
-	if _, ok := params["log_level"]; !ok {
-		t.Errorf("expected log_level in params")
+
+	for name, params := range body {
+		if name == "" {
+			t.Errorf("expected non-empty provider name")
+		}
+		if _, ok := params["http_timeout_sec"]; !ok {
+			t.Errorf("expected http_timeout_sec in params for %s", name)
+		}
+		if _, ok := params["max_retries"]; !ok {
+			t.Errorf("expected max_retries in params for %s", name)
+		}
+		// log_level is no longer in per-provider params
+		break // only check first provider
 	}
 }
 
@@ -2716,9 +2718,10 @@ func TestRuntimeConfigHandler_GetSingleKey(t *testing.T) {
 	srv := newTestServer([]string{"key-a"})
 	defer srv.Close()
 
-	resp, err := http.Get(srv.URL + "/api/runtime-config?key=http_timeout_sec")
+	// Use ?provider=test (the default provider name from newTestServer)
+	resp, err := http.Get(srv.URL + "/api/runtime-config?provider=test&key=http_timeout_sec")
 	if err != nil {
-		t.Fatalf("GET /api/runtime-config?key=http_timeout_sec: %v", err)
+		t.Fatalf("GET /api/runtime-config?provider=test&key=http_timeout_sec: %v", err)
 	}
 	defer resp.Body.Close()
 
@@ -2743,7 +2746,7 @@ func TestRuntimeConfigHandler_GetUnknownKey(t *testing.T) {
 	srv := newTestServer([]string{"key-a"})
 	defer srv.Close()
 
-	resp, err := http.Get(srv.URL + "/api/runtime-config?key=unknown_key")
+	resp, err := http.Get(srv.URL + "/api/runtime-config?provider=test&key=unknown_key")
 	if err != nil {
 		t.Fatalf("GET /api/runtime-config?key=unknown_key: %v", err)
 	}
@@ -2784,7 +2787,7 @@ func TestRuntimeConfigHandler_SetHttpTimeout(t *testing.T) {
 	}
 
 	// Verify the change was applied
-	checkResp, err := http.Get(srv.URL + "/api/runtime-config?key=http_timeout_sec")
+	checkResp, err := http.Get(srv.URL + "/api/runtime-config?provider=test&key=http_timeout_sec")
 	if err != nil {
 		t.Fatalf("GET /api/runtime-config?key=http_timeout_sec: %v", err)
 	}
