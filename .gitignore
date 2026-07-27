@@ -26,6 +26,9 @@ akswitch_proxy.exe
 # TODO.md — 私人笔记，不跟踪
 /TODO.md
 
+# CONTEXT.md — /grill-with-docs 运行时状态，不跟踪
+docs/CONTEXT.md
+
 # Load test results (binary reports, keep .gitkeep)
 test/load/results/*.bin
 test/load/results/*.html
