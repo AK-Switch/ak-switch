@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/pelletier/go-toml/v2"
 )
@@ -25,24 +24,6 @@ func XDGConfigPath() (string, error) {
 		return "", fmt.Errorf("获取用户家目录失败: %w", err)
 	}
 	return filepath.Join(homeDir, ".akswitch", "config.toml"), nil
-}
-
-// DetectConfigSource 按优先级自动检测配置源。
-// 优先级: specifiedPath > XDG config.toml > .env
-// 返回检测到的路径、是否为 TOML 源、错误信息。
-func DetectConfigSource(specifiedPath string) (source string, fromToml bool, err error) {
-	if specifiedPath != "" {
-		return specifiedPath, strings.HasSuffix(specifiedPath, ".toml"), nil
-	}
-	// 检查 XDG 配置路径是否存在
-	xdgPath, xdgErr := XDGConfigPath()
-	if xdgErr == nil {
-		if _, statErr := os.Stat(xdgPath); statErr == nil {
-			return xdgPath, true, nil
-		}
-	}
-	// 回退到 .env
-	return ".env", false, nil
 }
 
 // LoadAllTomlProviders 读取 TOML 配置文件中的所有 [provider.*] 段，

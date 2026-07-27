@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"akswitch/internal/config"
@@ -14,6 +15,85 @@ import (
 	"akswitch/internal/tokenestimator"
 	"akswitch/internal/tracker"
 )
+
+// BackgroundTaskManager manages background goroutines for the proxy server.
+// It holds the stop signal and WaitGroup, and provides methods to start
+// individual background tasks. Call Stop() to signal all tasks and wait
+// for them to complete.
+type BackgroundTaskManager struct {
+	stop    chan struct{}
+	wg      sync.WaitGroup
+	metrics *akswitchmetrics.Metrics
+}
+
+// NewBackgroundTaskManager creates a BackgroundTaskManager.
+func NewBackgroundTaskManager(metrics *akswitchmetrics.Metrics) *BackgroundTaskManager {
+	return &BackgroundTaskManager{
+		stop:    make(chan struct{}),
+		metrics: metrics,
+	}
+}
+
+// Stop signals all background tasks to stop and waits for them to complete.
+func (m *BackgroundTaskManager) Stop() {
+	close(m.stop)
+	m.wg.Wait()
+}
+
+// StopChan returns the stop channel for sharing with external goroutines.
+func (m *BackgroundTaskManager) StopChan() <-chan struct{} {
+	return m.stop
+}
+
+// StartKeyPoolMetrics periodically updates the keypool gauge metrics.
+func (m *BackgroundTaskManager) StartKeyPoolMetrics(pool *keypool.KeyPool, providerName string) {
+	m.wg.Add(1)
+	go func() {
+		defer m.wg.Done()
+		RefreshKeyPoolMetrics(m.metrics, pool, providerName, m.stop)
+	}()
+}
+
+// StartHealthCheck periodically probes the upstream endpoint and updates
+// the upstream circuit breaker state based on the response.
+func (m *BackgroundTaskManager) StartHealthCheck(cfg *config.Config, proxy *ProxyEngine, ps *ProviderState) {
+	m.wg.Add(1)
+	go func() {
+		defer m.wg.Done()
+		ActiveHealthCheck(cfg, proxy, m.metrics, ps, m.stop)
+	}()
+}
+
+// StartCalibrator periodically sends tiny non-streaming requests to calibrate
+// token estimation. It runs once immediately on start, then at the configured interval.
+func (m *BackgroundTaskManager) StartCalibrator(calibrator *tracker.Calibrator, pool *keypool.KeyPool, targetBase, model string, interval time.Duration) {
+	if model == "" || interval <= 0 {
+		return
+	}
+	m.wg.Add(1)
+	go func() {
+		defer m.wg.Done()
+		PeriodicCalibrator(calibrator, pool, targetBase, model, interval, m.stop)
+	}()
+}
+
+// StartUptimeTicker periodically updates the uptime metric gauge.
+func (m *BackgroundTaskManager) StartUptimeTicker(startTime time.Time) {
+	m.wg.Add(1)
+	go func() {
+		defer m.wg.Done()
+		uptimeTicker := time.NewTicker(10 * time.Second)
+		defer uptimeTicker.Stop()
+		for {
+			select {
+			case <-m.stop:
+				return
+			case <-uptimeTicker.C:
+				m.metrics.UptimeSeconds.Set(time.Since(startTime).Seconds())
+			}
+		}
+	}()
+}
 
 // RefreshKeyPoolMetrics periodically updates the keypool gauge metrics.
 func RefreshKeyPoolMetrics(metrics *akswitchmetrics.Metrics, pool *keypool.KeyPool, providerName string, stop <-chan struct{}) {

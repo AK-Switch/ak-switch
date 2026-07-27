@@ -1,7 +1,6 @@
 // Package config provides centralized configuration management for AK Switch.
 //
-// It reads from TOML configuration files, validates required fields,
-// and supports runtime diffing for hot-reload scenarios.
+// It reads from TOML configuration files and validates required fields.
 package config
 
 import (
@@ -61,13 +60,6 @@ type ConfigError struct {
 }
 
 func (e *ConfigError) Error() string { return e.Message }
-
-// ConfigChange represents a single field that changed between two Config values.
-type ConfigChange struct {
-	Field    string
-	OldValue string
-	NewValue string
-}
 
 // DefaultConfig returns a Config with all optional fields set to their defaults.
 func DefaultConfig() *Config {

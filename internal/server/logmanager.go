@@ -31,11 +31,22 @@ func (lm *LogManager) SetFormat(compact bool, singleProvider bool) {
 	lm.singleProvider = singleProvider
 }
 
-// ApplyLevel sets the global slog handler's minimum level based on a string.
+// ApplyLevel sets the log level and applies it to the global slog handler.
+// This is a convenience method that calls BuildHandler and then slog.SetDefault.
 // Supported values: "debug", "info", "warn", "error".
 // Unknown or empty values default to slog.LevelInfo.
 // Updates both the stderr handler and the active file handler (if any).
 func (lm *LogManager) ApplyLevel(level string) {
+	handler := lm.BuildHandler(level)
+	slog.SetDefault(slog.New(handler))
+}
+
+// BuildHandler creates a slog.Handler for the given log level without
+// setting it globally. This allows callers to control when slog.SetDefault
+// is called, avoiding the global side effect of ApplyLevel.
+// Supported values: "debug", "info", "warn", "error".
+// Unknown or empty values default to slog.LevelInfo.
+func (lm *LogManager) BuildHandler(level string) slog.Handler {
 	var lvl slog.Level
 	switch strings.ToLower(level) {
 	case "debug":
@@ -54,14 +65,14 @@ func (lm *LogManager) ApplyLevel(level string) {
 	stderrHandler := newHandler(os.Stderr, &lm.level, lm.compact, lm.singleProvider)
 	if lm.fileWriter != nil {
 		fileHandler := slog.NewTextHandler(lm.fileWriter, &slog.HandlerOptions{Level: &lm.level})
-		slog.SetDefault(slog.New(&multiHandler{stderr: stderrHandler, file: fileHandler}))
-	} else {
-		slog.SetDefault(slog.New(stderrHandler))
+		return &multiHandler{stderr: stderrHandler, file: fileHandler}
 	}
+	return stderrHandler
 }
 
 // InitFileHandler initializes file-based logging with the given path and rotation settings.
 // If logFile is empty, this is a no-op (file logging remains disabled).
+// The caller should call ApplyLevel or BuildHandler to activate the file handler.
 func (lm *LogManager) InitFileHandler(logFile string, maxSizeMB, maxAgeDays int) {
 	if logFile == "" {
 		return
@@ -76,20 +87,6 @@ func (lm *LogManager) InitFileHandler(logFile string, maxSizeMB, maxAgeDays int)
 		Compress: false,
 	}
 	lm.fileWriter = lj
-
-	fileHandler := slog.NewTextHandler(lj, &slog.HandlerOptions{Level: &lm.level})
-
-	// Use a direct stderr handler instead of slog.Default().Handler()
-	// to avoid a circular dependency in Go 1.24+:
-	// slog.Default().Handler() writes to log.Writer(), which calls
-	// slog.Default().Handler() again → deadlock.
-	stderrHandler := slog.NewTextHandler(os.Stderr, nil)
-
-	// Wrap both into a multiHandler
-	slog.SetDefault(slog.New(&multiHandler{
-		stderr: stderrHandler,
-		file:   fileHandler,
-	}))
 	slog.Info("file logging initialized", "path", logFile, "maxSizeMB", maxSizeMB, "maxAgeDays", maxAgeDays)
 }
 

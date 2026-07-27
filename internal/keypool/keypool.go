@@ -380,29 +380,40 @@ func (p *KeyPool) Status() string {
 	return strings.Join(parts, " ")
 }
 
+// KeyDetail holds structured status information for a single key in the pool.
+type KeyDetail struct {
+	Index             int
+	Key               string
+	Name              string
+	Disabled          bool
+	Status            string
+	RequestsPerMinute int
+	LastUsed          string
+	CooldownRemaining string
+}
+
 // GetKeyDetails returns detailed status for each key in the pool.
-func (p *KeyPool) GetKeyDetails() []map[string]interface{} {
+func (p *KeyPool) GetKeyDetails() []KeyDetail {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	now := time.Now()
-	details := make([]map[string]interface{}, len(p.keys))
+	details := make([]KeyDetail, len(p.keys))
 	for i := range p.keys {
 		p.CleanupOldRequests(i)
 		name := ""
 		if i < len(p.names) {
 			name = p.names[i]
 		}
-		keyDetail := map[string]interface{}{
-			"index":               i,
-			"key":                 logentry.MaskKey(p.keys[i]),
-			"name":                name,
-			"disabled":            p.cbs[i].State() == circuitbreaker.StatePermanent,
-			"requests_per_minute": p.RequestsInLastMinute(i),
-			"last_used":           p.lastUsed[i].Format(time.RFC3339),
-			"cooldown_until":      p.cbs[i].CooldownRemaining().String(),
+		details[i] = KeyDetail{
+			Index:             i,
+			Key:               logentry.MaskKey(p.keys[i]),
+			Name:              name,
+			Disabled:          p.cbs[i].State() == circuitbreaker.StatePermanent,
+			Status:            p.KeyStatusLabel(i, now),
+			RequestsPerMinute: p.RequestsInLastMinute(i),
+			LastUsed:          p.lastUsed[i].Format(time.RFC3339),
+			CooldownRemaining: p.cbs[i].CooldownRemaining().String(),
 		}
-		keyDetail["status"] = p.KeyStatusLabel(i, now)
-		details[i] = keyDetail
 	}
 	return details
 }

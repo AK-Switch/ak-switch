@@ -315,11 +315,11 @@ func TestGetKeyDetailsIncludesName(t *testing.T) {
 	if len(details) != 2 {
 		t.Fatalf("GetKeyDetails len = %d, want 2", len(details))
 	}
-	if details[0]["name"] != "主key" {
-		t.Errorf("details[0].name = %q, want %q", details[0]["name"], "主key")
+	if details[0].Name != "主key" {
+		t.Errorf("details[0].name = %q, want %q", details[0].Name, "主key")
 	}
-	if details[1]["name"] != "" {
-		t.Errorf("details[1].name = %q, want empty", details[1]["name"])
+	if details[1].Name != "" {
+		t.Errorf("details[1].name = %q, want empty", details[1].Name)
 	}
 }
 
