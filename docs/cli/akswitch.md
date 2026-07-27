@@ -12,6 +12,7 @@ API Key rotation proxy for AI providers
 
 * [akswitch config](akswitch_config.md)	 - Manage configuration
 * [akswitch key](akswitch_key.md)	 - Manage API keys
+* [akswitch log-level](akswitch_log-level.md)	 - Show or set the log level
 * [akswitch logs](akswitch_logs.md)	 - Show request logs
 * [akswitch provider](akswitch_provider.md)	 - Manage providers
 * [akswitch start](akswitch_start.md)	 - Start the API key rotation proxy server

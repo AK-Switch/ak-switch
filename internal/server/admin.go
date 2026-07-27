@@ -20,27 +20,33 @@ func (pr *ProviderRouter) swHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (pr *ProviderRouter) logLevelHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
 	if !pr.checkAnyAdminToken(w, r) {
 		return
 	}
-	var body struct {
-		Level string `json:"level"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
-		return
-	}
-	body.Level = strings.TrimSpace(strings.ToLower(body.Level))
-	switch body.Level {
-	case "debug", "info", "warn", "error":
-		pr.logManager.ApplyLevel(body.Level)
-		respondJSON(w, http.StatusOK, map[string]string{"level": body.Level})
+
+	switch r.Method {
+	case http.MethodGet:
+		respondJSON(w, http.StatusOK, map[string]string{"level": pr.logManager.CurrentLevel()})
+
+	case http.MethodPost:
+		var body struct {
+			Level string `json:"level"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			respondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+			return
+		}
+		body.Level = strings.TrimSpace(strings.ToLower(body.Level))
+		switch body.Level {
+		case "debug", "info", "warn", "error":
+			pr.logManager.ApplyLevel(body.Level)
+			respondJSON(w, http.StatusOK, map[string]string{"level": body.Level})
+		default:
+			respondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid log level, use: debug, info, warn, error"})
+		}
+
 	default:
-		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid log level, use: debug, info, warn, error"})
+		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
 }
 

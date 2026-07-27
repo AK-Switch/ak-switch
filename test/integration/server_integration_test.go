@@ -2621,7 +2621,7 @@ func TestLogLevelHandler_InvalidLevel(t *testing.T) {
 	}
 }
 
-func TestLogLevelHandler_WrongMethod(t *testing.T) {
+func TestLogLevelHandler_GetLevel(t *testing.T) {
 	srv := newTestServer([]string{"key-a"})
 	defer srv.Close()
 
@@ -2631,8 +2631,17 @@ func TestLogLevelHandler_WrongMethod(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusMethodNotAllowed {
-		t.Errorf("expected status 405, got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	var body map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if level, ok := body["level"].(string); !ok || level == "" {
+		t.Errorf(`expected level to be non-empty, got %v`, body["level"])
 	}
 }
 

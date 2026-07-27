@@ -93,6 +93,23 @@ func (lm *LogManager) InitFileHandler(logFile string, maxSizeMB, maxAgeDays int)
 	slog.Info("file logging initialized", "path", logFile, "maxSizeMB", maxSizeMB, "maxAgeDays", maxAgeDays)
 }
 
+// CurrentLevel returns the current log level as a string.
+func (lm *LogManager) CurrentLevel() string {
+	lvl := lm.level.Level()
+	switch lvl {
+	case slog.LevelDebug:
+		return "debug"
+	case slog.LevelInfo:
+		return "info"
+	case slog.LevelWarn:
+		return "warn"
+	case slog.LevelError:
+		return "error"
+	default:
+		return "info"
+	}
+}
+
 // CloseFileHandler closes the active file handler writer, if any.
 func (lm *LogManager) CloseFileHandler() {
 	if lm.fileWriter != nil {
