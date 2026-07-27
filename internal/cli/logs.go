@@ -16,7 +16,7 @@ import (
 func init() {
 	logsCmd.Flags().IntVar(&logsLast, "last", 0, "Show only the last N entries (0 = all)")
 	logsCmd.Flags().StringVar(&logsSince, "since", "", "Show entries after this timestamp (RFC3339, e.g. 2026-07-14T00:00:00Z)")
-	logsCmd.Flags().BoolVar(&logsVerbose, "verbose", false, "Show full request details (method, URL, body size)")
+	logsCmd.Flags().BoolVar(&logsVerbose, "verbose", false, "Show full request details (method, URL, tokens, body size, TTFB)")
 	logsCmd.Flags().BoolVar(&logsCompact, "compact", false, "Use compact format (TTFB, total time, body sizes)")
 	rootCmd.AddCommand(logsCmd)
 }
@@ -158,25 +158,48 @@ func formatLogLine(entry map[string]interface{}, mode string) string {
 		return fmt.Sprintf("%s %s %s %s (%s) [%s]", prefix, status, method, path, keyPart, timingStr)
 
 	case "verbose":
-		// Full debugging view: [ts] provider METHOD url -> status (retry N, durationMsms, key: name)
-		if provider != "" {
-			prefix += " " + provider
-		}
+		// Full debugging view: [ts] status provider METHOD url (key: name, durationMs, tok=X+Y, bodySize, ttfb, ...)
 		var extras []string
-		if retry != "" && retry != "0" {
-			extras = append(extras, "retry "+retry)
+		if keyName != "" {
+			extras = append(extras, "key: "+keyName)
 		}
 		if duration != "" {
 			extras = append(extras, duration+"ms")
 		}
-		if keyName != "" {
-			extras = append(extras, "key: "+keyName)
+
+		inTok := getIntField(entry, "input_tokens")
+		outTok := getIntField(entry, "output_tokens")
+		if inTok > 0 || outTok > 0 {
+			extras = append(extras, fmt.Sprintf("tok=%d+%d", inTok, outTok))
 		}
+
+		reqSize := getFloatField(entry, "request_body_size")
+		respSize := getFloatField(entry, "response_body_size")
+		reqStr := fmtSizeCompact(reqSize)
+		if respSize > 0 {
+			extras = append(extras, reqStr+"→"+fmtSizeCompact(respSize))
+		} else if reqSize > 0 {
+			extras = append(extras, reqStr)
+		}
+
+		ttfb := getFloatField(entry, "ttfb_ms")
+		if ttfb > 0 {
+			extras = append(extras, "ttfb="+fmtDurationCompact(ttfb))
+		}
+
+		if retry != "" && retry != "0" {
+			extras = append(extras, "retry "+retry)
+		}
+
 		extraStr := ""
 		if len(extras) > 0 {
 			extraStr = " (" + strings.Join(extras, ", ") + ")"
 		}
-		return fmt.Sprintf("%s %s %s -> %s%s", prefix, method, path, status, extraStr)
+
+		if provider != "" {
+			return fmt.Sprintf("%s %s %s %s %s%s", prefix, status, provider, method, path, extraStr)
+		}
+		return fmt.Sprintf("%s %s %s %s%s", prefix, status, method, path, extraStr)
 
 	default:
 		// Default user-friendly view: [HH:MM:SS.mmm] status (provider, key: name, durationMsms[, retry N])

@@ -103,8 +103,8 @@ func TestFormatLogLine_Verbose_ShowsMethodUrl(t *testing.T) {
 	if !strings.Contains(line, "200") {
 		t.Errorf("verbose view should contain status, got: %s", line)
 	}
-	if !strings.Contains(line, "->") {
-		t.Errorf("verbose view should contain '->' separator, got: %s", line)
+	if !strings.Contains(line, "openai") {
+		t.Errorf("verbose view should contain provider, got: %s", line)
 	}
 }
 
@@ -114,6 +114,53 @@ func TestFormatLogLine_Verbose_NegativeDuration(t *testing.T) {
 
 	if !strings.Contains(line, "-1ms") {
 		t.Errorf("verbose view should show negative duration, got: %s", line)
+	}
+}
+
+func TestFormatLogLine_Verbose_ShowsTokens(t *testing.T) {
+	entry := makeEntry(map[string]interface{}{
+		"input_tokens":  float64(45),
+		"output_tokens": float64(312),
+	})
+	line := formatLogLine(entry, "verbose")
+
+	if !strings.Contains(line, "tok=45+312") {
+		t.Errorf("verbose view should show token info, got: %s", line)
+	}
+}
+
+func TestFormatLogLine_Verbose_ShowsBodySize(t *testing.T) {
+	entry := makeEntry(map[string]interface{}{
+		"request_body_size":  float64(102400),
+		"response_body_size": float64(51200),
+	})
+	line := formatLogLine(entry, "verbose")
+
+	if !strings.Contains(line, "100KB→50KB") {
+		t.Errorf("verbose view should show body size, got: %s", line)
+	}
+}
+
+func TestFormatLogLine_Verbose_ShowsTtfb(t *testing.T) {
+	entry := makeEntry(map[string]interface{}{
+		"ttfb_ms": float64(500),
+	})
+	line := formatLogLine(entry, "verbose")
+
+	if !strings.Contains(line, "ttfb=500ms") {
+		t.Errorf("verbose view should show ttfb, got: %s", line)
+	}
+}
+
+func TestFormatLogLine_Verbose_NoProvider(t *testing.T) {
+	entry := makeEntry(map[string]interface{}{"provider": ""})
+	line := formatLogLine(entry, "verbose")
+
+	if !strings.Contains(line, "GET") {
+		t.Errorf("verbose view should show method even without provider, got: %s", line)
+	}
+	if !strings.Contains(line, "key: my-key") {
+		t.Errorf("verbose view should show key even without provider, got: %s", line)
 	}
 }
 
