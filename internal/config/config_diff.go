@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"akswitch/internal/utils"
+	"akswitch/internal/logentry"
 )
 
 // fieldDef defines a single configuration field for diff comparison.
@@ -100,7 +100,7 @@ func maskedSliceWithNames(keys []string, names []string) []string {
 		if i < len(names) {
 			n = names[i]
 		}
-		result[i] = joinKeyName(utils.MaskKey(k), n)
+		result[i] = joinKeyName(logentry.MaskKey(k), n)
 	}
 	return result
 }

@@ -4,7 +4,7 @@ import (
 	"akswitch/internal/circuitbreaker"
 	"akswitch/internal/config"
 	"akswitch/internal/keypool"
-	"akswitch/internal/utils"
+	"akswitch/internal/logentry"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -56,7 +56,7 @@ func (pr *ProviderRouter) configHandler(w http.ResponseWriter, r *http.Request) 
 				keys := p.Pool.Keys()
 				maskedKeys := make([]string, len(keys))
 				for i, k := range keys {
-					maskedKeys[i] = utils.MaskKey(k)
+					maskedKeys[i] = logentry.MaskKey(k)
 				}
 				result[name] = ConfigPayload{
 					TargetBase: p.Config.TargetBase,
@@ -72,7 +72,7 @@ func (pr *ProviderRouter) configHandler(w http.ResponseWriter, r *http.Request) 
 		keys := ps.Pool.Keys()
 		maskedKeys := make([]string, len(keys))
 		for i, k := range keys {
-			maskedKeys[i] = utils.MaskKey(k)
+			maskedKeys[i] = logentry.MaskKey(k)
 		}
 		respondJSON(w, http.StatusOK, ConfigPayload{
 			TargetBase: ps.Config.TargetBase,
@@ -111,7 +111,7 @@ func (pr *ProviderRouter) keysHandler(w http.ResponseWriter, r *http.Request) {
 			nameVal, _ := pool.Name(i)
 			result[i] = map[string]interface{}{
 				"index":       i + 1,
-				"key":         utils.MaskKey(keys[i]),
+				"key":         logentry.MaskKey(keys[i]),
 				"status":      pool.KeyStatusLabel(i, now),
 				"requests_1m": pool.RequestsInLastMinute(i),
 				"name":        nameVal,
@@ -138,7 +138,7 @@ func (pr *ProviderRouter) keysHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"index": idx,
-			"key":   utils.MaskKey(body.Key),
+			"key":   logentry.MaskKey(body.Key),
 			"name":  body.KeyName,
 		})
 

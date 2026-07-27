@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"akswitch/internal/utils"
+	"akswitch/internal/logentry"
 )
 
 // resetEnv cleans up all config-related env vars to prevent leakage between tests.
@@ -106,7 +106,7 @@ func TestSanitized(t *testing.T) {
 		t.Error("original key mutated")
 	}
 
-	// Sanitized copy: first 4 + "..." + last 4 chars (per utils.MaskKey)
+	// Sanitized copy: first 4 + "..." + last 4 chars (per logentry.MaskKey)
 	if s.Keys[0] != "nvap...sGW1" {
 		t.Errorf("sanitized Keys[0] = %q, want %q", s.Keys[0], "nvap...sGW1")
 	}
@@ -128,9 +128,9 @@ func TestSanitized_UsesUtilsMaskKey(t *testing.T) {
 	key := "sk-abcdefghijklmn"
 	cfg := &Config{Keys: []string{key}}
 	s := cfg.Sanitized()
-	expected := utils.MaskKey(key)
+	expected := logentry.MaskKey(key)
 	if s.Keys[0] != expected {
-		t.Errorf("Sanitized Keys[0] = %q, want %q (must match utils.MaskKey)", s.Keys[0], expected)
+		t.Errorf("Sanitized Keys[0] = %q, want %q (must match logentry.MaskKey)", s.Keys[0], expected)
 	}
 }
 

@@ -4,13 +4,13 @@ import (
 	"sync"
 	"time"
 
-	"akswitch/internal/utils"
+	"akswitch/internal/logentry"
 )
 
 // LogStore is a thread-safe, fixed-size log store for API usage logs.
 type LogStore struct {
 	mu       sync.Mutex
-	logs     []utils.LogEntry
+	logs     []logentry.LogEntry
 	maxLen   int
 	OnAppend func(prevLen, newLen, maxLen int) // optional callback, called under lock
 }
@@ -18,15 +18,15 @@ type LogStore struct {
 // New creates a LogStore with the given max size.
 func New(maxLen int) *LogStore {
 	return &LogStore{
-		logs:   make([]utils.LogEntry, 0, maxLen),
+		logs:   make([]logentry.LogEntry, 0, maxLen),
 		maxLen: maxLen,
 	}
 }
 
 // Append adds an entry. The entry's Key is masked immediately before storing.
 // If the store is full, the oldest entries are dropped in bulk (O(1) amortized).
-func (ls *LogStore) Append(entry utils.LogEntry) {
-	entry.Key = utils.MaskKey(entry.Key)
+func (ls *LogStore) Append(entry logentry.LogEntry) {
+	entry.Key = logentry.MaskKey(entry.Key)
 	ls.mu.Lock()
 	defer ls.mu.Unlock()
 	prevLen := len(ls.logs)
@@ -49,17 +49,17 @@ func (ls *LogStore) Len() int {
 }
 
 // Snapshot returns a deep copy of all entries.
-func (ls *LogStore) Snapshot() []utils.LogEntry {
+func (ls *LogStore) Snapshot() []logentry.LogEntry {
 	ls.mu.Lock()
 	defer ls.mu.Unlock()
-	result := make([]utils.LogEntry, len(ls.logs))
+	result := make([]logentry.LogEntry, len(ls.logs))
 	copy(result, ls.logs)
 	return result
 }
 
 // SnapshotSince returns a deep copy of entries whose timestamp >= since.
 // since is parsed as RFC3339. If since is empty or unparseable, returns all entries.
-func (ls *LogStore) SnapshotSince(since string) []utils.LogEntry {
+func (ls *LogStore) SnapshotSince(since string) []logentry.LogEntry {
 	sinceTime, err := time.Parse(time.RFC3339, since)
 	if err != nil {
 		return ls.Snapshot()
@@ -83,7 +83,7 @@ func (ls *LogStore) SnapshotSince(since string) []utils.LogEntry {
 	}
 	cut = lo
 
-	result := make([]utils.LogEntry, len(ls.logs)-cut)
+	result := make([]logentry.LogEntry, len(ls.logs)-cut)
 	copy(result, ls.logs[cut:])
 	return result
 }
@@ -92,6 +92,6 @@ func (ls *LogStore) SnapshotSince(since string) []utils.LogEntry {
 func (ls *LogStore) Clear() {
 	ls.mu.Lock()
 	defer ls.mu.Unlock()
-	ls.logs = make([]utils.LogEntry, 0, ls.maxLen)
+	ls.logs = make([]logentry.LogEntry, 0, ls.maxLen)
 }
 

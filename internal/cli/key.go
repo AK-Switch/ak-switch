@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"akswitch/internal/keypool"
-	"akswitch/internal/utils"
+	"akswitch/internal/logentry"
 
 	"github.com/spf13/cobra"
 )
@@ -41,7 +41,7 @@ func updateKey(provider string, idx int, op KeyMutation) error {
 
 	// Capture entry for display before mutation
 	entry := store.Keys[idx]
-	desc := utils.MaskKey(entry.Key)
+	desc := logentry.MaskKey(entry.Key)
 	if entry.Name != "" {
 		desc += fmt.Sprintf(" (name: %s)", entry.Name)
 	}
@@ -334,7 +334,7 @@ Examples:
 				idx, provider, len(store.Keys), len(store.Keys)-1)
 		}
 
-		oldMasked := utils.MaskKey(store.Keys[idx].Key)
+		oldMasked := logentry.MaskKey(store.Keys[idx].Key)
 		store.Keys[idx].Key = newKey
 
 		if cmd.Flags().Changed("name") {
@@ -347,7 +347,7 @@ Examples:
 		}
 
 		fmt.Printf("Updated key [%d] %s -> %s for provider %q\n",
-			idx, oldMasked, utils.MaskKey(newKey), provider)
+			idx, oldMasked, logentry.MaskKey(newKey), provider)
 		triggerReload()
 		return nil
 	},
@@ -440,7 +440,7 @@ Example output:
 			if entry.Disabled {
 				status = "disabled"
 			}
-			line := fmt.Sprintf("  [%d] %s  (%s)", i, utils.MaskKey(entry.Key), status)
+			line := fmt.Sprintf("  [%d] %s  (%s)", i, logentry.MaskKey(entry.Key), status)
 			if entry.Name != "" {
 				line += fmt.Sprintf("  name: %s", entry.Name)
 			}

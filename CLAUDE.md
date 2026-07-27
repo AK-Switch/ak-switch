@@ -13,8 +13,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **单一测试执行：**
 ```bash
 go test -tags=unit -run TestName ./internal/cli/          # 单元
-go test -tags=integration -run TestName -race .             # 集成
-go test -tags=e2e -run TestName -timeout=5m -race .         # E2E
+go test -tags=integration -run TestName -race ./test/integration/  # 集成
+go test -tags=e2e -run TestName -timeout=5m -race ./test/integration/  # E2E
 ```
 
 ## 测试
@@ -126,7 +126,7 @@ internal/
   metrics/                     # Prometheus 指标（所有指标统一注册到 router 级 registry）
   tracker/                     # Token 用量校准（Calibrator: 滑动窗口比较 tiktoken 估算 vs 实际值）
   tokenestimator/              # Token 估算（tiktoken 包装 + 响应体 input/output_tokens 提取）
-  utils/                       # LogEntry 结构体 + MaskKey + CopyHeaders
+  logentry/                    # LogEntry 结构体 + MaskKey（key 脱敏工具）
 docs/
   api.md                       # API 端点文档
   architecture.md              # 熔断器架构设计文档
@@ -182,7 +182,7 @@ docs/
 
 ### 关键数据结构：LogEntry
 
-`internal/utils/utils.go` 定义 `/logs` API 和 `akswitch logs` 的 JSON schema：
+`internal/logentry/logentry.go` 定义 `/logs` API 和 `akswitch logs` 的 JSON schema：
 
 ```go
 type LogEntry struct {

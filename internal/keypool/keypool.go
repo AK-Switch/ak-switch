@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"akswitch/internal/circuitbreaker"
-	"akswitch/internal/utils"
+	"akswitch/internal/logentry"
 )
 
 // KeyPool is a thread-safe, round-robin key pool with cooldown, disable, and request-tracking support.
@@ -394,7 +394,7 @@ func (p *KeyPool) GetKeyDetails() []map[string]interface{} {
 		}
 		keyDetail := map[string]interface{}{
 			"index":               i,
-			"key":                 utils.MaskKey(p.keys[i]),
+			"key":                 logentry.MaskKey(p.keys[i]),
 			"name":                name,
 			"disabled":            p.cbs[i].State() == circuitbreaker.StatePermanent,
 			"requests_per_minute": p.RequestsInLastMinute(i),

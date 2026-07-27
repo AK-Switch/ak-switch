@@ -37,7 +37,7 @@ jobs:
         run: go vet ./...
 
       - name: Integration tests
-        run: go test -tags=integration -count=1 -race ./
+        run: go test -tags=integration -count=1 -race ./test/integration/
 
   e2e:
     runs-on: windows-latest
@@ -50,7 +50,7 @@ jobs:
           cache: true
 
       - name: E2E tests
-        run: go test -tags=e2e -count=1 -timeout=5m -race ./
+        run: go test -tags=e2e -count=1 -timeout=5m -race ./test/integration/
 
   docs-check:
     runs-on: windows-latest
