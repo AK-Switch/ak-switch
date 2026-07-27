@@ -1,6 +1,6 @@
 //go:build integration
 
-package main
+package integration
 
 import (
 	"encoding/json"
@@ -25,7 +25,7 @@ var expectedPanels = []string{
 // TestGrafanaDashboardJSON_IsValid validates the pre-built Grafana dashboard JSON
 // is valid and contains all expected panels with correct metadata.
 func TestGrafanaDashboardJSON_IsValid(t *testing.T) {
-	data, err := os.ReadFile("deployments/grafana/provisioning/dashboards/akswitch-overview.json")
+	data, err := os.ReadFile("../../deployments/grafana/provisioning/dashboards/akswitch-overview.json")
 	if err != nil {
 		t.Fatalf("failed to read dashboard JSON: %v", err)
 	}
@@ -73,7 +73,7 @@ func TestGrafanaDashboardJSON_IsValid(t *testing.T) {
 // TestGrafanaDashboard_PanelsHaveTargets verifies every panel has at least one
 // PromQL target expression and a non-empty expr field.
 func TestGrafanaDashboard_PanelsHaveTargets(t *testing.T) {
-	data, err := os.ReadFile("deployments/grafana/provisioning/dashboards/akswitch-overview.json")
+	data, err := os.ReadFile("../../deployments/grafana/provisioning/dashboards/akswitch-overview.json")
 	if err != nil {
 		t.Fatalf("failed to read dashboard JSON: %v", err)
 	}
@@ -112,7 +112,7 @@ func TestGrafanaDashboard_PanelsHaveTargets(t *testing.T) {
 // TestPrometheusConfig_Exists validates the Prometheus config file exists
 // and contains the expected scrape target for akswitch.
 func TestPrometheusConfig_Exists(t *testing.T) {
-	data, err := os.ReadFile("deployments/prometheus/prometheus.yml")
+	data, err := os.ReadFile("../../deployments/prometheus/prometheus.yml")
 	if err != nil {
 		t.Fatalf("prometheus.yml not found: %v", err)
 	}
@@ -139,7 +139,7 @@ func TestPrometheusConfig_Exists(t *testing.T) {
 // configuration files exist and have expected content.
 func TestGrafanaProvisioning_ConfigsExist(t *testing.T) {
 	// Datasource config
-	dsData, err := os.ReadFile("deployments/grafana/provisioning/datasources/prometheus.yml")
+	dsData, err := os.ReadFile("../../deployments/grafana/provisioning/datasources/prometheus.yml")
 	if err != nil {
 		t.Fatalf("datasource config not found: %v", err)
 	}
@@ -160,7 +160,7 @@ func TestGrafanaProvisioning_ConfigsExist(t *testing.T) {
 	}
 
 	// Dashboard provisioning config
-	dpData, err := os.ReadFile("deployments/grafana/provisioning/dashboards/dashboard.yml")
+	dpData, err := os.ReadFile("../../deployments/grafana/provisioning/dashboards/dashboard.yml")
 	if err != nil {
 		t.Fatalf("dashboard provisioning config not found: %v", err)
 	}
@@ -183,7 +183,7 @@ func TestGrafanaProvisioning_ConfigsExist(t *testing.T) {
 // TestDockerCompose_MinimalServices validates docker-compose.yml contains
 // the expected service definitions.
 func TestDockerCompose_MinimalServices(t *testing.T) {
-	data, err := os.ReadFile("docker-compose.yml")
+	data, err := os.ReadFile("../../docker-compose.yml")
 	if err != nil {
 		t.Fatalf("docker-compose.yml not found: %v", err)
 	}

@@ -1,10 +1,11 @@
-package utils
+// Package logentry defines the LogEntry data model and key masking utilities.
+//
+// LogEntry is the core data structure for the logging system, representing
+// a single proxy request with its metadata. MaskKey provides consistent
+// key sanitization across the entire codebase.
+package logentry
 
-import (
-	"net/http"
-	"strings"
-)
-
+// LogEntry represents a single proxy request log entry.
 type LogEntry struct {
 	Timestamp       string `json:"timestamp"`
 	Key             string `json:"key"`
@@ -22,21 +23,12 @@ type LogEntry struct {
 	OutputTokens    int    `json:"output_tokens,omitempty"`
 }
 
+// MaskKey returns a masked version of the API key for display purposes.
+// It shows the first 4 and last 4 characters, separated by "...".
+// Keys 12 characters or shorter are fully masked as "****".
 func MaskKey(key string) string {
 	if len(key) <= 12 {
 		return "****"
 	}
 	return key[:4] + "..." + key[len(key)-4:]
-}
-
-func CopyHeaders(dst, src http.Header) {
-	for k, vals := range src {
-		lower := strings.ToLower(k)
-		if lower == "x-admin-token" || lower == "cookie" || lower == "proxy-authorization" {
-			continue
-		}
-		for _, v := range vals {
-			dst.Add(k, v)
-		}
-	}
 }

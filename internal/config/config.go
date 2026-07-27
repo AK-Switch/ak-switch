@@ -10,7 +10,7 @@ import (
 	"reflect"
 	"strconv"
 
-	"akswitch/internal/utils"
+	"akswitch/internal/logentry"
 )
 
 // Config holds all application configuration.
@@ -129,13 +129,13 @@ func (c *Config) Validate() error {
 }
 
 // Sanitized returns a copy of the Config with sensitive fields masked.
-// API keys in Keys are masked via utils.MaskKey — first 4 chars + "..." + last 4 chars.
+// API keys in Keys are masked via logentry.MaskKey — first 4 chars + "..." + last 4 chars.
 // KeyNames are not sensitive and are copied as-is.
 func (c *Config) Sanitized() *Config {
 	s := *c // shallow copy
 	s.Keys = make([]string, len(c.Keys))
 	for i, k := range c.Keys {
-		s.Keys[i] = utils.MaskKey(k)
+		s.Keys[i] = logentry.MaskKey(k)
 	}
 	s.KeyNames = make([]string, len(c.KeyNames))
 	copy(s.KeyNames, c.KeyNames)

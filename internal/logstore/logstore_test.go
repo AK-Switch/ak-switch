@@ -3,13 +3,13 @@
 package logstore
 
 import (
-	"akswitch/internal/utils"
+	"akswitch/internal/logentry"
 	"testing"
 )
 
 func TestAppendAndSnapshot(t *testing.T) {
 	s := New(100)
-	entries := []utils.LogEntry{
+	entries := []logentry.LogEntry{
 		{Timestamp: "2025-01-01T00:00:00Z", Key: "sk-real-key-12345", KeyIndex: 1, Method: "POST", URL: "https://example.com/v1/chat", Status: 200, RequestBodySize: 100},
 		{Timestamp: "2025-01-01T00:00:01Z", Key: "another-key-67890", KeyIndex: 2, Method: "GET", URL: "https://example.com/v1/models", Status: 200, RequestBodySize: 0},
 		{Timestamp: "2025-01-01T00:00:02Z", Key: "test-key-abcde", KeyIndex: 3, Method: "POST", URL: "https://example.com/v1/completions", Status: 400, RequestBodySize: 50},
@@ -30,9 +30,9 @@ func TestAppendAndSnapshot(t *testing.T) {
 
 	// Check all fields match (Key will be masked)
 	expectedKeys := []string{
-		utils.MaskKey("sk-real-key-12345"),
-		utils.MaskKey("another-key-67890"),
-		utils.MaskKey("test-key-abcde"),
+		logentry.MaskKey("sk-real-key-12345"),
+		logentry.MaskKey("another-key-67890"),
+		logentry.MaskKey("test-key-abcde"),
 	}
 
 	for i, got := range snap {
@@ -63,7 +63,7 @@ func TestAppendAndSnapshot(t *testing.T) {
 func TestFIFOLimit(t *testing.T) {
 	s := New(3)
 	for i := 0; i < 5; i++ {
-		s.Append(utils.LogEntry{
+		s.Append(logentry.LogEntry{
 			Timestamp:       "entry",
 			Key:             "key",
 			KeyIndex:        i + 1,
@@ -95,7 +95,7 @@ func TestFIFOLimit(t *testing.T) {
 func TestClear(t *testing.T) {
 	s := New(10)
 	for i := 0; i < 3; i++ {
-		s.Append(utils.LogEntry{
+		s.Append(logentry.LogEntry{
 			Timestamp:       "entry",
 			Key:             "key",
 			KeyIndex:        i + 1,
@@ -129,9 +129,9 @@ func TestClear(t *testing.T) {
 func TestKeyMaskedOnAppend(t *testing.T) {
 	s := New(10)
 	rawKey := "sk-real-key-12345"
-	expectedMasked := utils.MaskKey(rawKey)
+	expectedMasked := logentry.MaskKey(rawKey)
 
-	s.Append(utils.LogEntry{
+	s.Append(logentry.LogEntry{
 		Timestamp:       "2025-01-01T00:00:00Z",
 		Key:             rawKey,
 		KeyIndex:        1,
@@ -162,7 +162,7 @@ func TestKeyMaskedOnAppend(t *testing.T) {
 
 func TestSnapshotSince(t *testing.T) {
 	s := New(100)
-	entries := []utils.LogEntry{
+	entries := []logentry.LogEntry{
 		{Timestamp: "2025-01-01T00:00:00Z", Key: "k1", KeyIndex: 1, Method: "GET", URL: "/", Status: 200, RequestBodySize: 0},
 		{Timestamp: "2025-01-01T00:00:01Z", Key: "k2", KeyIndex: 2, Method: "GET", URL: "/", Status: 200, RequestBodySize: 0},
 		{Timestamp: "2025-01-01T00:00:02Z", Key: "k3", KeyIndex: 3, Method: "GET", URL: "/", Status: 200, RequestBodySize: 0},
@@ -229,7 +229,7 @@ func TestOnAppendCallback(t *testing.T) {
 	}
 
 	// Append 1 entry — no overflow
-	s.Append(utils.LogEntry{Timestamp: "e1", Key: "k1", KeyIndex: 1, Method: "GET", URL: "/", Status: 200, RequestBodySize: 0})
+	s.Append(logentry.LogEntry{Timestamp: "e1", Key: "k1", KeyIndex: 1, Method: "GET", URL: "/", Status: 200, RequestBodySize: 0})
 	if len(calls) != 1 {
 		t.Fatalf("expected 1 callback call, got %d", len(calls))
 	}
@@ -238,8 +238,8 @@ func TestOnAppendCallback(t *testing.T) {
 	}
 
 	// Append 2 more — still no overflow
-	s.Append(utils.LogEntry{Timestamp: "e2", Key: "k2", KeyIndex: 2, Method: "GET", URL: "/", Status: 200, RequestBodySize: 0})
-	s.Append(utils.LogEntry{Timestamp: "e3", Key: "k3", KeyIndex: 3, Method: "GET", URL: "/", Status: 200, RequestBodySize: 0})
+	s.Append(logentry.LogEntry{Timestamp: "e2", Key: "k2", KeyIndex: 2, Method: "GET", URL: "/", Status: 200, RequestBodySize: 0})
+	s.Append(logentry.LogEntry{Timestamp: "e3", Key: "k3", KeyIndex: 3, Method: "GET", URL: "/", Status: 200, RequestBodySize: 0})
 	if len(calls) != 3 {
 		t.Fatalf("expected 3 callback calls, got %d", len(calls))
 	}
@@ -248,7 +248,7 @@ func TestOnAppendCallback(t *testing.T) {
 	}
 
 	// Append 4th entry — overflow (drop oldest)
-	s.Append(utils.LogEntry{Timestamp: "e4", Key: "k4", KeyIndex: 4, Method: "GET", URL: "/", Status: 200, RequestBodySize: 0})
+	s.Append(logentry.LogEntry{Timestamp: "e4", Key: "k4", KeyIndex: 4, Method: "GET", URL: "/", Status: 200, RequestBodySize: 0})
 	if len(calls) != 4 {
 		t.Fatalf("expected 4 callback calls, got %d", len(calls))
 	}
@@ -263,7 +263,7 @@ func TestOnAppendCallback(t *testing.T) {
 
 	// Verify OnAppend nil is safe
 	s.OnAppend = nil
-	s.Append(utils.LogEntry{Timestamp: "e5", Key: "k5", KeyIndex: 5, Method: "GET", URL: "/", Status: 200, RequestBodySize: 0})
+	s.Append(logentry.LogEntry{Timestamp: "e5", Key: "k5", KeyIndex: 5, Method: "GET", URL: "/", Status: 200, RequestBodySize: 0})
 	if len(calls) != 4 {
 		t.Errorf("expected no extra callback calls after setting nil, got %d", len(calls))
 	}

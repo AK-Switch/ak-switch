@@ -1,14 +1,14 @@
 //go:build integration
 
-package main
+package integration
 
 import (
 	"context"
 	"net"
 	"time"
 	"akswitch/internal/config"
-	"akswitch/internal/utils"
 	"akswitch/internal/keypool"
+	"akswitch/internal/logentry"
 	"akswitch/internal/server"
 	"bytes"
 	"encoding/json"
@@ -1868,7 +1868,7 @@ func TestConfigGet(t *testing.T) {
 		t.Fatalf("expected 3 keys, got %d", len(keys))
 	}
 
-	expectedMasked := utils.MaskKey("key-a")
+	expectedMasked := logentry.MaskKey("key-a")
 
 	for i, k := range keys {
 		masked, ok := k.(string)
@@ -1880,7 +1880,7 @@ func TestConfigGet(t *testing.T) {
 		if masked == "key-a" || masked == "key-b" || masked == "key-c" {
 			t.Errorf("keys[%d]=%q appears unmasked", i, masked)
 		}
-		// The masking format should match utils.MaskKey()
+		// The masking format should match logentry.MaskKey()
 		if i == 0 && masked != expectedMasked {
 			t.Errorf("keys[0]=%q, want masking like %q", masked, expectedMasked)
 		}
@@ -2007,8 +2007,8 @@ func TestKeysPost(t *testing.T) {
 	if key, ok := addResp["key"].(string); !ok || key == "" {
 		t.Errorf("expected non-empty masked key, got %v", addResp["key"])
 	}
-	if addResp["key"] != utils.MaskKey("new-test-key") {
-		t.Errorf("expected key=%q, got %q", utils.MaskKey("new-test-key"), addResp["key"])
+	if addResp["key"] != logentry.MaskKey("new-test-key") {
+		t.Errorf("expected key=%q, got %q", logentry.MaskKey("new-test-key"), addResp["key"])
 	}
 
 	// GET 验证 key 数量为 4

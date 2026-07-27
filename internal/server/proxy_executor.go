@@ -4,7 +4,7 @@ import (
 	"akswitch/internal/circuitbreaker"
 	"akswitch/internal/config"
 	akswitchmetrics "akswitch/internal/metrics"
-	"akswitch/internal/utils"
+	"akswitch/internal/logentry"
 	"bufio"
 	"bytes"
 	"encoding/json"
@@ -133,7 +133,7 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 			px.recordProxyMetrics(r.Method, "5xx", "", start)
 			return
 		}
-		utils.CopyHeaders(req.Header, r.Header)
+		copyHeaders(req.Header, r.Header)
 		req.Header.Set("Authorization", "Bearer "+key)
 
 		resp, err := client.Do(req)
@@ -191,7 +191,7 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 
 	// Retry exhausted
 	writeProxyError(w, http.StatusServiceUnavailable, ErrorExhaustedRetries, fmt.Sprintf("%s 重试已耗尽，所有 Key 无响应", ps.Name))
-	px.logs.Append(utils.LogEntry{
+	px.logs.Append(logentry.LogEntry{
 		Timestamp:       time.Now().Format(time.RFC3339),
 		Key:             lastKey,
 		KeyIndex:        lastIdx + 1,
@@ -286,7 +286,7 @@ func (px *ProxyExecutor) handleServerError(ps *ProviderState, idx int, resp *htt
 func (px *ProxyExecutor) handleNonRetryable(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, method, target string, bodyBytes []byte, attempt int, key string, ttfb time.Duration) {
 	defer resp.Body.Close()
 	keyName, _ := ps.Pool.Name(idx)
-	utils.CopyHeaders(w.Header(), resp.Header)
+	copyHeaders(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
 	io.Copy(w, resp.Body)
 
@@ -310,7 +310,7 @@ func (px *ProxyExecutor) handleSuccess(w http.ResponseWriter, ps *ProviderState,
 	pool.RecordSuccess(idx)
 	upCB.RecordSuccess()
 
-	utils.CopyHeaders(w.Header(), resp.Header)
+	copyHeaders(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
 
 	var inputTokens, outputTokens int
@@ -401,9 +401,9 @@ func (px *ProxyExecutor) handleSuccess(w http.ResponseWriter, ps *ProviderState,
 // ── Proxy Helpers ──────────────────────────────────────
 
 // buildLogEntry creates a structured LogEntry for proxy request logging.
-func (px *ProxyExecutor) buildLogEntry(ps *ProviderState, key string, idx int, method, target string, status int, bodySize int, start time.Time, attempt int, ttfbMs int64) utils.LogEntry {
+func (px *ProxyExecutor) buildLogEntry(ps *ProviderState, key string, idx int, method, target string, status int, bodySize int, start time.Time, attempt int, ttfbMs int64) logentry.LogEntry {
 	keyName, _ := ps.Pool.Name(idx)
-	return utils.LogEntry{
+	return logentry.LogEntry{
 		Timestamp:       time.Now().Format(time.RFC3339),
 		Key:             key,
 		KeyIndex:        idx + 1,

@@ -26,8 +26,8 @@ make test-all
 
 # 或单独运行
 go test -tags=unit -count=1 -short ./internal/...
-go test -tags=integration -count=1 -race ./
-go test -tags=e2e -count=1 -timeout=5m -race ./
+go test -tags=integration -count=1 -race ./test/integration/
+go test -tags=e2e -count=1 -timeout=5m -race ./test/integration/
 ```
 
 ## 开发环境

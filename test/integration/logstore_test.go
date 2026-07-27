@@ -1,17 +1,17 @@
 //go:build integration
 
-package main
+package integration
 
 import (
 	"testing"
 
 	"akswitch/internal/logstore"
-	"akswitch/internal/utils"
+	"akswitch/internal/logentry"
 )
 
 func TestAppendAndSnapshot(t *testing.T) {
 	s := logstore.New(100)
-	entries := []utils.LogEntry{
+	entries := []logentry.LogEntry{
 		{Timestamp: "2025-01-01T00:00:00Z", Key: "sk-real-key-12345", KeyIndex: 1, Method: "POST", URL: "https://example.com/v1/chat", Status: 200, RequestBodySize: 100},
 		{Timestamp: "2025-01-01T00:00:01Z", Key: "another-key-67890", KeyIndex: 2, Method: "GET", URL: "https://example.com/v1/models", Status: 200, RequestBodySize: 0},
 		{Timestamp: "2025-01-01T00:00:02Z", Key: "test-key-abcde", KeyIndex: 3, Method: "POST", URL: "https://example.com/v1/completions", Status: 400, RequestBodySize: 50},
@@ -32,9 +32,9 @@ func TestAppendAndSnapshot(t *testing.T) {
 
 	// Check all fields match (Key will be masked)
 	expectedKeys := []string{
-		utils.MaskKey("sk-real-key-12345"),
-		utils.MaskKey("another-key-67890"),
-		utils.MaskKey("test-key-abcde"),
+		logentry.MaskKey("sk-real-key-12345"),
+		logentry.MaskKey("another-key-67890"),
+		logentry.MaskKey("test-key-abcde"),
 	}
 
 	for i, got := range snap {
@@ -65,7 +65,7 @@ func TestAppendAndSnapshot(t *testing.T) {
 func TestFIFOLimit(t *testing.T) {
 	s := logstore.New(3)
 	for i := 0; i < 5; i++ {
-		s.Append(utils.LogEntry{
+		s.Append(logentry.LogEntry{
 			Timestamp:       "entry",
 			Key:             "key",
 			KeyIndex:        i + 1,
@@ -97,7 +97,7 @@ func TestFIFOLimit(t *testing.T) {
 func TestClear(t *testing.T) {
 	s := logstore.New(10)
 	for i := 0; i < 3; i++ {
-		s.Append(utils.LogEntry{
+		s.Append(logentry.LogEntry{
 			Timestamp:       "entry",
 			Key:             "key",
 			KeyIndex:        i + 1,
@@ -130,9 +130,9 @@ func TestClear(t *testing.T) {
 func TestKeyMaskedOnAppend(t *testing.T) {
 	s := logstore.New(10)
 	rawKey := "sk-real-key-12345"
-	expectedMasked := utils.MaskKey(rawKey)
+	expectedMasked := logentry.MaskKey(rawKey)
 
-	s.Append(utils.LogEntry{
+	s.Append(logentry.LogEntry{
 		Timestamp:       "2025-01-01T00:00:00Z",
 		Key:             rawKey,
 		KeyIndex:        1,

@@ -18,7 +18,7 @@
 - 重命名 `internal/cmd/` → `internal/cli/`，避免与根目录 `cmd/` 混淆
 - 重命名 `alvus-dashboard/` → `web/`，符合 Go 标准布局
 - 合并 `grafana/` + `prometheus/` → `deployments/`，统一部署配置
-- 审查报告移入 `docs/internal/` 归档
+- 审查报告移入 `docs/archive/` 归档
 - 修复 `release.yml` 中 ldflags 路径引用
 
 ### CLI 文档自动生成（PR #130）
@@ -119,7 +119,7 @@
 
 - `start_cmd_test.go` — 子进程模式测试 `akswitch start` TOML 启动全链路
 - `e2e_test.go` — 真实二进制全流程模拟（provider add → proxy → shutdown）
-- `docs/internal/critical-paths.md` — 所有 CLI 行为测试覆盖状态
+- `docs/archive/critical-paths.md` — 所有 CLI 行为测试覆盖状态
 - CLAUDE.md 新增"关键路径覆盖纪律"
 
 ## README 重写 + 文档拆分（PR #26）
@@ -130,7 +130,7 @@
 - `docs/api.md` — API 端点文档
 - `docs/architecture.md` — 熔断器架构
 - `docs/deployment.md` — Docker 部署与监控栈
-- 研究/分析文档移入 `docs/internal/`
+- 研究/分析文档移入 `docs/archive/`
 
 ## 代码仓库规范化（PR #51）
 
