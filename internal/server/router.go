@@ -326,6 +326,16 @@ func (pr *ProviderRouter) StartBackgroundTasks() {
 			defer pr.wg.Done()
 			ActiveHealthCheck(p.Config, p.Proxy, pr.metrics, p, pr.stop)
 		}()
+
+		// Start per-provider calibration ticker (if model is configured)
+		if p.Config.GenaiModel != "" {
+			pr.wg.Add(1)
+			go func() {
+				defer pr.wg.Done()
+				interval := time.Duration(p.Config.CalibrationIntervalSec) * time.Second
+				PeriodicCalibrator(pr.calibrator, p.Pool, p.Config.TargetBase, p.Config.GenaiModel, interval, pr.stop)
+			}()
+		}
 	}
 
 	// Router-level uptime gauge
