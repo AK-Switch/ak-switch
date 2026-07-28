@@ -22,11 +22,11 @@ services:
 
   # ── Prometheus ───────────────────────────────────────
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v2.53.0
     ports:
       - "${PROMETHEUS_PORT:-9090}:9090"
     volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deployments/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
     restart: unless-stopped
     networks:
@@ -36,7 +36,7 @@ services:
 
   # ── Grafana ──────────────────────────────────────────
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:11.1.0
     ports:
       - "${GRAFANA_PORT:-3001}:3000"
     environment:
@@ -48,7 +48,7 @@ services:
       - GF_INSTALL_PLUGINS=
     volumes:
       # Auto-provision Prometheus datasource and pre-built dashboard
-      - ./grafana/provisioning/:/etc/grafana/provisioning/:ro
+      - ./deployments/grafana/provisioning/:/etc/grafana/provisioning/:ro
       # Persistent storage for dashboards and settings
       - grafana-data:/var/lib/grafana
     restart: unless-stopped
