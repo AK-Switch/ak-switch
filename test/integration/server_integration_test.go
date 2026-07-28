@@ -1380,7 +1380,7 @@ func TestProxy_NonRetryable_DoesNotPenalizeKey(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // TestKeyPersistence_AddKeyRestart verifies that adding a key via API
-// persists it to disk and survives a restart.
+// persists it to the keyring and survives a restart.
 func TestKeyPersistence_AddKeyRestart(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -1388,16 +1388,12 @@ func TestKeyPersistence_AddKeyRestart(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	tmpDir := t.TempDir()
-	keysFile := filepath.Join(tmpDir, "keys.json")
-
 	cfg := &config.Config{
 		TargetBase:  upstream.URL,
 		GenaiBase:   upstream.URL,
 		Port:        0,
 		MaxRetries:  3,
 		CooldownSec: 60,
-		KeysFile:    keysFile,
 	}
 	pool := keypool.NewKeyPool([]string{"initial-key"}, nil)
 	pr := server.NewProviderRouter("")
@@ -1416,23 +1412,32 @@ func TestKeyPersistence_AddKeyRestart(t *testing.T) {
 
 	srv.Close()
 
-	data, err := os.ReadFile(keysFile)
+	// Verify keys are persisted via keyring
+	store, err := keypool.LoadStoreFromKeyring("test")
 	if err != nil {
-		t.Fatalf("read keys.json: %v", err)
+		t.Fatalf("LoadStoreFromKeyring: %v", err)
 	}
-	t.Logf("keys.json content: %s", string(data))
-
-	if !strings.Contains(string(data), "persistent-key") {
-		t.Errorf("keys.json should contain 'persistent-key', got: %s", string(data))
+	if store == nil {
+		t.Fatal("keys should be persisted to keyring after adding a key")
 	}
 
-	// Simulate a restart: load keys from file
-	fileKeys, fileNames, err := keypool.LoadKeysFromFile(keysFile)
-	if err != nil {
-		t.Fatalf("LoadKeysFromFile: %v", err)
+	found := false
+	for _, entry := range store.Keys {
+		if entry.Key == "persistent-key" {
+			found = true
+			break
+		}
 	}
-	if fileKeys == nil {
-		t.Fatal("keys.json should exist after first server wrote it")
+	if !found {
+		t.Errorf("persistent-key not found in keyring store, got keys: %v", store.Keys)
+	}
+
+	// Load keys from store for restart simulation
+	fileKeys := make([]string, len(store.Keys))
+	fileNames := make([]string, len(store.Keys))
+	for i, entry := range store.Keys {
+		fileKeys[i] = entry.Key
+		fileNames[i] = entry.Name
 	}
 
 	restoredPool := keypool.NewKeyPool(fileKeys, fileNames)
@@ -1442,7 +1447,6 @@ func TestKeyPersistence_AddKeyRestart(t *testing.T) {
 		Port:        0,
 		MaxRetries:  3,
 		CooldownSec: 60,
-		KeysFile:    keysFile,
 	}
 	pr2 := server.NewProviderRouter("")
 	pr2.AddProvider("test", newCfg, restoredPool)
@@ -1481,16 +1485,12 @@ func TestKeyPersistence_DeleteKeyRestart(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	tmpDir := t.TempDir()
-	keysFile := filepath.Join(tmpDir, "keys.json")
-
 	cfg := &config.Config{
 		TargetBase:  upstream.URL,
 		GenaiBase:   upstream.URL,
 		Port:        0,
 		MaxRetries:  3,
 		CooldownSec: 60,
-		KeysFile:    keysFile,
 	}
 	pool := keypool.NewKeyPool([]string{"key-a", "key-b"}, nil)
 	pr := server.NewProviderRouter("")
@@ -1513,23 +1513,23 @@ func TestKeyPersistence_DeleteKeyRestart(t *testing.T) {
 
 	srv.Close()
 
-	fileKeys, _, err := keypool.LoadKeysFromFile(keysFile)
+	// Verify keys are persisted via keyring
+	store, err := keypool.LoadStoreFromKeyring("test")
 	if err != nil {
-		t.Fatalf("LoadKeysFromFile: %v", err)
+		t.Fatalf("LoadStoreFromKeyring: %v", err)
 	}
-	if fileKeys == nil {
-		t.Fatal("keys.json should exist")
+	if store == nil {
+		t.Fatal("keys should be persisted to keyring after deletion")
 	}
-	t.Logf("keys after delete: %v", fileKeys)
 
-	for _, k := range fileKeys {
-		if k == "key-a" {
+	for _, entry := range store.Keys {
+		if entry.Key == "key-a" {
 			t.Error("key-a should not be in the persisted keys after deletion")
 		}
 	}
 	found := false
-	for _, k := range fileKeys {
-		if k == "key-b" {
+	for _, entry := range store.Keys {
+		if entry.Key == "key-b" {
 			found = true
 			break
 		}
@@ -1548,16 +1548,12 @@ func TestKeyPersistence_DisableKeyAndPersist(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	tmpDir := t.TempDir()
-	keysFile := filepath.Join(tmpDir, "keys.json")
-
 	cfg := &config.Config{
 		TargetBase:  upstream.URL,
 		GenaiBase:   upstream.URL,
 		Port:        0,
 		MaxRetries:  3,
 		CooldownSec: 60,
-		KeysFile:    keysFile,
 	}
 	pool := keypool.NewKeyPool([]string{"key-a", "key-b"}, nil)
 	pr := server.NewProviderRouter("")
@@ -1576,12 +1572,13 @@ func TestKeyPersistence_DisableKeyAndPersist(t *testing.T) {
 
 	srv.Close()
 
-	store, err := keypool.LoadFullStore(keysFile)
+	// Verify keys are persisted via keyring with disabled state
+	store, err := keypool.LoadStoreFromKeyring("test")
 	if err != nil {
-		t.Fatalf("LoadFullStore: %v", err)
+		t.Fatalf("LoadStoreFromKeyring: %v", err)
 	}
 	if store == nil {
-		t.Fatal("keys.json should exist")
+		t.Fatal("keys should be persisted to keyring after disabling a key")
 	}
 
 	t.Logf("store contents: %+v", store.Keys)
@@ -1602,16 +1599,12 @@ func TestKeyEncryption_NoEncryption_BackwardCompatible(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	tmpDir := t.TempDir()
-	keysFile := filepath.Join(tmpDir, "keys.json")
-
 	cfg := &config.Config{
 		TargetBase:  upstream.URL,
 		GenaiBase:   upstream.URL,
 		Port:        0,
 		MaxRetries:  3,
 		CooldownSec: 60,
-		KeysFile:    keysFile,
 	}
 	pool := keypool.NewKeyPool([]string{"plaintext-key-a"}, nil)
 	pr := server.NewProviderRouter("")
@@ -1627,13 +1620,30 @@ func TestKeyEncryption_NoEncryption_BackwardCompatible(t *testing.T) {
 	resp.Body.Close()
 	srv.Close()
 
-	// Read raw file — keys should be plaintext
-	data, err := os.ReadFile(keysFile)
+	// Verify keys are persisted via keyring
+	store, err := keypool.LoadStoreFromKeyring("test")
 	if err != nil {
-		t.Fatalf("read keys.json: %v", err)
+		t.Fatalf("LoadStoreFromKeyring: %v", err)
 	}
-	if !strings.Contains(string(data), "plaintext-key-a") {
-		t.Error("plaintext key 'plaintext-key-a' not found in unencrypted file")
+	if store == nil {
+		t.Fatal("keys should be persisted to keyring")
+	}
+
+	foundA := false
+	foundB := false
+	for _, entry := range store.Keys {
+		if entry.Key == "plaintext-key-a" {
+			foundA = true
+		}
+		if entry.Key == "plaintext-key-b" {
+			foundB = true
+		}
+	}
+	if !foundA {
+		t.Error("plaintext-key-a not found in keyring store")
+	}
+	if !foundB {
+		t.Error("plaintext-key-b not found in keyring store")
 	}
 }
 
@@ -1650,9 +1660,23 @@ func TestLogEntry_HasNewFields(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	srv := setupServer(t, upstream, []string{"test-key-a", "test-key-b"}, 10, 60)
+	logFile := filepath.Join(t.TempDir(), "test.log")
+	cfg := &config.Config{
+		TargetBase:  upstream.URL,
+		GenaiBase:   upstream.URL,
+		Port:        0,
+		MaxRetries:  10,
+		CooldownSec: 60,
+	}
+	pool := keypool.NewKeyPool([]string{"test-key-a", "test-key-b"}, nil)
+	pr := server.NewProviderRouter("")
+	pr.LogManager().InitFileHandler(logFile, 10, 1)
+	pr.LogManager().ApplyLevel("debug")
+	pr.AddProvider("test", cfg, pool)
+	srv := httptest.NewServer(pr.Handler())
 	defer srv.Close()
 
+	defer pr.LogManager().CloseFileHandler()
 	resp, err := http.Get(srv.URL + "/test/v1/models")
 	if err != nil {
 		t.Fatalf("GET /v1/models: %v", err)
@@ -1700,9 +1724,23 @@ func TestLogEntry_ExhaustionHas503(t *testing.T) {
 	defer upstream.Close()
 
 	// MaxRetries=2, 3 keys, all 429 -> 503
-	srv := setupServer(t, upstream, []string{"key-a", "key-b", "key-c"}, 2, 2)
+	logFile := filepath.Join(t.TempDir(), "test.log")
+	cfg := &config.Config{
+		TargetBase:  upstream.URL,
+		GenaiBase:   upstream.URL,
+		Port:        0,
+		MaxRetries:  2,
+		CooldownSec: 2,
+	}
+	pool := keypool.NewKeyPool([]string{"key-a", "key-b", "key-c"}, nil)
+	pr := server.NewProviderRouter("")
+	pr.LogManager().InitFileHandler(logFile, 10, 1)
+	pr.LogManager().ApplyLevel("debug")
+	pr.AddProvider("test", cfg, pool)
+	srv := httptest.NewServer(pr.Handler())
 	defer srv.Close()
 
+	defer pr.LogManager().CloseFileHandler()
 	resp, err := http.Get(srv.URL + "/test/v1/models")
 	if err != nil {
 		t.Fatalf("GET /v1/models: %v", err)
@@ -1757,9 +1795,23 @@ func TestLogEntry_CLIFormat(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	srv := setupServer(t, upstream, []string{"test-key-a", "test-key-b"}, 10, 60)
+	logFile := filepath.Join(t.TempDir(), "test.log")
+	cfg := &config.Config{
+		TargetBase:  upstream.URL,
+		GenaiBase:   upstream.URL,
+		Port:        0,
+		MaxRetries:  10,
+		CooldownSec: 60,
+	}
+	pool := keypool.NewKeyPool([]string{"test-key-a", "test-key-b"}, nil)
+	pr := server.NewProviderRouter("")
+	pr.LogManager().InitFileHandler(logFile, 10, 1)
+	pr.LogManager().ApplyLevel("debug")
+	pr.AddProvider("test", cfg, pool)
+	srv := httptest.NewServer(pr.Handler())
 	defer srv.Close()
 
+	defer pr.LogManager().CloseFileHandler()
 	resp, err := http.Get(srv.URL + "/test/v1/models")
 	if err != nil {
 		t.Fatalf("GET /v1/models: %v", err)
@@ -2256,7 +2308,7 @@ func TestStatsHandler(t *testing.T) {
 		t.Fatalf("decode response: %v", err)
 	}
 
-	fields := []string{"total_requests", "successful_requests", "failed_requests", "success_rate", "active_keys", "cooling_keys", "disabled_keys", "uptime_seconds"}
+	fields := []string{"active_keys", "cooling_keys", "disabled_keys", "uptime_seconds"}
 	for _, f := range fields {
 		if _, ok := body[f]; !ok {
 			t.Errorf("missing field %q in response", f)
@@ -3700,69 +3752,6 @@ func TestTokenUsageMetrics(t *testing.T) {
 	}
 }
 
-// TestLogStoreMetrics verifies that logstore metrics are exposed via /metrics
-// after requests are processed.
-func TestLogStoreMetrics(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, `{"id": "test"}`)
-	}))
-	defer upstream.Close()
-
-	cfg := &config.Config{
-		TargetBase:             upstream.URL,
-		GenaiBase:              upstream.URL,
-		Port:                   0,
-		MaxRetries:             1,
-		CooldownSec:            60,
-		UpstreamCBThreshold:    5,
-		CBResetSec:             30,
-		HealthCheckIntervalSec: 30,
-		HealthCheckPath:        "/health",
-		HealthCheckTimeoutSec:  5,
-	}
-	pool := keypool.NewKeyPool([]string{"test-key-1234567890"}, nil)
-	pr := server.NewProviderRouter("")
-	pr.AddProvider("test", cfg, pool)
-	srv := httptest.NewServer(pr.Handler())
-	defer srv.Close()
-
-	// Send a few requests to generate log entries
-	for i := 0; i < 3; i++ {
-		resp, err := http.Get(srv.URL + "/test/v1/models")
-		if err != nil {
-			t.Fatalf("request %d: %v", i, err)
-		}
-		resp.Body.Close()
-	}
-
-	// Check /metrics for logstore metrics
-	metricsResp, err := http.Get(srv.URL + "/metrics")
-	if err != nil {
-		t.Fatalf("GET /metrics: %v", err)
-	}
-	defer metricsResp.Body.Close()
-	body, _ := io.ReadAll(metricsResp.Body)
-	metricsBody := string(body)
-
-	// Verify logstore metrics are present
-	if !strings.Contains(metricsBody, `akswitch_logstore_entries_total`) {
-		t.Error("logstore_entries_total metric not found in /metrics output")
-	}
-	if !strings.Contains(metricsBody, `akswitch_logstore_fill_ratio`) {
-		t.Error("logstore_fill_ratio metric not found in /metrics output")
-	}
-
-	// Verify entries counter is > 0 (should be 3 from our requests)
-	if !strings.Contains(metricsBody, `akswitch_logstore_entries_total 3`) {
-		t.Logf("metrics body: %s", metricsBody)
-	}
-
-	// logstore_dropped_total should be 0 since we only sent 3 entries (capacity is 10000)
-	if !strings.Contains(metricsBody, `akswitch_logstore_dropped_total 0`) {
-		t.Logf("metrics body: %s", metricsBody)
-	}
-}
 
 // TestMetricsEndpointAccessible verifies the /metrics endpoint is accessible
 // and returns valid Prometheus text format.
@@ -3817,18 +3806,7 @@ func TestMetricsEndpointAccessible(t *testing.T) {
 	// Debug: log the metrics body
 	t.Logf("Metrics body for debugging: %s", metricsBody)
 
-	// Verify the new metrics appear in the output (CounterVec metrics like
-	// akswitch_requests_total only appear after their first increment)
-	expectedMetrics := []string{
-		"akswitch_logstore_entries_total",
-		"akswitch_logstore_dropped_total",
-		"akswitch_logstore_fill_ratio",
-	}
-	for _, name := range expectedMetrics {
-		if !strings.Contains(metricsBody, name) {
-			t.Errorf("expected metric %q not found in /metrics output", name)
-		}
-	}
+
 }
 
 // TestRetryMetrics verifies that retry counters are exposed via /metrics

@@ -222,6 +222,12 @@ func RemoveKeys(provider string) error {
 	return removeFromKeyring(provider)
 }
 
+// LoadStoreFromKeyring loads a provider's full KeyStore from the system keyring.
+// Returns (nil, nil) if the provider has no stored keys.
+func LoadStoreFromKeyring(provider string) (*KeyStore, error) {
+	return loadFromKeyring(provider)
+}
+
 // keysFromStore extracts key and name slices from a KeyStore.
 func keysFromStore(store *KeyStore) (keys, names []string) {
 	keys = make([]string, len(store.Keys))

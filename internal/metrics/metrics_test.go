@@ -53,52 +53,7 @@ func TestTokenUsageCounterRegistration(t *testing.T) {
 	}
 }
 
-func TestLogStoreMetricsRegistration(t *testing.T) {
-	reg, m := NewRegistry()
-	if m.LogStoreEntries == nil {
-		t.Fatal("LogStoreEntries counter should not be nil")
-	}
-	if m.LogStoreDropped == nil {
-		t.Fatal("LogStoreDropped counter should not be nil")
-	}
-	if m.LogStoreFillRatio == nil {
-		t.Fatal("LogStoreFillRatio gauge should not be nil")
-	}
 
-	// Increment counters and set gauge
-	m.LogStoreEntries.Inc()
-	m.LogStoreEntries.Inc()
-	m.LogStoreDropped.Inc()
-	m.LogStoreFillRatio.Set(0.75)
-
-	// Read back via registry
-	metrics, err := reg.Gather()
-	if err != nil {
-		t.Fatalf("Gather failed: %v", err)
-	}
-
-	checks := map[string]float64{
-		"akswitch_logstore_entries_total": 2,
-		"akswitch_logstore_dropped_total": 1,
-	}
-	for _, mf := range metrics {
-		name := mf.GetName()
-		if expected, ok := checks[name]; ok {
-			for _, m := range mf.GetMetric() {
-				if m.GetCounter().GetValue() != expected {
-					t.Errorf("%s = %v, want %v", name, m.GetCounter().GetValue(), expected)
-				}
-			}
-		}
-		if name == "akswitch_logstore_fill_ratio" {
-			for _, m := range mf.GetMetric() {
-				if m.GetGauge().GetValue() != 0.75 {
-					t.Errorf("fill_ratio = %v, want 0.75", m.GetGauge().GetValue())
-				}
-			}
-		}
-	}
-}
 
 func TestRetryCounterRegistration(t *testing.T) {
 	reg, m := NewRegistry()

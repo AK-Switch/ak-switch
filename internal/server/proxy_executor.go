@@ -4,7 +4,6 @@ import (
 	"akswitch/internal/circuitbreaker"
 	"akswitch/internal/config"
 	akswitchmetrics "akswitch/internal/metrics"
-	"akswitch/internal/logentry"
 	"bufio"
 	"bytes"
 	"encoding/json"
@@ -17,7 +16,6 @@ import (
 	"strings"
 	"time"
 
-	"akswitch/internal/logstore"
 	"akswitch/internal/tokenestimator"
 	"akswitch/internal/tracker"
 )
@@ -27,15 +25,13 @@ import (
 // It is owned by ProviderRouter and receives per-request state via ProviderState.
 type ProxyExecutor struct {
 	metrics    *akswitchmetrics.Metrics
-	logs       *logstore.LogStore
 	calibrator *tracker.Calibrator
 }
 
 // NewProxyExecutor creates a ProxyExecutor with the given dependencies.
-func NewProxyExecutor(metrics *akswitchmetrics.Metrics, logs *logstore.LogStore, calibrator *tracker.Calibrator) *ProxyExecutor {
+func NewProxyExecutor(metrics *akswitchmetrics.Metrics, calibrator *tracker.Calibrator) *ProxyExecutor {
 	return &ProxyExecutor{
 		metrics:    metrics,
-		logs:       logs,
 		calibrator: calibrator,
 	}
 }
@@ -49,9 +45,6 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 	upCB := ps.Proxy.upCB
 
 	start := time.Now()
-	var lastKey string
-	var lastIdx int
-	var lastKeyName string
 
 	bodyBytes, err := readRequestBody(w, r)
 	if err != nil {
@@ -100,9 +93,6 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 			time.Sleep(wait + jitter)
 			continue
 		}
-		lastKey = key
-		lastIdx = idx
-		lastKeyName, _ = pool.Name(lastIdx)
 		if !pool.CB(idx).Allow() {
 			pool.Release(idx) // release since we're skipping this key
 			remaining := pool.CB(idx).CooldownRemaining()
@@ -155,21 +145,21 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 		// ── Response status dispatch ──
 		switch {
 		case resp.StatusCode == http.StatusTooManyRequests:
-			px.logs.Append(px.buildLogEntry(ps, key, idx, r.Method, target, resp.StatusCode, len(bodyBytes), start, attempt, ttfb.Milliseconds()))
+			
 			if px.handleRateLimited(w, ps, idx, resp, cfg, start, r.Method, target, bodyBytes) {
 				return
 			}
 			continue
 
 		case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
-			px.logs.Append(px.buildLogEntry(ps, key, idx, r.Method, target, resp.StatusCode, len(bodyBytes), start, attempt, ttfb.Milliseconds()))
+			
 			if px.handleAuthRejected(w, ps, idx, resp, start, r.Method, target, bodyBytes) {
 				return
 			}
 			continue
 
 		case resp.StatusCode == http.StatusBadGateway || resp.StatusCode == http.StatusServiceUnavailable:
-			px.logs.Append(px.buildLogEntry(ps, key, idx, r.Method, target, resp.StatusCode, len(bodyBytes), start, attempt, ttfb.Milliseconds()))
+			
 			px.handleServerError(ps, idx, resp, attempt)
 			continue
 
@@ -178,7 +168,7 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 			return
 
 		case resp.StatusCode >= 500:
-			px.logs.Append(px.buildLogEntry(ps, key, idx, r.Method, target, resp.StatusCode, len(bodyBytes), start, attempt, ttfb.Milliseconds()))
+			
 			px.handleServerError(ps, idx, resp, attempt)
 			continue
 
@@ -191,21 +181,16 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 
 	// Retry exhausted
 	writeProxyError(w, http.StatusServiceUnavailable, ErrorExhaustedRetries, fmt.Sprintf("%s 重试已耗尽，所有 Key 无响应", ps.Name))
-	px.logs.Append(logentry.LogEntry{
-		Timestamp:       time.Now().Format(time.RFC3339),
-		Key:             lastKey,
-		KeyIndex:        lastIdx + 1,
-		KeyName:         lastKeyName,
-		Method:          r.Method,
-		URL:             target,
-		Status:          http.StatusServiceUnavailable,
-		RequestBodySize: len(bodyBytes),
-		DurationMs:      time.Since(start).Milliseconds(),
-		Retries:         cfg.MaxRetries,
-		Provider:        ps.Name,
-	})
+
 	px.metrics.RetryCount.WithLabelValues(ps.Name).Add(float64(cfg.MaxRetries))
-	slog.Debug("proxy response debug", "status", 503, "duration_ms", time.Since(start).Seconds()*1000, "retries", cfg.MaxRetries)
+	slog.Warn("proxy retry exhausted",
+			"provider", ps.Name,
+			"method", r.Method,
+			"url", target,
+			"status", 503,
+			"retry", cfg.MaxRetries,
+			"duration_ms", time.Since(start).Milliseconds(),
+		)
 	px.recordProxyMetrics(r.Method, "5xx", "", start)
 }
 
@@ -291,7 +276,7 @@ func (px *ProxyExecutor) handleNonRetryable(w http.ResponseWriter, ps *ProviderS
 	w.WriteHeader(resp.StatusCode)
 	io.Copy(w, resp.Body)
 
-	px.logs.Append(px.buildLogEntry(ps, key, idx, method, target, resp.StatusCode, len(bodyBytes), start, attempt, ttfb.Milliseconds()))
+	
 	slog.Warn("non-retryable client error", "provider", ps.Name, "method", method, "url", target, "status", resp.StatusCode, "key_name", keyName)
 	slog.Debug("proxy response debug", "status", resp.StatusCode, "duration_ms", time.Since(start).Seconds()*1000, "retries", attempt+1)
 	px.recordProxyMetrics(method, "4xx", fmt.Sprintf("%d", idx), start)
@@ -366,10 +351,6 @@ func (px *ProxyExecutor) handleSuccess(w http.ResponseWriter, ps *ProviderState,
 	}
 
 	pool.IncrementRequestCount(idx)
-	entry := px.buildLogEntry(ps, key, idx, method, target, resp.StatusCode, len(bodyBytes), start, attempt, ttfb.Milliseconds())
-	entry.InputTokens = inputTokens
-	entry.OutputTokens = outputTokens
-	px.logs.Append(entry)
 	if inputTokens > 0 {
 		px.metrics.TokenUsage.WithLabelValues(ps.Name, "input").Add(float64(inputTokens))
 	}
@@ -401,24 +382,6 @@ func (px *ProxyExecutor) handleSuccess(w http.ResponseWriter, ps *ProviderState,
 
 // ── Proxy Helpers ──────────────────────────────────────
 
-// buildLogEntry creates a structured LogEntry for proxy request logging.
-func (px *ProxyExecutor) buildLogEntry(ps *ProviderState, key string, idx int, method, target string, status int, bodySize int, start time.Time, attempt int, ttfbMs int64) logentry.LogEntry {
-	keyName, _ := ps.Pool.Name(idx)
-	return logentry.LogEntry{
-		Timestamp:       time.Now().Format(time.RFC3339),
-		Key:             key,
-		KeyIndex:        idx + 1,
-		KeyName:         keyName,
-		Method:          method,
-		URL:             target,
-		Status:          status,
-		RequestBodySize: bodySize,
-		DurationMs:      time.Since(start).Milliseconds(),
-		TtfbMs:          ttfbMs,
-		Retries:         attempt,
-		Provider:        ps.Name,
-	}
-}
 
 // recordProxyMetrics records request total count and duration metrics.
 func (px *ProxyExecutor) recordProxyMetrics(method, statusClass, keyIndex string, start time.Time) {

@@ -13,7 +13,7 @@ import (
 
 	"akswitch/internal/config"
 	"akswitch/internal/keypool"
-	"akswitch/internal/logstore"
+	
 	"akswitch/internal/tracker"
 	akswitchmetrics "akswitch/internal/metrics"
 
@@ -67,12 +67,10 @@ func (ps *ProviderState) SetLastHealthCheck(ok bool) {
 	ps.lastHealthCheckOK = ok
 }
 
-// PersistKeys saves the current key pool state to the keys file.
-// Called after key mutations through the management API.
+// PersistKeys saves the current key pool state (including disabled state)
+// to the system keyring. Called after key mutations through the management API
+// and proxy flow (401/403 disable).
 func (ps *ProviderState) PersistKeys() {
-	if ps.Config.KeysFile == "" {
-		return
-	}
 	keys := ps.Pool.Keys()
 	entries := make([]keypool.KeyEntry, len(keys))
 	for i := range keys {
@@ -83,8 +81,8 @@ func (ps *ProviderState) PersistKeys() {
 			Disabled: ps.Pool.IsDisabled(i),
 		}
 	}
-	if err := keypool.SaveFullStore(ps.Config.KeysFile, &keypool.KeyStore{Keys: entries}); err != nil {
-		slog.Error("failed to persist keys", "path", ps.Config.KeysFile, "error", err)
+	if err := keypool.SaveKeys(ps.Name, &keypool.KeyStore{Keys: entries}); err != nil {
+		slog.Error("failed to persist keys to keyring", "provider", ps.Name, "error", err)
 	}
 }
 
@@ -94,7 +92,7 @@ type ProviderRouter struct {
 	proxy           *http.Server
 	listener        net.Listener
 	providers       map[string]*ProviderState
-	logs            *logstore.LogStore
+	
 	startTime       time.Time
 	metrics         *akswitchmetrics.Metrics
 	metricsRegistry *prometheus.Registry
@@ -119,7 +117,6 @@ func NewProviderRouter(dashboardHTML string) *ProviderRouter {
 	reg, m := akswitchmetrics.NewRegistry()
 	pr := &ProviderRouter{
 		providers:       make(map[string]*ProviderState),
-		logs:            logstore.New(10000),
 		startTime:       time.Now(),
 		metrics:         m,
 		metricsRegistry: reg,
@@ -128,16 +125,9 @@ func NewProviderRouter(dashboardHTML string) *ProviderRouter {
 		logManager:      NewLogManager(),
 	}
 	pr.taskManager = NewBackgroundTaskManager(m)
-	pr.logs.OnAppend = func(prevLen, newLen, maxLen int) {
-		pr.metrics.LogStoreEntries.Inc()
-		if dropped := (prevLen + 1) - newLen; dropped > 0 {
-			pr.metrics.LogStoreDropped.Add(float64(dropped))
-		}
-		pr.metrics.LogStoreFillRatio.Set(float64(newLen) / float64(maxLen))
-	}
 
 	// Initialize proxy executor with shared dependencies
-	pr.proxyExecutor = NewProxyExecutor(m, pr.logs, pr.calibrator)
+	pr.proxyExecutor = NewProxyExecutor(m, pr.calibrator)
 
 	// Initialize key operation handlers via factory function
 	pr.disableKeyHandler = pr.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {

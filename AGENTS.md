@@ -26,8 +26,7 @@ go test -tags=e2e -run TestName -timeout=5m -race ./test/integration/  # E2E
 cmd/akswitch/main.go           # 入口
 internal/
   cli/                         # Cobra CLI 命令层
-    root.go, start.go, logs.go # 根命令、启动、日志
-    config.go, key.go, ...     # 配置/密钥/Provider 管理
+    root.go, start.go, config.go, key.go, ... # 根命令、启动、配置/密钥/Provider 管理
     selfrestart.go             # 二进制自监控重启
   server/                      # HTTP 代理 + 管理 API
     proxy_executor.go          # 代理生命周期（Key 选择→转发→重试→Token 计量）
@@ -38,7 +37,7 @@ internal/
   keypool/                     # API Key 轮转（round-robin + cooldown）
   circuitbreaker/              # 两层熔断（Key 级 + 上游级）
   config/                      # TOML 配置加载
-  logstore/                    # 请求日志环形缓冲区
+  
   metrics/                     # Prometheus 指标
   tracker/                     # Token 校准器（Calibrator）
   tokenestimator/              # tiktoken 估算
@@ -56,7 +55,7 @@ See [docs/architecture.md](./docs/architecture.md) for detailed design docs.
 - **ProviderRouter + ProxyExecutor** — 单端口 `/{provider}/...` 路由，ProxyExecutor 执行完整生命周期（Key 选择→转发→重试→Token 计量）
 - **两层熔断** — Key 级（429 退避）→ 上游级（502/503 熔断）
 - **配置热重载** — 监听 `.env` 变更，热更新 key pool，不停机
-- **双数据通道** — Prometheus 指标（`/metrics`，聚合趋势）与请求日志（`/logs`，单请求详情）解耦
+- **单数据通道** — Prometheus 指标（`/metrics`，聚合趋势）与请求日志（`/logs`，从 JSON 日志文件读取）
 - **启动 key 探针** — 启动时检测 401/403 自动禁用无效 key
 - **Token 校准** — Calibrator 滑动窗口，比较 tiktoken 估算 vs 实际值
 
@@ -171,10 +170,11 @@ akswitch start --dev --provider=sensenova
 
 ## 日志分析
 
-用增量 checkpoint 模式，禁止全量扫描：
-1. 读上次分析的 checkpoint
-2. `akswitch logs --since=<checkpoint>` 只拉新日志
-3. 分析完成后更新 checkpoint
+日志文件为 JSON 格式（每行一条），使用标准工具分析：
+
+- `tail -f <log_file>` — 实时查看日志
+- `grep '"proxy success"' <log_file>` — 筛选请求日志
+- `jq 'select(.status >= 400)' <log_file>` — 筛选失败请求
 
 ## Token 计量
 
