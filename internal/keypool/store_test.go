@@ -273,6 +273,7 @@ func TestLoadKeysFromStore_CustomFile(t *testing.T) {
 	dir := t.TempDir()
 	config.ConfigDir = dir
 	defer func() { config.ConfigDir = "" }()
+	RemoveKeys("test")
 
 	// Write a custom keys file
 	keysPath := filepath.Join(dir, "my-keys.json")
@@ -308,6 +309,8 @@ func TestLoadKeysFromStore_CustomFile(t *testing.T) {
 
 func TestLoadKeysFromStore_CustomFileNotExist(t *testing.T) {
 
+	RemoveKeys("test")
+
 	dir := t.TempDir()
 	config.ConfigDir = dir
 	defer func() { config.ConfigDir = "" }()
@@ -327,6 +330,8 @@ func TestLoadKeysFromStore_CustomFileNotExist(t *testing.T) {
 
 func TestLoadKeysFromStore_NoSource(t *testing.T) {
 
+	RemoveKeys("test")
+
 	dir := t.TempDir()
 	config.ConfigDir = dir
 	defer func() { config.ConfigDir = "" }()
@@ -343,3 +348,4 @@ func TestLoadKeysFromStore_NoSource(t *testing.T) {
 		t.Errorf("names = %v, want nil", names)
 	}
 }
+

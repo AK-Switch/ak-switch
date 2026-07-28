@@ -183,7 +183,14 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 	writeProxyError(w, http.StatusServiceUnavailable, ErrorExhaustedRetries, fmt.Sprintf("%s 重试已耗尽，所有 Key 无响应", ps.Name))
 
 	px.metrics.RetryCount.WithLabelValues(ps.Name).Add(float64(cfg.MaxRetries))
-	slog.Debug("proxy response debug", "status", 503, "duration_ms", time.Since(start).Seconds()*1000, "retries", cfg.MaxRetries)
+	slog.Warn("proxy retry exhausted",
+			"provider", ps.Name,
+			"method", r.Method,
+			"url", target,
+			"status", 503,
+			"retry", cfg.MaxRetries,
+			"duration_ms", time.Since(start).Milliseconds(),
+		)
 	px.recordProxyMetrics(r.Method, "5xx", "", start)
 }
 
