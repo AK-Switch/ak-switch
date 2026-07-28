@@ -141,14 +141,8 @@ func TestFullE2E_RealUserSimulation(t *testing.T) {
 	}
 
 	// ── 9. akswitch logs ──────────────────────────────────
-	t.Log("9. akswitch logs")
-	logsOut, _ := exec.Command(bin, "logs").CombinedOutput()
-	logsStr := string(bytes.TrimSpace(logsOut))
-	if logsStr != "" {
-		t.Logf("   output:\n%s", logsStr)
-	} else {
-		t.Log("   (no output)")
-	}
+	t.Log("9. akswitch logs — removed (ring buffer eliminated)")
+	// The 'akswitch logs' command was removed in favor of reading the log file directly.
 
 	// ── 10. akswitch stop ─────────────────────────────────
 	t.Log("10. akswitch stop")

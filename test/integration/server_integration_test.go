@@ -3700,69 +3700,6 @@ func TestTokenUsageMetrics(t *testing.T) {
 	}
 }
 
-// TestLogStoreMetrics verifies that logstore metrics are exposed via /metrics
-// after requests are processed.
-func TestLogStoreMetrics(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, `{"id": "test"}`)
-	}))
-	defer upstream.Close()
-
-	cfg := &config.Config{
-		TargetBase:             upstream.URL,
-		GenaiBase:              upstream.URL,
-		Port:                   0,
-		MaxRetries:             1,
-		CooldownSec:            60,
-		UpstreamCBThreshold:    5,
-		CBResetSec:             30,
-		HealthCheckIntervalSec: 30,
-		HealthCheckPath:        "/health",
-		HealthCheckTimeoutSec:  5,
-	}
-	pool := keypool.NewKeyPool([]string{"test-key-1234567890"}, nil)
-	pr := server.NewProviderRouter("")
-	pr.AddProvider("test", cfg, pool)
-	srv := httptest.NewServer(pr.Handler())
-	defer srv.Close()
-
-	// Send a few requests to generate log entries
-	for i := 0; i < 3; i++ {
-		resp, err := http.Get(srv.URL + "/test/v1/models")
-		if err != nil {
-			t.Fatalf("request %d: %v", i, err)
-		}
-		resp.Body.Close()
-	}
-
-	// Check /metrics for logstore metrics
-	metricsResp, err := http.Get(srv.URL + "/metrics")
-	if err != nil {
-		t.Fatalf("GET /metrics: %v", err)
-	}
-	defer metricsResp.Body.Close()
-	body, _ := io.ReadAll(metricsResp.Body)
-	metricsBody := string(body)
-
-	// Verify logstore metrics are present
-	if !strings.Contains(metricsBody, `akswitch_logstore_entries_total`) {
-		t.Error("logstore_entries_total metric not found in /metrics output")
-	}
-	if !strings.Contains(metricsBody, `akswitch_logstore_fill_ratio`) {
-		t.Error("logstore_fill_ratio metric not found in /metrics output")
-	}
-
-	// Verify entries counter is > 0 (should be 3 from our requests)
-	if !strings.Contains(metricsBody, `akswitch_logstore_entries_total 3`) {
-		t.Logf("metrics body: %s", metricsBody)
-	}
-
-	// logstore_dropped_total should be 0 since we only sent 3 entries (capacity is 10000)
-	if !strings.Contains(metricsBody, `akswitch_logstore_dropped_total 0`) {
-		t.Logf("metrics body: %s", metricsBody)
-	}
-}
 
 // TestMetricsEndpointAccessible verifies the /metrics endpoint is accessible
 // and returns valid Prometheus text format.
