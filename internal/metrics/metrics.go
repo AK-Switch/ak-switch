@@ -17,11 +17,7 @@ type Metrics struct {
 	HealthCheckProbes   *prometheus.CounterVec // akswitch_healthcheck_probes_total, labels: {"provider","status":"ok"|"fail"}
 	HealthCheckDuration *prometheus.HistogramVec // akswitch_healthcheck_duration_seconds, labels: {"provider"}
 
-	// LogStore metrics
-	LogStoreEntries   prometheus.Counter // akswitch_logstore_entries_total
-	LogStoreDropped   prometheus.Counter // akswitch_logstore_dropped_total
-	LogStoreFillRatio prometheus.Gauge   // akswitch_logstore_fill_ratio
-
+	
 	// Token usage metrics
 	TokenUsage *prometheus.CounterVec // akswitch_token_usage_total, labels: {"provider", "direction"}
 
@@ -94,28 +90,7 @@ func NewRegistry() (*prometheus.Registry, *Metrics) {
 			},
 			[]string{"provider"},
 		),
-		LogStoreEntries: factory.NewCounter(
-			prometheus.CounterOpts{
-				Namespace: "akswitch",
-				Name:      "logstore_entries_total",
-				Help:      "Total number of log entries appended.",
-			},
-		),
-		LogStoreDropped: factory.NewCounter(
-			prometheus.CounterOpts{
-				Namespace: "akswitch",
-				Name:      "logstore_dropped_total",
-				Help:      "Total number of log entries dropped due to ring buffer overflow.",
-			},
-		),
-		LogStoreFillRatio: factory.NewGauge(
-			prometheus.GaugeOpts{
-				Namespace: "akswitch",
-				Name:      "logstore_fill_ratio",
-				Help:      "Current fill ratio of the log ring buffer (0.0 to 1.0).",
-			},
-		),
-		TokenUsage: factory.NewCounterVec(
+				TokenUsage: factory.NewCounterVec(
 			prometheus.CounterOpts{
 				Namespace: "akswitch",
 				Name:      "token_usage_total",

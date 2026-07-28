@@ -64,7 +64,7 @@ func (lm *LogManager) BuildHandler(level string) slog.Handler {
 
 	stderrHandler := newHandler(os.Stderr, &lm.level, lm.compact, lm.singleProvider)
 	if lm.fileWriter != nil {
-		fileHandler := slog.NewTextHandler(lm.fileWriter, &slog.HandlerOptions{Level: &lm.level})
+		fileHandler := slog.NewJSONHandler(lm.fileWriter, &slog.HandlerOptions{Level: &lm.level})
 		return &multiHandler{stderr: stderrHandler, file: fileHandler}
 	}
 	return stderrHandler
@@ -113,4 +113,12 @@ func (lm *LogManager) CloseFileHandler() {
 		_ = lm.fileWriter.Close()
 		lm.fileWriter = nil
 	}
+}
+
+// LogFilePath returns the path of the active log file, or empty string if no file logging.
+func (lm *LogManager) LogFilePath() string {
+	if lm.fileWriter != nil {
+		return lm.fileWriter.Filename
+	}
+	return ""
 }

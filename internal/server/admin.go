@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -247,13 +248,82 @@ func (pr *ProviderRouter) healthHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func (pr *ProviderRouter) logsHandler(w http.ResponseWriter, r *http.Request) {
-	since := r.URL.Query().Get("since")
-	if since != "" {
-		entries := pr.logs.SnapshotSince(since)
-		respondJSON(w, http.StatusOK, entries)
+	logFile := pr.logManager.LogFilePath()
+	if logFile == "" {
+		respondJSON(w, http.StatusOK, []interface{}{})
 		return
 	}
-	entries := pr.logs.Snapshot()
+
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		slog.Error("failed to read log file", "path", logFile, "error", err)
+		respondJSON(w, http.StatusOK, []interface{}{})
+		return
+	}
+
+	// Parse the since parameter
+	var sinceTime time.Time
+	since := r.URL.Query().Get("since")
+	if since != "" {
+		var parseErr error
+		sinceTime, parseErr = time.Parse(time.RFC3339, since)
+		if parseErr != nil {
+			sinceTime = time.Time{} // fallback to no filter
+		}
+	}
+
+	var entries []map[string]interface{}
+		lines := strings.Split(string(data), "\n")
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var raw map[string]interface{}
+		if err := json.Unmarshal([]byte(line), &raw); err != nil {
+			continue
+		}
+		// Only include proxy success entries
+		msg, _ := raw["msg"].(string)
+		if msg != "proxy success" {
+			continue
+		}
+
+		// Parse timestamp for since filtering
+		if !sinceTime.IsZero() {
+			ts, _ := raw["time"].(string)
+			if t, err := time.Parse(time.RFC3339, ts); err == nil {
+				if t.Before(sinceTime) {
+					continue
+				}
+			}
+		}
+
+		entry := map[string]interface{}{
+			"timestamp":         raw["time"],
+			"key_name":          raw["key_name"],
+			"method":            raw["method"],
+			"url":               raw["url"],
+			"status":            raw["status"],
+			"request_body_size": raw["request_body_size"],
+			"provider":          raw["provider"],
+			"duration_ms":       raw["duration_ms"],
+			"ttfb_ms":           raw["ttfb_ms"],
+			"retry":             raw["retry"],
+			"input_tokens":      raw["input_tokens"],
+			"output_tokens":     raw["output_tokens"],
+			"response_body_size": raw["response_body_size"],
+		}
+		// key_index was 1-based in the old LogEntry; slog logs 0-based
+		if ki, ok := raw["key_index"].(float64); ok {
+			entry["key_index"] = int(ki) + 1
+		}
+		// key field for dashboard compatibility (no longer stores actual key)
+		entry["key"] = raw["key_name"]
+		entries = append(entries, entry)
+	}
+
 	respondJSON(w, http.StatusOK, entries)
 }
 
@@ -270,29 +340,11 @@ func (pr *ProviderRouter) clearHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	pr.logs.Clear()
+	// Ring buffer removed — no-op
 	respondJSON(w, http.StatusOK, map[string]string{"status": "cleared"})
 }
 
 func (pr *ProviderRouter) statsHandler(w http.ResponseWriter, r *http.Request) {
-	total := pr.logs.Len()
-	entries := pr.logs.Snapshot()
-
-	successful := 0
-	failed := 0
-	for _, e := range entries {
-		if e.Status < 400 {
-			successful++
-		} else {
-			failed++
-		}
-	}
-
-	var successRate float64
-	if total > 0 {
-		successRate = float64(successful) / float64(total) * 100
-	}
-
 	// Aggregate key stats across all providers
 	pr.mu.RLock()
 	totalActive := 0
@@ -306,14 +358,10 @@ func (pr *ProviderRouter) statsHandler(w http.ResponseWriter, r *http.Request) {
 	pr.mu.RUnlock()
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
-		"total_requests":      total,
-		"successful_requests": successful,
-		"failed_requests":     failed,
-		"success_rate":        fmt.Sprintf("%.2f", successRate),
-		"active_keys":         totalActive,
-		"cooling_keys":        totalCooling,
-		"disabled_keys":       totalDisabled,
-		"uptime_seconds":      time.Since(pr.startTime).Seconds(),
+		"active_keys":    totalActive,
+		"cooling_keys":   totalCooling,
+		"disabled_keys":  totalDisabled,
+		"uptime_seconds": time.Since(pr.startTime).Seconds(),
 	})
 }
 
