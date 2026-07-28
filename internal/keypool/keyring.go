@@ -50,7 +50,7 @@ func initKeyring() error {
 	// (headless Linux, CI, WSL without desktop environment, etc.)
 	fallbackDir := keyringFallbackDir()
 	if err := os.MkdirAll(fallbackDir, 0700); err != nil {
-		return fmt.Errorf("open keyring: %w (create fallback dir: %v)", firstErr, err)
+		return fmt.Errorf("open keyring: Tier 1 (OS keyring) failed: %w; Tier 2 (file fallback) create dir: %v", firstErr, err)
 	}
 
 	passwordFunc := fallbackPasswordFunc(filepath.Join(fallbackDir, "password"))
@@ -61,7 +61,7 @@ func initKeyring() error {
 		FilePasswordFunc: passwordFunc,
 	})
 	if err != nil {
-		return fmt.Errorf("open keyring: %w (fallback failed: %v)", firstErr, err)
+		return fmt.Errorf("open keyring: Tier 1 (OS keyring) failed: %w; Tier 2 (file fallback) also failed: %v", firstErr, err)
 	}
 
 	keyringBackend = kr
@@ -125,16 +125,20 @@ func keyringItemKey(provider string) string {
 // saveToKeyring saves a provider's KeyStore to the system keyring.
 func saveToKeyring(provider string, store *KeyStore) error {
 	if err := initKeyring(); err != nil {
-		return err
+		return fmt.Errorf("save keys for %q to keyring: %w. "+
+			"Hint: use --insecure-storage to bypass the system keyring (WARNING: keys stored in plaintext)", provider, err)
 	}
 	data, err := json.Marshal(store)
 	if err != nil {
-		return fmt.Errorf("marshal keystore: %w", err)
+		return fmt.Errorf("save keys for %q: marshal keystore: %w", provider, err)
 	}
-	return keyringBackend.Set(keyring.Item{
+	if err := keyringBackend.Set(keyring.Item{
 		Key:  keyringItemKey(provider),
 		Data: data,
-	})
+	}); err != nil {
+		return fmt.Errorf("save keys for %q to keyring: %w", provider, err)
+	}
+	return nil
 }
 
 // loadFromKeyring loads a provider's KeyStore from the system keyring.
