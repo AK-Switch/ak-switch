@@ -349,3 +349,69 @@ func TestLoadKeysFromStore_NoSource(t *testing.T) {
 	}
 }
 
+func TestLoadDisabledNames_FromFile(t *testing.T) {
+	dir := t.TempDir()
+	config.ConfigDir = dir
+	defer func() { config.ConfigDir = "" }()
+
+	keysPath := filepath.Join(dir, "keys.json")
+	store := &KeyStore{
+		Keys: []KeyEntry{
+			{Key: "sk-key-a", Name: "prod", Disabled: false},
+			{Key: "sk-key-b", Name: "staging", Disabled: true},
+			{Key: "sk-key-c", Name: "dev", Disabled: true},
+			{Key: "sk-key-d", Name: "", Disabled: false},
+		},
+	}
+	if err := SaveFullStore(keysPath, store); err != nil {
+		t.Fatalf("SaveFullStore: %v", err)
+	}
+
+	cfg := &config.Config{KeysFile: keysPath}
+	disabled := LoadDisabledNames("test-load-disabled-names", cfg)
+	if len(disabled) != 2 {
+		t.Fatalf("LoadDisabledNames returned %d names, want 2: %v", len(disabled), disabled)
+	}
+	if disabled[0] != "staging" {
+		t.Errorf("disabled[0] = %q, want %q", disabled[0], "staging")
+	}
+	if disabled[1] != "dev" {
+		t.Errorf("disabled[1] = %q, want %q", disabled[1], "dev")
+	}
+}
+
+func TestLoadDisabledNames_NoDisabledKeys(t *testing.T) {
+	dir := t.TempDir()
+	config.ConfigDir = dir
+	defer func() { config.ConfigDir = "" }()
+
+	keysPath := filepath.Join(dir, "keys.json")
+	store := &KeyStore{
+		Keys: []KeyEntry{
+			{Key: "sk-key-a", Name: "prod", Disabled: false},
+			{Key: "sk-key-b", Name: "staging", Disabled: false},
+		},
+	}
+	if err := SaveFullStore(keysPath, store); err != nil {
+		t.Fatalf("SaveFullStore: %v", err)
+	}
+
+	cfg := &config.Config{KeysFile: keysPath}
+	disabled := LoadDisabledNames("test-load-disabled-names", cfg)
+	if disabled != nil {
+		t.Errorf("LoadDisabledNames = %v, want nil", disabled)
+	}
+}
+
+func TestLoadDisabledNames_NoStore(t *testing.T) {
+	dir := t.TempDir()
+	config.ConfigDir = dir
+	defer func() { config.ConfigDir = "" }()
+
+	cfg := &config.Config{}
+	disabled := LoadDisabledNames("nonexistent", cfg)
+	if disabled != nil {
+		t.Errorf("LoadDisabledNames = %v, want nil", disabled)
+	}
+}
+

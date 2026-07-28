@@ -487,7 +487,6 @@ func (pr *ProviderRouter) reloadHandler(w http.ResponseWriter, r *http.Request) 
 					n, _ := existing.Pool.Name(i)
 					if n == name {
 						_ = existing.Pool.Disable(i)
-						break
 					}
 				}
 			}

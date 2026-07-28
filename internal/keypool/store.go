@@ -238,3 +238,46 @@ func keysFromStore(store *KeyStore) (keys, names []string) {
 	}
 	return keys, names
 }
+
+// LoadDisabledNames loads the names of permanently disabled keys for a provider
+// from the key store. Returns nil if the store has no entries or no disabled keys.
+// Uses the same load priority as LoadKeysFromStore: keyring → keys file → insecure file.
+func LoadDisabledNames(name string, cfg *config.Config) []string {
+	store := loadStoreFromAnyBackend(name, cfg)
+	if store == nil {
+		return nil
+	}
+	var disabled []string
+	for _, entry := range store.Keys {
+		if entry.Disabled {
+			disabled = append(disabled, entry.Name)
+		}
+	}
+	return disabled
+}
+
+// loadStoreFromAnyBackend tries to load a KeyStore from any available backend.
+// Priority: keyring → keys file → insecure file.
+// Returns the first successful result, or nil if all backends fail.
+func loadStoreFromAnyBackend(name string, cfg *config.Config) *KeyStore {
+	// 1. Try system keyring first
+	if store, err := loadFromKeyring(name); err == nil && store != nil {
+		return store
+	}
+
+	// 2. Fallback: custom keys file
+	if cfg.KeysFile != "" {
+		store, err := LoadFullStore(cfg.KeysFile)
+		if err == nil && store != nil {
+			return store
+		}
+	}
+
+	// 3. Fallback: insecure plaintext file
+	store, err := loadInsecureFile(name)
+	if err == nil && store != nil {
+		return store
+	}
+
+	return nil
+}
