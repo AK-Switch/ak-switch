@@ -257,6 +257,7 @@ func (px *ProxyExecutor) handleAuthRejected(w http.ResponseWriter, ps *ProviderS
 	px.metrics.UpstreamErrors.WithLabelValues("auth_rejected").Inc()
 	if pool.RecordAuthFailure(idx) {
 		pool.Disable(idx)
+		ps.PersistKeys()
 		slog.Warn("key permanently disabled", "provider", ps.Name, "key_index", idx, "key_name", keyName, "status", resp.StatusCode, "body_preview", MaskSensitiveData(string(body), 1024))
 	} else {
 		slog.Warn("key auth failure", "provider", ps.Name, "key_index", idx, "key_name", keyName, "status", resp.StatusCode, "fail_count", pool.CB(idx).AuthFailCount())

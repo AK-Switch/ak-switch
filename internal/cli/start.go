@@ -189,6 +189,17 @@ func initProviders(router *server.ProviderRouter, providers map[string]*config.C
 			slog.Error("failed to add provider", "provider", name, "error", err)
 			continue
 		}
+
+		// Restore permanently disabled keys from persisted store
+		for _, dn := range keypool.LoadDisabledNames(name, cfg) {
+			for i := 0; i < pool.Len(); i++ {
+				n, _ := pool.Name(i)
+				if n == dn {
+					pool.Disable(i)
+					slog.Info("restored disabled key", "provider", name, "key_index", i, "key_name", dn)
+				}
+			}
+		}
 		slog.Info("provider configured",
 			"name", name,
 			"keys", len(keys),
