@@ -140,6 +140,28 @@ main 分支受保护，禁止直接推送。遵循 GitHub Flow + 原子 commit�
 
 ## 调试指南
 
+### 日志位置与格式
+
+运行时日志文件由 `config.toml` 的 `log_file` 字段指定（默认为空，仅 stdout）。
+启动时输出：`file logging initialized  path=<路径>`。
+
+请求日志通过 `akswitch logs` 命令查看，数据来源为内存环形缓冲区（`/api/logs`）。
+LogEntry 关键字段：
+
+| 字段 | 说明 |
+|------|------|
+| `key_index` | 1-based key 索引 |
+| `key_name` | key 名称 |
+| `status` | HTTP 状态码 |
+| `retry` | 重试次数（0 = 首次） |
+| `duration_ms` | 总耗时(ms) |
+| `ttfb_ms` | 首字节时间(ms) |
+| `provider` | 提供者名称 |
+
+运行时配置：`akswitch config get/set/list`（无需重启）。
+
+常见排查见 [docs/troubleshooting.md](./docs/troubleshooting.md)。
+
 ### 设置日志级别
 
 运行时通过 API 设置（无需重启）：
