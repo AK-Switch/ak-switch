@@ -254,12 +254,72 @@ func (pr *ProviderRouter) logsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data, err := os.ReadFile(logFile)
+	// Read only the last 1 MB of the log file to bound memory usage
+	const maxRead = 1 << 20 // 1 MB
+	fi, err := os.Stat(logFile)
 	if err != nil {
+		slog.Error("failed to stat log file", "path", logFile, "error", err)
+		respondJSON(w, http.StatusOK, []interface{}{})
+		return
+	}
+	fileSize := fi.Size()
+	readOffset := fileSize - maxRead
+	if readOffset < 0 {
+		readOffset = 0
+	}
+
+	f, err := os.Open(logFile)
+	if err != nil {
+		slog.Error("failed to open log file", "path", logFile, "error", err)
+		respondJSON(w, http.StatusOK, []interface{}{})
+		return
+	}
+	defer f.Close()
+
+	if readOffset > 0 {
+		_, err = f.Seek(readOffset, 0)
+		if err != nil {
+			slog.Error("failed to seek in log file", "path", logFile, "error", err)
+			respondJSON(w, http.StatusOK, []interface{}{})
+			return
+		}
+		// Skip to the first complete line
+		var buf [1]byte
+		for {
+			_, err := f.Read(buf[:])
+			if err != nil {
+				break
+			}
+			if buf[0] == '\n' {
+				break
+			}
+		}
+	}
+
+	// Read only the portion of the file we need
+	data := make([]byte, maxRead)
+	// Re-read from the offset we calculated
+	f.Seek(readOffset, 0)
+	// Skip first partial line again
+	if readOffset > 0 {
+		var buf2 [1]byte
+		for {
+			_, err := f.Read(buf2[:])
+			if err != nil {
+				break
+			}
+			if buf2[0] == '\n' {
+				break
+			}
+		}
+	}
+	n, err := f.Read(data)
+	if err != nil && err.Error() != "EOF" {
 		slog.Error("failed to read log file", "path", logFile, "error", err)
 		respondJSON(w, http.StatusOK, []interface{}{})
 		return
 	}
+	dataStr := string(data[:n])
 
 	// Parse the since parameter
 	var sinceTime time.Time
@@ -273,8 +333,7 @@ func (pr *ProviderRouter) logsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var entries []map[string]interface{}
-		lines := strings.Split(string(data), "\n")
-
+	lines := strings.Split(dataStr, "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -284,9 +343,12 @@ func (pr *ProviderRouter) logsHandler(w http.ResponseWriter, r *http.Request) {
 		if err := json.Unmarshal([]byte(line), &raw); err != nil {
 			continue
 		}
-		// Only include proxy success entries
-		msg, _ := raw["msg"].(string)
-		if msg != "proxy success" {
+		// Include any request-related entry (has method and url fields)
+		// This covers both "proxy success" and error entries (rate limited, auth rejected, etc.)
+		if _, hasMethod := raw["method"]; !hasMethod {
+			continue
+		}
+		if _, hasURL := raw["url"]; !hasURL {
 			continue
 		}
 
