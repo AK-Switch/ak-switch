@@ -17,6 +17,7 @@ Add, list, and remove provider configurations in config.toml.
 * [akswitch](akswitch.md)	 - API Key rotation proxy for AI providers
 * [akswitch provider add](akswitch_provider_add.md)	 - Add a new provider
 * [akswitch provider default](akswitch_provider_default.md)	 - Set the default provider
+* [akswitch provider info](akswitch_provider_info.md)	 - Show detailed information about a provider
 * [akswitch provider list](akswitch_provider_list.md)	 - List all providers
 * [akswitch provider remove](akswitch_provider_remove.md)	 - Remove a provider
 

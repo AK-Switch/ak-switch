@@ -109,6 +109,12 @@ func TestFindKeyIndexByName_Duplicate(t *testing.T) {
 
 // Parameterized test: all commands that accept a key index must have --by-name.
 // This enforces the invariant that addKeyIndexFlags is called for every command.
+func TestProviderInfoCmd_Exists(t *testing.T) {
+	if providerInfoCmd == nil {
+		t.Fatal("expected providerInfoCmd to be defined")
+	}
+}
+
 func TestAllKeyIndexCommands_HaveByNameFlag(t *testing.T) {
 	commands := []struct {
 		name string

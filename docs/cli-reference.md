@@ -16,6 +16,7 @@ CLI 命令文档已从代码自动生成，位于 [`docs/cli/`](cli/) 目录下�
 | `akswitch config view` | [`akswitch_config_view.md`](cli/akswitch_config_view.md) |
 | `akswitch provider` | [`akswitch_provider.md`](cli/akswitch_provider.md) |
 | `akswitch provider add` | [`akswitch_provider_add.md`](cli/akswitch_provider_add.md) |
+| `akswitch provider info` | [`akswitch_provider_info.md`](cli/akswitch_provider_info.md) |
 | `akswitch provider list` | [`akswitch_provider_list.md`](cli/akswitch_provider_list.md) |
 | `akswitch provider remove` | [`akswitch_provider_remove.md`](cli/akswitch_provider_remove.md) |
 | `akswitch provider default` | [`akswitch_provider_default.md`](cli/akswitch_provider_default.md) |
