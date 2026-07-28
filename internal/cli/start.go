@@ -269,7 +269,11 @@ func loadKeysForProvider(name string, cfg *config.Config) (keys, names []string)
 	if len(keys) > 0 {
 		entries := make([]keypool.KeyEntry, len(keys))
 		for i := range keys {
-			entries[i] = keypool.KeyEntry{Key: keys[i], Name: names[i]}
+			name := ""
+			if i < len(names) {
+				name = names[i]
+			}
+			entries[i] = keypool.KeyEntry{Key: keys[i], Name: name}
 		}
 		_ = keypool.SaveKeys(name, &keypool.KeyStore{Keys: entries})
 	}
