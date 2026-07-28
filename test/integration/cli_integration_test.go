@@ -1255,12 +1255,28 @@ func TestCLI_ProviderInfo_Format(t *testing.T) {
 		t.Fatalf("XDGConfigPath failed: %v", err)
 	}
 
-	// Init + add a provider
-	runAkswitch(t, "akswitch", "config", "init", "-p", xdgPath)
-	runAkswitch(t, "akswitch", "provider", "add", "alpha",
-		"--target", "https://alpha.test/v1",
-		"--port", "9501",
-	)
+	// Create a minimal config file directly (avoiding config init global state)
+	tc := &config.TomlConfig{
+		Port: 8080,
+		Provider: map[string]*config.Config{
+			"alpha": {
+				TargetBase:          "https://alpha.test/v1",
+				GenaiBase:           "https://alpha.test",
+				CooldownSec:         60,
+				MaxRetries:          3,
+				BackoffCapSec:       120,
+				BackoffMultiplier:   2,
+				CBResetSec:          30,
+				UpstreamCBThreshold: 5,
+				HealthCheckIntervalSec: 30,
+				HealthCheckPath:       "/health",
+				HealthCheckTimeoutSec:  5,
+			},
+		},
+	}
+	if err := config.SaveTomlConfig(tc, xdgPath); err != nil {
+		t.Fatalf("failed to write config: %v", err)
+	}
 
 	// Add keys for the provider
 	store := &keypool.KeyStore{
