@@ -366,6 +366,11 @@ func (pr *ProviderRouter) reloadHandler(w http.ResponseWriter, r *http.Request) 
 
 			existing.Config = cfg
 			existing.Pool = keypool.NewKeyPool(cfg.Keys, cfg.KeyNames)
+			existing.Pool.ConfigureCBs(
+				time.Duration(cfg.CooldownSec)*time.Second,
+				time.Duration(cfg.BackoffCapSec)*time.Second,
+				cfg.BackoffMultiplier,
+			)
 
 			for _, name := range disabledNames {
 				for i := 0; i < existing.Pool.Len(); i++ {
