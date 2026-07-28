@@ -1,47 +1,7 @@
 # CLI 参考
 
-CLI 命令文档已从代码自动生成，位于 [`docs/cli/`](cli/) 目录下。
-
-每个命令有独立的 Markdown 文件：
-
-| 命令 | 文档 |
-|------|------|
-| `akswitch` | [`akswitch.md`](cli/akswitch.md) |
-| `akswitch start` | [`akswitch_start.md`](cli/akswitch_start.md) |
-| `akswitch stop` | [`akswitch_stop.md`](cli/akswitch_stop.md) |
-| `akswitch status` | [`akswitch_status.md`](cli/akswitch_status.md) |
-| `akswitch version` | [`akswitch_version.md`](cli/akswitch_version.md) |
-| `akswitch config` | [`akswitch_config.md`](cli/akswitch_config.md) |
-| `akswitch config init` | [`akswitch_config_init.md`](cli/akswitch_config_init.md) |
-| `akswitch config view` | [`akswitch_config_view.md`](cli/akswitch_config_view.md) |
-| `akswitch provider` | [`akswitch_provider.md`](cli/akswitch_provider.md) |
-| `akswitch provider add` | [`akswitch_provider_add.md`](cli/akswitch_provider_add.md) |
-| `akswitch provider info` | [`akswitch_provider_info.md`](cli/akswitch_provider_info.md) |
-| `akswitch provider list` | [`akswitch_provider_list.md`](cli/akswitch_provider_list.md) |
-| `akswitch provider remove` | [`akswitch_provider_remove.md`](cli/akswitch_provider_remove.md) |
-| `akswitch provider default` | [`akswitch_provider_default.md`](cli/akswitch_provider_default.md) |
-| `akswitch key` | [`akswitch_key.md`](cli/akswitch_key.md) |
-| `akswitch key add` | [`akswitch_key_add.md`](cli/akswitch_key_add.md) |
-| `akswitch key import` | [`akswitch_key_import.md`](cli/akswitch_key_import.md) |
-| `akswitch key list` | [`akswitch_key_list.md`](cli/akswitch_key_list.md) |
-| `akswitch key remove` | [`akswitch_key_remove.md`](cli/akswitch_key_remove.md) |
-| `akswitch key disable` | [`akswitch_key_disable.md`](cli/akswitch_key_disable.md) |
-| `akswitch key enable` | [`akswitch_key_enable.md`](cli/akswitch_key_enable.md) |
-| `akswitch key update` | [`akswitch_key_update.md`](cli/akswitch_key_update.md) |
-| `akswitch key rename` | [`akswitch_key_rename.md`](cli/akswitch_key_rename.md) |
-| `akswitch logs` | [`akswitch_logs.md`](cli/akswitch_logs.md) |
-
-## 维护
-
-新增或修改 CLI 命令/标志后，运行以下命令更新文档：
-
-```bash
-make gen-docs
-# 或
-go run ./tools/gen-cli-docs/
-```
-
-CI 会自动检查 `docs/cli/` 是否与代码一致。
+CLI 的完整用法和所有子命令通过 `akswitch --help` 和 `akswitch <command> --help` 查看。
+`--help` 是 CLI 文档的第一来源，始终与代码一致。
 
 ## 架构概览
 
@@ -69,6 +29,32 @@ Providers (from /home/user/.config/akswitch/config.toml):
   NAME        TARGET                                            PORT
   nvidia      https://integrate.api.nvidia.com/v1               3001  (default)
   sensenova   https://api.sensenova.com/v1                      3001
+```
+
+### provider info 输出示例
+
+```
+Provider: agnes
+  Status:  running  →  http://100.65.183.101:4000
+  CB:      closed
+  Requests: 730 (success: 420, failed: 310)
+
+  Config:
+    Target:  https://apihub.agnes-ai.com/v1
+    Port:    4000
+
+  Tuning:
+    Max retries:        2
+    Cooldown:           15s
+
+  Health check:
+    Interval:  30s
+    Path:      /health
+    Timeout:   5s
+
+  Keys:
+    Total: 31  Active: 31  Disabled: 0
+    [0] sk-s...0l8U  (active)  name: Google
 ```
 
 ### Key 存储
