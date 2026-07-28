@@ -189,6 +189,17 @@ func initProviders(router *server.ProviderRouter, providers map[string]*config.C
 			slog.Error("failed to add provider", "provider", name, "error", err)
 			continue
 		}
+
+		// Restore permanently disabled keys from persisted store
+		for _, dn := range keypool.LoadDisabledNames(name, cfg) {
+			for i := 0; i < pool.Len(); i++ {
+				n, _ := pool.Name(i)
+				if n == dn {
+					pool.Disable(i)
+					slog.Info("restored disabled key", "provider", name, "key_index", i, "key_name", dn)
+				}
+			}
+		}
 		slog.Info("provider configured",
 			"name", name,
 			"keys", len(keys),
@@ -265,9 +276,17 @@ func loadKeysForProvider(name string, cfg *config.Config) (keys, names []string)
 	// Fallback: use configured keys
 	keys = cfg.Keys
 	names = cfg.KeyNames
-	// If KeysFile is configured and we have in-memory keys, persist them
-	if cfg.KeysFile != "" && len(keys) > 0 {
-		_ = keypool.SaveKeysToFile(cfg.KeysFile, keys, names)
+	// Persist to keyring for first-time startup
+	if len(keys) > 0 {
+		entries := make([]keypool.KeyEntry, len(keys))
+		for i := range keys {
+			name := ""
+			if i < len(names) {
+				name = names[i]
+			}
+			entries[i] = keypool.KeyEntry{Key: keys[i], Name: name}
+		}
+		_ = keypool.SaveKeys(name, &keypool.KeyStore{Keys: entries})
 	}
 	return keys, names
 }

@@ -21,9 +21,10 @@
 - 审查报告移入 `docs/archive/` 归档
 - 修复 `release.yml` 中 ldflags 路径引用
 
-### CLI 文档自动生成（PR #130）
-- 新增 `tools/gen-cli-docs/` 工具，从 Cobra 命令树自动生成 Markdown 文档
-- `docs/cli/` 下每个命令独立文档，CI 中 `docs-check` 作业验证文档最新
+### CLI 文档简化
+- 移除 `docs/cli/` 自动生成目录和 `tools/gen-cli-docs/` 工具
+- CLI 参考统一为 `akswitch --help`，文档第一来源始终与代码一致
+- `docs/cli-reference.md` 精简为架构概览和输出示例
 - 删除手写维护的 `docs/cli-reference.md`，从源头消除文档过期
 
 ### 开发者模式

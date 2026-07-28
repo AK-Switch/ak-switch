@@ -1,12 +1,18 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
+	"time"
 
 	"akswitch/internal/config"
+	"akswitch/internal/keypool"
+	"akswitch/internal/logentry"
 
 	"github.com/spf13/cobra"
 )
@@ -17,6 +23,7 @@ func init() {
 	providerCmd.AddCommand(providerListCmd)
 	providerCmd.AddCommand(providerRemoveCmd)
 	providerCmd.AddCommand(providerDefaultCmd)
+	providerCmd.AddCommand(providerInfoCmd)
 
 	providerAddCmd.Flags().StringP("target", "t", "", "Upstream target URL (required)")
 	providerAddCmd.Flags().IntP("port", "p", 0, "HTTP listen port (required for first provider)")
@@ -268,6 +275,153 @@ when no --provider or --all flag is given.`,
 		}
 
 		fmt.Printf("Default provider set to %q\n", name)
+		return nil
+	},
+}
+
+var providerInfoCmd = &cobra.Command{
+	Use:   "info <name>",
+	Short: "Show detailed information about a provider",
+	Long: `Display detailed configuration and status for a single provider.
+
+Combines config settings, key summary, and runtime status (when server is running)
+in one output.
+
+Example:
+  akswitch provider info nvidia
+  akswitch provider info sensenova`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		name := args[0]
+
+		source, err := config.XDGConfigPath()
+		if err != nil {
+			return fmt.Errorf("failed to determine XDG config path: %w", err)
+		}
+		if _, statErr := os.Stat(source); statErr != nil {
+			return fmt.Errorf("no configuration file found at %s", source)
+		}
+
+		// Load all providers from TOML
+		providers, err := config.LoadAllTomlProviders(source)
+		if err != nil {
+			return fmt.Errorf("failed to load configuration: %w", err)
+		}
+
+		// Find the provider
+		cfg, exists := providers[name]
+		if !exists {
+			return fmt.Errorf("provider %q not found in %s", name, source)
+		}
+
+		sanitized := cfg.Sanitized()
+
+		// Header
+		defaultMark := ""
+		if name == config.DefaultProviderName {
+			defaultMark = "  (default)"
+		}
+		fmt.Printf("Provider: %s%s\n", name, defaultMark)
+
+		// Runtime status (try server)
+		client := &http.Client{Timeout: 3 * time.Second}
+		port := detectServerPort()
+		host := detectServerHost()
+		healthURL := fmt.Sprintf("http://%s:%d/health", host, port)
+		healthResp, err := client.Get(healthURL)
+		if err == nil {
+			body, _ := io.ReadAll(healthResp.Body)
+			healthResp.Body.Close()
+			var healthData map[string]interface{}
+			if json.Unmarshal(body, &healthData) == nil {
+				if details, ok := healthData["details"]; ok {
+					if det, ok2 := details.(map[string]interface{}); ok2 {
+						if info, ok3 := det[name]; ok3 {
+							if inf, ok4 := info.(map[string]interface{}); ok4 {
+								cbState := "unknown"
+								if cs, ok5 := inf["upstream_cb_state"]; ok5 {
+									cbState = fmt.Sprintf("%v", cs)
+								}
+								fmt.Printf("  Status:  running  →  http://%s:%d\n", host, port)
+								fmt.Printf("  CB:      %s\n", cbState)
+							}
+						}
+					}
+				}
+			}
+
+			// Stats
+			statsURL := fmt.Sprintf("http://%s:%d/api/stats", host, port)
+			statsResp, err := client.Get(statsURL)
+			if err == nil {
+				statsBody, _ := io.ReadAll(statsResp.Body)
+				statsResp.Body.Close()
+				var stats map[string]interface{}
+				if json.Unmarshal(statsBody, &stats) == nil {
+					fmt.Printf("  Requests: %v (success: %v, failed: %v)\n",
+						stats["total_requests"], stats["successful_requests"], stats["failed_requests"])
+				}
+			}
+		} else {
+			fmt.Println("  Status:  not running")
+		}
+
+		// Config section
+		fmt.Println("\n  Config:")
+		fmt.Printf("    Target:  %s\n", sanitized.TargetBase)
+		fmt.Printf("    Port:    %d\n", sanitized.Port)
+		if sanitized.GenaiBase != "" {
+			fmt.Printf("    GenAI:   %s\n", sanitized.GenaiBase)
+		}
+		if sanitized.AdminToken != "" {
+			fmt.Println("    Admin token: (set)")
+		}
+
+		// Tuning section
+		fmt.Println("\n  Tuning:")
+		fmt.Printf("    Max retries:        %d\n", sanitized.MaxRetries)
+		fmt.Printf("    Cooldown:           %ds\n", sanitized.CooldownSec)
+		fmt.Printf("    Backoff cap:        %ds\n", sanitized.BackoffCapSec)
+		fmt.Printf("    Backoff multiplier: %.1f\n", sanitized.BackoffMultiplier)
+		fmt.Printf("    CB threshold:       %d\n", sanitized.UpstreamCBThreshold)
+		fmt.Printf("    CB reset:           %ds\n", sanitized.CBResetSec)
+
+		// Health check section
+		fmt.Println("\n  Health check:")
+		fmt.Printf("    Interval:  %ds\n", sanitized.HealthCheckIntervalSec)
+		fmt.Printf("    Path:      %s\n", sanitized.HealthCheckPath)
+		fmt.Printf("    Timeout:   %ds\n", sanitized.HealthCheckTimeoutSec)
+
+		// Keys section
+		store, keyErr := keypool.LoadKeys(name)
+		fmt.Println("\n  Keys:")
+		if keyErr != nil || store == nil || len(store.Keys) == 0 {
+			fmt.Println("    (no keys configured)")
+		} else {
+			total := len(store.Keys)
+			active := 0
+			disabled := 0
+			for _, entry := range store.Keys {
+				if entry.Disabled {
+					disabled++
+				} else {
+					active++
+				}
+			}
+			fmt.Printf("    Total: %d  Active: %d  Disabled: %d\n", total, active, disabled)
+			for i, entry := range store.Keys {
+				status := "active"
+				if entry.Disabled {
+					status = "disabled"
+				}
+				line := fmt.Sprintf("    [%d] %s  (%s)", i, logentry.MaskKey(entry.Key), status)
+				if entry.Name != "" {
+					line += fmt.Sprintf("  name: %s", entry.Name)
+				}
+				fmt.Println(line)
+			}
+		}
+
 		return nil
 	},
 }
