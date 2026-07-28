@@ -186,6 +186,23 @@ func legacyKeysPath(provider string) (string, error) {
 func LoadKeysFromStore(name string, cfg *config.Config) (keys, names []string, loaded bool) {
 	// 1. Try system keyring first
 	if store, err := loadFromKeyring(name); err == nil && store != nil {
+		// Also try to load from insecure file and merge keys not in keyring.
+		// This ensures keys saved with --insecure-storage are always loaded
+		// even when keyring has data.
+		if insecureStore, err := loadInsecureFile(name); err == nil && insecureStore != nil {
+			for _, insecureEntry := range insecureStore.Keys {
+				found := false
+				for _, keyringEntry := range store.Keys {
+					if insecureEntry.Key == keyringEntry.Key {
+						found = true
+						break
+					}
+				}
+				if !found {
+					store.Keys = append(store.Keys, insecureEntry)
+				}
+			}
+		}
 		k, n := keysFromStore(store)
 		return k, n, true
 	}

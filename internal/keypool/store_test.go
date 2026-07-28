@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"akswitch/internal/config"
+	"github.com/99designs/keyring"
 )
 
 func TestLoadKeysFromFile_NotEmpty(t *testing.T) {
@@ -412,6 +413,115 @@ func TestLoadDisabledNames_NoStore(t *testing.T) {
 	disabled := LoadDisabledNames("nonexistent", cfg)
 	if disabled != nil {
 		t.Errorf("LoadDisabledNames = %v, want nil", disabled)
+	}
+}
+
+func TestLoadKeysFromStore_MergesKeyringAndInsecure(t *testing.T) {
+	dir := t.TempDir()
+	config.ConfigDir = dir
+	defer func() { config.ConfigDir = "" }()
+
+	// Set up a test keyring with some keys
+	kr := keyring.NewArrayKeyring(nil)
+	keyringStore := &KeyStore{
+		Keys: []KeyEntry{
+			{Key: "keyring-key-1", Name: "from-keyring"},
+		},
+	}
+	keyringData, err := json.Marshal(keyringStore)
+	if err != nil {
+		t.Fatalf("marshal keyring store: %v", err)
+	}
+	if err := kr.Set(keyring.Item{
+		Key:  keyringItemKey("test-merge"),
+		Data: keyringData,
+	}); err != nil {
+		t.Fatalf("set keyring item: %v", err)
+	}
+	setTestKeyring(kr)
+	defer resetTestKeyring()
+
+	// Write an insecure file with additional keys not in keyring
+	insecureStore := &KeyStore{
+		Keys: []KeyEntry{
+			{Key: "insecure-key-1", Name: "from-insecure"},
+		},
+	}
+	if err := SaveKeysInsecure("test-merge", insecureStore); err != nil {
+		t.Fatalf("SaveKeysInsecure: %v", err)
+	}
+
+	cfg := &config.Config{}
+	keys, names, loaded := LoadKeysFromStore("test-merge", cfg)
+	if !loaded {
+		t.Fatal("LoadKeysFromStore: loaded=false, want true")
+	}
+	if len(keys) != 2 {
+		t.Fatalf("got %d keys, want 2 (keyring + insecure): %v", len(keys), keys)
+	}
+
+	// Verify all keys are present by key value
+	got := make(map[string]string)
+	for i, k := range keys {
+		got[k] = names[i]
+	}
+	if got["keyring-key-1"] != "from-keyring" {
+		t.Errorf("keyring key name = %q, want %q", got["keyring-key-1"], "from-keyring")
+	}
+	if got["insecure-key-1"] != "from-insecure" {
+		t.Errorf("insecure key name = %q, want %q", got["insecure-key-1"], "from-insecure")
+	}
+}
+
+func TestLoadKeysFromStore_MergesInsecureOnlyWhenKeyringMissingKeys(t *testing.T) {
+	dir := t.TempDir()
+	config.ConfigDir = dir
+	defer func() { config.ConfigDir = "" }()
+
+	// Set up a test keyring with a key
+	kr := keyring.NewArrayKeyring(nil)
+	keyringStore := &KeyStore{
+		Keys: []KeyEntry{
+			{Key: "shared-key", Name: "from-keyring"},
+		},
+	}
+	keyringData, err := json.Marshal(keyringStore)
+	if err != nil {
+		t.Fatalf("marshal keyring store: %v", err)
+	}
+	if err := kr.Set(keyring.Item{
+		Key:  keyringItemKey("test-merge-dupe"),
+		Data: keyringData,
+	}); err != nil {
+		t.Fatalf("set keyring item: %v", err)
+	}
+	setTestKeyring(kr)
+	defer resetTestKeyring()
+
+	// Write an insecure file with the same key (should not duplicate)
+	insecureStore := &KeyStore{
+		Keys: []KeyEntry{
+			{Key: "shared-key", Name: "from-insecure"},
+		},
+	}
+	if err := SaveKeysInsecure("test-merge-dupe", insecureStore); err != nil {
+		t.Fatalf("SaveKeysInsecure: %v", err)
+	}
+
+	cfg := &config.Config{}
+	keys, names, loaded := LoadKeysFromStore("test-merge-dupe", cfg)
+	if !loaded {
+		t.Fatal("LoadKeysFromStore: loaded=false, want true")
+	}
+	if len(keys) != 1 {
+		t.Fatalf("got %d keys, want 1 (no duplicate): %v", len(keys), keys)
+	}
+	if keys[0] != "shared-key" {
+		t.Errorf("key = %q, want %q", keys[0], "shared-key")
+	}
+	// Keyring name should win (order preserved)
+	if names[0] != "from-keyring" {
+		t.Errorf("name = %q, want %q (keyring should win)", names[0], "from-keyring")
 	}
 }
 
