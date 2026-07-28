@@ -1240,3 +1240,114 @@ func TestProviderDefault_NotFound(t *testing.T) {
 		t.Errorf("error message = %q, want it to contain 'not found'", err.Error())
 	}
 }
+
+// ── Test: provider info 格式（离线模式） ────────
+//
+// "akswitch provider info <name>" 应输出配置详情和 key 概况。
+func TestCLI_ProviderInfo_Format(t *testing.T) {
+	cli.ResetConfigEnv()
+	tmpDir := t.TempDir()
+	config.ConfigDir = tmpDir
+	t.Cleanup(func() { config.ConfigDir = "" })
+
+	xdgPath, err := config.XDGConfigPath()
+	if err != nil {
+		t.Fatalf("XDGConfigPath failed: %v", err)
+	}
+
+	// Create a minimal config file directly (avoiding config init global state)
+	tc := &config.TomlConfig{
+		Port: 8080,
+		Provider: map[string]*config.Config{
+			"alpha": {
+				TargetBase:          "https://alpha.test/v1",
+				GenaiBase:           "https://alpha.test",
+				CooldownSec:         60,
+				MaxRetries:          3,
+				BackoffCapSec:       120,
+				BackoffMultiplier:   2,
+				CBResetSec:          30,
+				UpstreamCBThreshold: 5,
+				HealthCheckIntervalSec: 30,
+				HealthCheckPath:       "/health",
+				HealthCheckTimeoutSec:  5,
+			},
+		},
+	}
+	if err := config.SaveTomlConfig(tc, xdgPath); err != nil {
+		t.Fatalf("failed to write config: %v", err)
+	}
+
+	// Add keys for the provider
+	store := &keypool.KeyStore{
+		Keys: []keypool.KeyEntry{
+			{Key: "sk-abcdefghijklmn", Name: "key-one"},
+			{Key: "sk-uvwxyzabcdefgh", Name: "key-two"},
+		},
+	}
+	if err := keypool.SaveKeysInsecure("alpha", store); err != nil {
+		t.Fatalf("SaveKeysInsecure failed: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err = runAkswitch(t, "akswitch", "provider", "info", "alpha")
+
+	w.Close()
+	os.Stdout = oldStdout
+	io.Copy(&stdout, r)
+
+	if err != nil {
+		t.Fatalf("provider info alpha failed: %v", err)
+	}
+
+	output := stdout.String()
+	assertOutputContains(t, output, []string{
+		"Provider: alpha",
+		"Config:",
+		"Target:  https://alpha.test/v1",
+		"Port:    8080",
+		"Tuning:",
+		"Max retries:        3",
+		"Cooldown:           60s",
+		"Backoff cap:        120s",
+		"Backoff multiplier: 2.0",
+		"CB threshold:       5",
+		"CB reset:           30s",
+		"Health check:",
+		"Interval:  30s",
+		"Path:      /health",
+		"Timeout:   5s",
+		"Keys:",
+		"Total: 2  Active: 2  Disabled: 0",
+		"name: key-one",
+		"name: key-two",
+	})
+}
+
+// ── Test: provider info 不存在的 provider ────────
+//
+// "akswitch provider info <name>" 对不存在的 provider 应报错。
+func TestCLI_ProviderInfo_NotFound(t *testing.T) {
+	cli.ResetConfigEnv()
+	tmpDir := t.TempDir()
+	config.ConfigDir = tmpDir
+	t.Cleanup(func() { config.ConfigDir = "" })
+
+	xdgPath, err := config.XDGConfigPath()
+	if err != nil {
+		t.Fatalf("XDGConfigPath failed: %v", err)
+	}
+	runAkswitch(t, "akswitch", "config", "init", "-p", xdgPath)
+
+	err = runAkswitch(t, "akswitch", "provider", "info", "nonexistent")
+	if err == nil {
+		t.Fatal("expected error for info with nonexistent provider, got nil")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("error should contain 'not found', got: %v", err)
+	}
+}
