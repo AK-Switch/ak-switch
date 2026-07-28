@@ -54,10 +54,10 @@
 
 **可能的原因：**
 
-1. **`ConfigureCBs` 未被调用** — `reloadHandler` 中重建 `KeyPool` 后没有调用 `ConfigureCBs` 给断路器设置正确的冷却参数。见 #162。
+1. **`ConfigureCBs` 未被调用** — `reloadHandler` 中重建 `KeyPool` 后没有调用 `ConfigureCBs` 给断路器设置正确的冷却参数。见 #175。
 2. **启动时序问题** — `NewKeyPool` 创建断路器时未传入配置参数，延迟到 `ConfigureCBs` 才设置。如果 `RecordFailure` 在 `ConfigureCBs` 之前发生，就会返回 0。
 
-**修复状态：** 问题 1 已在 PR #162 修复。问题 2 是启动窗口期的问题，影响极小。
+**修复状态：** 问题 1 已在 PR #175 修复。问题 2 是启动窗口期的问题，影响极小。
 
 ### 大量 429 限流
 
@@ -124,7 +124,7 @@ akswitch config set cooldown_sec 60 --persist
 
 **原因：** `reloadHandler` 重建 `KeyPool` 时，只恢复了禁用状态（`disabledNames`），但冷却状态、重试次数、请求计数等运行时状态都丢失了。此外，`ConfigureCBs` 未被调用，断路器使用默认参数（0, 0, 0）。
 
-**修复状态：** `ConfigureCBs` 问题已在 PR #162 修复。
+**修复状态：** `ConfigureCBs` 问题已在 PR #175 修复。
 
 ## 系统诊断
 
