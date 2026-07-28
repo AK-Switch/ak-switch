@@ -363,7 +363,7 @@ func TestLoadDisabledNames_FromFile(t *testing.T) {
 	}
 
 	cfg := &config.Config{KeysFile: keysPath}
-	disabled := LoadDisabledNames("test", cfg)
+	disabled := LoadDisabledNames("test-load-disabled-names", cfg)
 	if len(disabled) != 2 {
 		t.Fatalf("LoadDisabledNames returned %d names, want 2: %v", len(disabled), disabled)
 	}
@@ -392,7 +392,7 @@ func TestLoadDisabledNames_NoDisabledKeys(t *testing.T) {
 	}
 
 	cfg := &config.Config{KeysFile: keysPath}
-	disabled := LoadDisabledNames("test", cfg)
+	disabled := LoadDisabledNames("test-load-disabled-names", cfg)
 	if disabled != nil {
 		t.Errorf("LoadDisabledNames = %v, want nil", disabled)
 	}
