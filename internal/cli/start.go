@@ -197,7 +197,6 @@ func initProviders(router *server.ProviderRouter, providers map[string]*config.C
 				if n == dn {
 					pool.Disable(i)
 					slog.Info("restored disabled key", "provider", name, "key_index", i, "key_name", dn)
-					break
 				}
 			}
 		}
