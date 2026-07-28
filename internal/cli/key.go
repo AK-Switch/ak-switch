@@ -251,7 +251,7 @@ Examples:
 		}
 
 		// Auto-number duplicate names before dedup
-			entries = autoNumberNames(entries)
+			entries = autoNumberNames(entries, store)
 
 			// Dedup against existing keys
 			newEntries, skipped := dedupEntries(entries, store)
@@ -620,7 +620,29 @@ func dedupEntries(entries []keypool.KeyEntry, store *keypool.KeyStore) ([]keypoo
 // autoNumberNames appends a sequential suffix (-1, -2, ...) to every named entry
 // so that keys sharing the same name get unique numbered names.
 // Entries with empty names are left unchanged.
-func autoNumberNames(entries []keypool.KeyEntry) []keypool.KeyEntry {
+// If store is non-nil, existing numbered entries in the store are used to
+// determine the starting suffix, preventing cross-batch name collisions.
+func autoNumberNames(entries []keypool.KeyEntry, store *keypool.KeyStore) []keypool.KeyEntry {
+	// Scan existing store for the max suffix of each base name
+	// e.g., "auto-reg-4" → base="auto-reg", suffix=4
+	nameMaxSuffix := make(map[string]int)
+	if store != nil {
+		for _, e := range store.Keys {
+			if e.Name == "" {
+				continue
+			}
+			if idx := strings.LastIndexByte(e.Name, '-'); idx > 0 {
+				suffix := e.Name[idx+1:]
+				if n, err := strconv.Atoi(suffix); err == nil {
+					base := e.Name[:idx]
+					if n > nameMaxSuffix[base] {
+						nameMaxSuffix[base] = n
+					}
+				}
+			}
+		}
+	}
+
 	nameCount := make(map[string]int)
 	for _, e := range entries {
 		if e.Name == "" {
@@ -630,6 +652,14 @@ func autoNumberNames(entries []keypool.KeyEntry) []keypool.KeyEntry {
 	}
 	// Only add suffix if the name appears more than once
 	nameIndex := make(map[string]int)
+	// Initialize from store's max suffix to avoid cross-batch collisions
+	for name := range nameCount {
+		if nameCount[name] > 1 {
+			if maxN, ok := nameMaxSuffix[name]; ok {
+				nameIndex[name] = maxN
+			}
+		}
+	}
 	for i, e := range entries {
 		if e.Name == "" {
 			continue

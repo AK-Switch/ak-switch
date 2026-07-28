@@ -180,7 +180,7 @@ func TestAutoNumberNames_UniqueNames(t *testing.T) {
 		{Key: "sk-222", Name: "beta"},
 		{Key: "sk-333", Name: "gamma"},
 	}
-	result := autoNumberNames(entries)
+	result := autoNumberNames(entries, nil)
 	if len(result) != 3 {
 		t.Fatalf("expected 3 entries, got %d", len(result))
 	}
@@ -201,7 +201,7 @@ func TestAutoNumberNames_DuplicateNames(t *testing.T) {
 		{Key: "sk-222", Name: "auto-reg"},
 		{Key: "sk-333", Name: "auto-reg"},
 	}
-	result := autoNumberNames(entries)
+	result := autoNumberNames(entries, nil)
 	if len(result) != 3 {
 		t.Fatalf("expected 3 entries, got %d", len(result))
 	}
@@ -222,7 +222,7 @@ func TestAutoNumberNames_EmptyNames(t *testing.T) {
 		{Key: "sk-222", Name: ""},
 		{Key: "sk-333", Name: "alpha"},
 	}
-	result := autoNumberNames(entries)
+	result := autoNumberNames(entries, nil)
 	if result[0].Name != "alpha-1" {
 		t.Errorf("entry 0 name = %q, want %q", result[0].Name, "alpha-1")
 	}
@@ -238,11 +238,66 @@ func TestAutoNumberNames_SingleEntry(t *testing.T) {
 	entries := []keypool.KeyEntry{
 		{Key: "sk-111", Name: "only-one"},
 	}
-	result := autoNumberNames(entries)
+	result := autoNumberNames(entries, nil)
 	if len(result) != 1 {
 		t.Fatalf("expected 1 entry, got %d", len(result))
 	}
 	if result[0].Name != "only-one" {
 		t.Errorf("name = %q, want %q", result[0].Name, "only-one")
+	}
+}
+
+func TestAutoNumberNames_CrossBatch(t *testing.T) {
+	// Simulate store with existing numbered entries: auto-reg-1~4 from a previous import
+	store := &keypool.KeyStore{
+		Keys: []keypool.KeyEntry{
+			{Key: "sk-old-1", Name: "auto-reg-1"},
+			{Key: "sk-old-2", Name: "auto-reg-2"},
+			{Key: "sk-old-3", Name: "auto-reg-3"},
+			{Key: "sk-old-4", Name: "auto-reg-4"},
+			{Key: "sk-other", Name: "manual-key"},
+		},
+	}
+	// New batch: 3 keys all named "auto-reg"
+	entries := []keypool.KeyEntry{
+		{Key: "sk-111", Name: "auto-reg"},
+		{Key: "sk-222", Name: "auto-reg"},
+		{Key: "sk-333", Name: "auto-reg"},
+	}
+	result := autoNumberNames(entries, store)
+	if len(result) != 3 {
+		t.Fatalf("expected 3 entries, got %d", len(result))
+	}
+	// Should continue from existing max suffix 4, not restart at 1
+	if result[0].Name != "auto-reg-5" {
+		t.Errorf("entry 0 name = %q, want %q", result[0].Name, "auto-reg-5")
+	}
+	if result[1].Name != "auto-reg-6" {
+		t.Errorf("entry 1 name = %q, want %q", result[1].Name, "auto-reg-6")
+	}
+	if result[2].Name != "auto-reg-7" {
+		t.Errorf("entry 2 name = %q, want %q", result[2].Name, "auto-reg-7")
+	}
+}
+
+func TestAutoNumberNames_CrossBatchNilStore(t *testing.T) {
+	// Same as TestAutoNumberNames_DuplicateNames but with explicit nil store
+	entries := []keypool.KeyEntry{
+		{Key: "sk-111", Name: "auto-reg"},
+		{Key: "sk-222", Name: "auto-reg"},
+		{Key: "sk-333", Name: "auto-reg"},
+	}
+	result := autoNumberNames(entries, nil)
+	if len(result) != 3 {
+		t.Fatalf("expected 3 entries, got %d", len(result))
+	}
+	if result[0].Name != "auto-reg-1" {
+		t.Errorf("entry 0 name = %q, want %q", result[0].Name, "auto-reg-1")
+	}
+	if result[1].Name != "auto-reg-2" {
+		t.Errorf("entry 1 name = %q, want %q", result[1].Name, "auto-reg-2")
+	}
+	if result[2].Name != "auto-reg-3" {
+		t.Errorf("entry 2 name = %q, want %q", result[2].Name, "auto-reg-3")
 	}
 }
