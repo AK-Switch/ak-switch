@@ -331,7 +331,7 @@ Example:
 		healthURL := fmt.Sprintf("http://%s:%d/health", host, port)
 		healthReq, err := http.NewRequest(http.MethodGet, healthURL, nil)
 		if err == nil {
-			if token, tokErr := loadAdminToken(name); tokErr == nil && token != "" {
+			if token, tokErr := loadAdminTokenFromConfig(); tokErr == nil && token != "" {
 				healthReq.Header.Set("X-Admin-Token", token)
 			}
 		}
