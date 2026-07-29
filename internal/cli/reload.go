@@ -6,22 +6,54 @@ import (
 	"os"
 	"time"
 
+	"akswitch/internal/config"
+
 	"github.com/spf13/cobra"
 )
 
 // triggerReload sends a reload request to the running server.
-// Returns true if the server accepted the signal, false if unreachable.
+// Returns true if the server accepted the signal, false if unreachable or auth failed.
 func triggerReload() bool {
 	port := detectServerPort()
 
 	client := &http.Client{Timeout: 3 * time.Second}
 	url := fmt.Sprintf("http://%s:%d/api/reload", detectServerHost(), port)
-	resp, err := client.Post(url, "application/json", nil)
+	req, err := http.NewRequest(http.MethodPost, url, nil)
+	if err != nil {
+		return false
+	}
+	if token, tokErr := loadAdminTokenFromConfig(); tokErr == nil && token != "" {
+		req.Header.Set("X-Admin-Token", token)
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return false
 	}
 	resp.Body.Close()
-	return true
+	return resp.StatusCode == http.StatusOK
+}
+
+// loadAdminTokenFromConfig loads the admin token from the TOML config file.
+// Returns empty string if the config doesn't exist or has no admin token.
+func loadAdminTokenFromConfig() (string, error) {
+	xdgPath, err := config.XDGConfigPath()
+	if err != nil {
+		return "", err
+	}
+	tc, err := config.LoadTomlConfig(xdgPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	for _, p := range tc.Provider {
+		if p.AdminToken != "" {
+			return p.AdminToken, nil
+		}
+	}
+	return "", nil
 }
 
 var reloadCmd = &cobra.Command{

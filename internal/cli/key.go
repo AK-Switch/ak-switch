@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"akswitch/internal/config"
 	"akswitch/internal/keypool"
 	"akswitch/internal/logentry"
 
@@ -108,6 +109,7 @@ func init() {
 	keyAddCmd.Flags().Bool("insecure-storage", false, "Store keys in plaintext (WARNING: not encrypted)")
 	keyListCmd.Flags().Bool("runtime", false, "Query live status from running server (shows cooldown, RPM)")
 	addKeyIndexFlags(keyCooldownCmd)
+	keyCmd.AddCommand(keyUpstreamCBResetCmd)
 }
 
 var keyCmd = &cobra.Command{
@@ -559,6 +561,53 @@ var keyEnableCmd = &cobra.Command{
 	},
 }
 
+// resetUpstreamCB sends a POST to the running server to reset the upstream
+// circuit breaker for the specified provider.
+func resetUpstreamCB(provider string) error {
+	port := detectServerPort()
+	client := &http.Client{Timeout: 5 * time.Second}
+	url := fmt.Sprintf("http://%s:%d/api/stats/reset-upstream-cb?provider=%s",
+		detectServerHost(), port, url.QueryEscape(provider))
+
+	req, err := http.NewRequest(http.MethodPost, url, nil)
+	if err != nil {
+		return err
+	}
+	if token, tokErr := loadAdminToken(provider); tokErr == nil && token != "" {
+		req.Header.Set("X-Admin-Token", token)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("server not reachable: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API error (HTTP %d): %s", resp.StatusCode, string(body))
+	}
+	return nil
+}
+
+var keyUpstreamCBResetCmd = &cobra.Command{
+	Use:   "upstream-cb-reset <provider>",
+	Short: "Reset the upstream circuit breaker for a provider",
+	Long: `Force-close the upstream circuit breaker for a provider.
+
+The upstream circuit breaker opens after repeated 502/503 responses.
+This command resets it so the provider can resume sending requests
+immediately without waiting for the recovery timeout.
+
+Examples:
+  akswitch key upstream-cb-reset nvidia
+  akswitch key upstream-cb-reset sensenova`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return resetUpstreamCB(args[0])
+	},
+}
+
 // resolveKeyIndex resolves a key index from command arguments.
 // If --by-name is set, looks up the index by name; otherwise parses it as an integer.
 func resolveKeyIndex(cmd *cobra.Command, args []string) (int, error) {
@@ -597,6 +646,26 @@ func findKeyIndexByName(store *keypool.KeyStore, name string) (int, error) {
 	return matches[0], nil
 }
 
+// loadAdminToken loads the admin token for a provider from the TOML config.
+// Returns empty string if the config file doesn't exist or the provider has no token set.
+func loadAdminToken(provider string) (string, error) {
+	xdgPath, err := config.XDGConfigPath()
+	if err != nil {
+		return "", err
+	}
+	tc, err := config.LoadTomlConfig(xdgPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	if p, ok := tc.Provider[provider]; ok {
+		return p.AdminToken, nil
+	}
+	return "", nil
+}
+
 // callKeyRuntimeAPI sends a key operation request to the running server.
 // Supported operations: "cooldown", "enable", "disable".
 // Returns nil on success, error if server is unreachable or API returns an error.
@@ -619,6 +688,9 @@ func callKeyRuntimeAPI(provider string, idx int, operation string) error {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if token, tokErr := loadAdminToken(provider); tokErr == nil && token != "" {
+		req.Header.Set("X-Admin-Token", token)
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -638,7 +710,15 @@ func keyListRuntime(provider string) error {
 	client := &http.Client{Timeout: 5 * time.Second}
 	url := fmt.Sprintf("http://%s:%d/api/keys?provider=%s", detectServerHost(), detectServerPort(), url.QueryEscape(provider))
 
-	resp, err := client.Get(url)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("server not reachable: %w", err)
+	}
+	if token, tokErr := loadAdminToken(provider); tokErr == nil && token != "" {
+		req.Header.Set("X-Admin-Token", token)
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("server not reachable: %w", err)
 	}
