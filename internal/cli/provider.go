@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"akswitch/internal/config"
@@ -332,11 +333,11 @@ Example:
 			return fmt.Errorf("provider %q not found in %s", name, source)
 		}
 
-		// Read flags — use sentinel -1 to detect "flag not provided"
+		// Read flags via os.Args scan to avoid Cobra Changed() persistence (Cobra #1398)
 		changes := 0
 
-		if cmd.Flags().Changed("target") {
-			target, _ := cmd.Flags().GetString("target")
+		if hasCLIFlag("target") {
+			target := getCLIFlagValue("target")
 			if target == "" {
 				return fmt.Errorf("--target/-t cannot be empty")
 			}
@@ -344,88 +345,88 @@ Example:
 			changes++
 		}
 
-		if cmd.Flags().Changed("genai") {
-			prov.GenaiBase, _ = cmd.Flags().GetString("genai")
+		if hasCLIFlag("genai") {
+			prov.GenaiBase = getCLIFlagValue("genai")
 			changes++
 		}
-		if cmd.Flags().Changed("cooldown-sec") {
+		if hasCLIFlag("cooldown-sec") {
 			v, _ := cmd.Flags().GetInt("cooldown-sec")
-			if v < 0 {
-				return fmt.Errorf("--cooldown-sec must be >= 0")
+			if v < -1 {
+				return fmt.Errorf("--cooldown-sec must be >= -1")
 			}
 			prov.CooldownSec = v
 			changes++
 		}
-		if cmd.Flags().Changed("max-retries") {
+		if hasCLIFlag("max-retries") {
 			v, _ := cmd.Flags().GetInt("max-retries")
-			if v < 0 {
-				return fmt.Errorf("--max-retries must be >= 0")
+			if v < -1 {
+				return fmt.Errorf("--max-retries must be >= -1")
 			}
 			prov.MaxRetries = v
 			changes++
 		}
-		if cmd.Flags().Changed("backoff-cap-sec") {
+		if hasCLIFlag("backoff-cap-sec") {
 			v, _ := cmd.Flags().GetInt("backoff-cap-sec")
-			if v < 0 {
-				return fmt.Errorf("--backoff-cap-sec must be >= 0")
+			if v < -1 {
+				return fmt.Errorf("--backoff-cap-sec must be >= -1")
 			}
 			prov.BackoffCapSec = v
 			changes++
 		}
-		if cmd.Flags().Changed("backoff-multiplier") {
+		if hasCLIFlag("backoff-multiplier") {
 			v, _ := cmd.Flags().GetFloat64("backoff-multiplier")
-			if v < 0 {
-				return fmt.Errorf("--backoff-multiplier must be >= 0")
+			if v < -1 {
+				return fmt.Errorf("--backoff-multiplier must be >= -1")
 			}
 			prov.BackoffMultiplier = v
 			changes++
 		}
-		if cmd.Flags().Changed("cb-reset-sec") {
+		if hasCLIFlag("cb-reset-sec") {
 			v, _ := cmd.Flags().GetInt("cb-reset-sec")
-			if v < 0 {
-				return fmt.Errorf("--cb-reset-sec must be >= 0")
+			if v < -1 {
+				return fmt.Errorf("--cb-reset-sec must be >= -1")
 			}
 			prov.CBResetSec = v
 			changes++
 		}
-		if cmd.Flags().Changed("upstream-cb-threshold") {
+		if hasCLIFlag("upstream-cb-threshold") {
 			v, _ := cmd.Flags().GetInt("upstream-cb-threshold")
-			if v < 0 {
-				return fmt.Errorf("--upstream-cb-threshold must be >= 0")
+			if v < -1 {
+				return fmt.Errorf("--upstream-cb-threshold must be >= -1")
 			}
 			prov.UpstreamCBThreshold = v
 			changes++
 		}
-		if cmd.Flags().Changed("http-timeout-sec") {
+		if hasCLIFlag("http-timeout-sec") {
 			v, _ := cmd.Flags().GetInt("http-timeout-sec")
-			if v < 0 {
-				return fmt.Errorf("--http-timeout-sec must be >= 0")
+			if v < -1 {
+				return fmt.Errorf("--http-timeout-sec must be >= -1")
 			}
 			prov.HTTPTimeoutSec = v
 			changes++
 		}
-		if cmd.Flags().Changed("health-check-interval-sec") {
+		if hasCLIFlag("health-check-interval-sec") {
 			v, _ := cmd.Flags().GetInt("health-check-interval-sec")
-			if v < 0 {
-				return fmt.Errorf("--health-check-interval-sec must be >= 0")
+			if v < -1 {
+				return fmt.Errorf("--health-check-interval-sec must be >= -1")
 			}
 			prov.HealthCheckIntervalSec = v
 			changes++
 		}
-		if cmd.Flags().Changed("admin-token") {
+		if hasCLIFlag("admin-token") {
 			prov.AdminToken, _ = cmd.Flags().GetString("admin-token")
 			changes++
 		}
-		if cmd.Flags().Changed("disable-thinking") {
+		if hasCLIFlag("disable-thinking") {
 			prov.DisableThinking, _ = cmd.Flags().GetBool("disable-thinking")
 			changes++
 		}
-		if cmd.Flags().Changed("genai-model") {
-			prov.GenaiModel, _ = cmd.Flags().GetString("genai-model")
+		if hasCLIFlag("genai-model") {
+			prov.GenaiModel = getCLIFlagValue("genai-model")
 			changes++
 		}
-		if cmd.Flags().Changed("keys-file") {
-			prov.KeysFile, _ = cmd.Flags().GetString("keys-file")
+		if hasCLIFlag("keys-file") {
+			prov.KeysFile = getCLIFlagValue("keys-file")
 			changes++
 		}
 
@@ -626,4 +627,62 @@ Example:
 
 		return nil
 	},
+}
+
+// hasCLIFlag checks whether a flag was explicitly passed on the command line
+// by scanning os.Args. This avoids Cobra bug #1398 where Flags().Changed()
+// persists across Execute() calls within the same process.
+func hasCLIFlag(name string) bool {
+	for _, a := range os.Args {
+		if a == "--"+name || a == "-"+flagShortName(name) {
+			return true
+		}
+		// Handle --flag=value form
+		if len(a) > len(name)+2 && a[:2] == "--" {
+			rest := a[2:]
+			if idx := strings.Index(rest, "="); idx > 0 {
+				if rest[:idx] == name {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// getCLIFlagValue returns the value of a string flag from os.Args.
+// Supports --flag value, --flag=value, and -f value forms.
+func getCLIFlagValue(name string) string {
+	short := flagShortName(name)
+	for i, a := range os.Args {
+		// --flag=value
+		if len(a) > len(name)+2 && a[:2] == "--" {
+			rest := a[2:]
+			if idx := strings.Index(rest, "="); idx > 0 && rest[:idx] == name {
+				return rest[idx+1:]
+			}
+		}
+		// --flag value
+		if a == "--"+name && i+1 < len(os.Args) {
+			return os.Args[i+1]
+		}
+		// -f value
+		if a == "-"+short && i+1 < len(os.Args) {
+			return os.Args[i+1]
+		}
+	}
+	return ""
+}
+
+// flagShortName maps long flag names to their short forms (if any).
+func flagShortName(name string) string {
+	switch name {
+	case "target":
+		return "t"
+	case "cooldown-sec":
+		return "c"
+	case "max-retries":
+		return "r"
+	}
+	return ""
 }
