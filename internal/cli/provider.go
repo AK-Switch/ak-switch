@@ -331,7 +331,7 @@ Example:
 		healthURL := fmt.Sprintf("http://%s:%d/health", host, port)
 		healthReq, err := http.NewRequest(http.MethodGet, healthURL, nil)
 		if err == nil {
-			if token, tokErr := loadAdminTokenFromConfig(); tokErr == nil && token != "" {
+			if token, tokErr := loadAdminToken(name); tokErr == nil && token != "" {
 				healthReq.Header.Set("X-Admin-Token", token)
 			}
 		}
@@ -365,23 +365,6 @@ Example:
 			}
 		} else {
 			fmt.Println("  Status:  not running")
-		}
-
-		// Stats
-		statsURL := fmt.Sprintf("http://%s:%d/api/stats", host, port)
-		statsReq, _ := http.NewRequest(http.MethodGet, statsURL, nil)
-		if token, tokErr := loadAdminTokenFromConfig(); tokErr == nil && token != "" {
-			statsReq.Header.Set("X-Admin-Token", token)
-		}
-		statsResp, err := client.Do(statsReq)
-		if err == nil {
-			statsBody, _ := io.ReadAll(statsResp.Body)
-			statsResp.Body.Close()
-			var stats map[string]interface{}
-			if json.Unmarshal(statsBody, &stats) == nil {
-				fmt.Printf("  Requests: %v (success: %v, failed: %v)\n",
-					stats["total_requests"], stats["successful_requests"], stats["failed_requests"])
-			}
 		}
 
 		// Config section

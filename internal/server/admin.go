@@ -407,7 +407,9 @@ func (pr *ProviderRouter) clearHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (pr *ProviderRouter) statsHandler(w http.ResponseWriter, r *http.Request) {
-	// Aggregate key stats across all providers
+	if !pr.checkAnyAdminToken(w, r) {
+		return
+	}
 	pr.mu.RLock()
 	totalActive := 0
 	totalCooling := 0

@@ -94,8 +94,6 @@ var statusCmd = &cobra.Command{
 
 		var stats map[string]interface{}
 		if err := json.Unmarshal(statsBody, &stats); err == nil {
-			fmt.Printf("Requests: %v (success: %v, failed: %v)\n",
-				stats["total_requests"], stats["successful_requests"], stats["failed_requests"])
 			fmt.Printf("Active keys: %v, Cooling: %v, Disabled: %v\n",
 				stats["active_keys"], stats["cooling_keys"], stats["disabled_keys"])
 			fmt.Printf("Uptime: %vs\n", stats["uptime_seconds"])
