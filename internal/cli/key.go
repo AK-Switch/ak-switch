@@ -22,7 +22,7 @@ import (
 type KeyMutation int
 
 const (
-	KeyEnable  KeyMutation = iota
+	KeyEnable KeyMutation = iota
 	KeyDisable
 	KeyRemove
 )
@@ -259,11 +259,11 @@ Examples:
 		}
 
 		// Auto-number duplicate names before dedup
-			entries = autoNumberNames(entries, store)
+		entries = autoNumberNames(entries, store)
 
-			// Dedup against existing keys
-			newEntries, skipped := dedupEntries(entries, store)
-			store.Keys = append(store.Keys, newEntries...)
+		// Dedup against existing keys
+		newEntries, skipped := dedupEntries(entries, store)
+		store.Keys = append(store.Keys, newEntries...)
 
 		if insecure {
 			if err := keypool.SaveKeysInsecure(provider, store); err != nil {
@@ -275,25 +275,25 @@ Examples:
 			}
 		}
 
-			// Build stats output
-			added := len(newEntries)
-			total := len(store.Keys)
-			names := make([]string, 0, added)
-			for _, e := range newEntries {
-				if e.Name != "" {
-					names = append(names, e.Name)
-				}
+		// Build stats output
+		added := len(newEntries)
+		total := len(store.Keys)
+		names := make([]string, 0, added)
+		for _, e := range newEntries {
+			if e.Name != "" {
+				names = append(names, e.Name)
 			}
-			nameList := ""
-			if len(names) > 0 {
-				nameList = fmt.Sprintf(" (%s)", strings.Join(names, ", "))
-			}
-			fmt.Printf("Imported %d key(s) to provider %q\n", len(entries), provider)
-			fmt.Printf("  ✅ Added: %d%s\n", added, nameList)
-			if skipped > 0 {
+		}
+		nameList := ""
+		if len(names) > 0 {
+			nameList = fmt.Sprintf(" (%s)", strings.Join(names, ", "))
+		}
+		fmt.Printf("Imported %d key(s) to provider %q\n", len(entries), provider)
+		fmt.Printf("  ✅ Added: %d%s\n", added, nameList)
+		if skipped > 0 {
 			fmt.Printf("  ⏭️  Skipped: %d (already exists)\n", skipped)
-			}
-			fmt.Printf("  Total: %d keys\n", total)
+		}
+		fmt.Printf("  Total: %d keys\n", total)
 		triggerReload()
 		return nil
 	},

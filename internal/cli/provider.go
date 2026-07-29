@@ -100,8 +100,8 @@ Example:
 
 		// Add new provider
 		tc.Provider[name] = &config.Config{
-			TargetBase: target,
-			GenaiBase:  genai,
+			TargetBase:  target,
+			GenaiBase:   genai,
 			CooldownSec: cooldown,
 			MaxRetries:  maxRetries,
 		}
@@ -341,6 +341,7 @@ Example:
 			healthResp.Body.Close()
 			if healthResp.StatusCode == http.StatusUnauthorized || healthResp.StatusCode == http.StatusForbidden {
 				fmt.Fprintf(os.Stderr, "health check auth failed (HTTP %d): check X-Admin-Token in server config\n", healthResp.StatusCode)
+				fmt.Printf("  Status:  auth required\n")
 			} else if healthResp.StatusCode == http.StatusOK {
 				var healthData map[string]interface{}
 				if json.Unmarshal(healthBody, &healthData) == nil {

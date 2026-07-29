@@ -98,7 +98,7 @@ var configInitCmd = &cobra.Command{
 var configViewCmd = &cobra.Command{
 	Use:   "view",
 	Short: "Display current configuration",
-	Long: `Read the TOML configuration file and print its contents in a human-readable format.`,
+	Long:  `Read the TOML configuration file and print its contents in a human-readable format.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		source, err := config.XDGConfigPath()
 		if err != nil {
@@ -418,6 +418,7 @@ var configSetCmd = &cobra.Command{
 		return nil
 	},
 }
+
 // printProviderParams prints a provider's runtime parameters.
 func printProviderParams(provider string, cp config.ConfigPayload) {
 	fmt.Printf("Provider: %s\n", provider)
