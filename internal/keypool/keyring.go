@@ -21,8 +21,9 @@ func defaultOpenKeyring(cfg keyring.Config) (keyring.Keyring, error) {
 }
 
 var (
-	keyringMu      sync.Mutex
-	keyringBackend keyring.Keyring
+	keyringMu         sync.Mutex
+	keyringBackend    keyring.Keyring
+	keyringInitConfig string
 )
 
 // initKeyring lazily opens the system keyring backend.
@@ -32,9 +33,13 @@ var (
 func initKeyring() error {
 	keyringMu.Lock()
 	defer keyringMu.Unlock()
-	if keyringBackend != nil {
+	// Invalidate cache when config directory changes (test isolation).
+	currentConfig := config.ConfigDir
+	if keyringBackend != nil && keyringInitConfig == currentConfig {
 		return nil
 	}
+	keyringBackend = nil
+	keyringInitConfig = ""
 
 	// Tier 1: Try OS-level keyring (Keychain / WinCred / SecretService)
 	kr, err := openKeyring(keyring.Config{
@@ -42,6 +47,7 @@ func initKeyring() error {
 	})
 	if err == nil {
 		keyringBackend = kr
+		keyringInitConfig = currentConfig
 		return nil
 	}
 	firstErr := err
@@ -65,6 +71,7 @@ func initKeyring() error {
 	}
 
 	keyringBackend = kr
+	keyringInitConfig = currentConfig
 	return nil
 }
 
@@ -114,6 +121,7 @@ func setTestKeyring(kr keyring.Keyring) {
 func resetTestKeyring() {
 	keyringMu.Lock()
 	keyringBackend = nil
+	keyringInitConfig = ""
 	keyringMu.Unlock()
 }
 
