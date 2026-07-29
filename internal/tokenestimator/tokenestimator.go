@@ -130,13 +130,14 @@ func EstimateInput(bodyBytes []byte, model string) int {
 		if len(msg.Content) == 0 {
 			continue
 		}
-		if msg.Content[0] == '"' {
+		switch msg.Content[0] {
+		case '"':
 			// String format: "content": "text"
 			var s string
 			if json.Unmarshal(msg.Content, &s) == nil {
 				inputBuf.WriteString(s)
 			}
-		} else if msg.Content[0] == '[' {
+		case '[':
 			// Anthropic array format: "content": [{"type": "text", "text": "..."}]
 			var parts []struct {
 				Text string `json:"text"`

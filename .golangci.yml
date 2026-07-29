@@ -1,11 +1,9 @@
 version: '2'
 linters:
   enable:
-    - gofmt
     - govet
     - errcheck
     - staticcheck
-    - gosimple
     - ineffassign
     - unconvert
     - misspell
@@ -16,13 +14,3 @@ linters:
     gocritic:
       disabled-checks:
         - appendAssign
-        - evalOrder
-issues:
-  exclude-rules:
-    # Allow generated files to be excluded from certain linters
-    - path: '_test\.go$'
-      linters:
-        - errcheck
-    - path: 'zz_generated'
-      linters:
-        - all

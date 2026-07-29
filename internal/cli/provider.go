@@ -90,7 +90,6 @@ Example:
 			if tc.Port == 0 {
 				return fmt.Errorf("--port/-p is required for the first provider")
 			}
-			port = tc.Port // reuse existing port
 		} else if tc.Port == 0 {
 			// First provider with a port — set it
 			tc.Port = port
@@ -331,7 +330,7 @@ Example:
 		healthResp, err := client.Get(healthURL)
 		if err == nil {
 			body, _ := io.ReadAll(healthResp.Body)
-			healthResp.Body.Close()
+			_ = healthResp.Body.Close()
 			var healthData map[string]interface{}
 			if json.Unmarshal(body, &healthData) == nil {
 				if details, ok := healthData["details"]; ok {
@@ -355,7 +354,7 @@ Example:
 			statsResp, err := client.Get(statsURL)
 			if err == nil {
 				statsBody, _ := io.ReadAll(statsResp.Body)
-				statsResp.Body.Close()
+				_ = statsResp.Body.Close()
 				var stats map[string]interface{}
 				if json.Unmarshal(statsBody, &stats) == nil {
 					fmt.Printf("  Requests: %v (success: %v, failed: %v)\n",

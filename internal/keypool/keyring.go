@@ -21,8 +21,10 @@ func defaultOpenKeyring(cfg keyring.Config) (keyring.Keyring, error) {
 }
 
 var (
-	keyringMu      sync.Mutex
-	keyringBackend keyring.Keyring
+	keyringMu         sync.Mutex
+	keyringBackend    keyring.Keyring
+	keyringInitConfig string
+	testKeyringSet    bool
 )
 
 // initKeyring lazily opens the system keyring backend.
@@ -32,7 +34,7 @@ var (
 func initKeyring() error {
 	keyringMu.Lock()
 	defer keyringMu.Unlock()
-	if keyringBackend != nil {
+	if keyringBackend != nil && (testKeyringSet || keyringInitConfig == keyringFallbackDir()) {
 		return nil
 	}
 
@@ -42,6 +44,7 @@ func initKeyring() error {
 	})
 	if err == nil {
 		keyringBackend = kr
+		keyringInitConfig = keyringFallbackDir()
 		return nil
 	}
 	firstErr := err
@@ -65,6 +68,7 @@ func initKeyring() error {
 	}
 
 	keyringBackend = kr
+	keyringInitConfig = keyringFallbackDir()
 	return nil
 }
 
@@ -104,16 +108,20 @@ func fallbackPasswordFunc(passwordFile string) keyring.PromptFunc {
 
 // setTestKeyring replaces the keyring backend for testing.
 // Must be called before the function under test, paired with resetTestKeyring.
+//nolint:unused // used by test files in the same package
 func setTestKeyring(kr keyring.Keyring) {
 	keyringMu.Lock()
 	keyringBackend = kr
+	testKeyringSet = true
 	keyringMu.Unlock()
 }
 
 // resetTestKeyring clears the keyring backend (for testing).
+//nolint:unused // used by test files in the same package
 func resetTestKeyring() {
 	keyringMu.Lock()
 	keyringBackend = nil
+	testKeyringSet = false
 	keyringMu.Unlock()
 }
 

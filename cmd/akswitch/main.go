@@ -10,5 +10,5 @@ import (
 var dashboardHTML string
 
 func main() {
-	cli.Execute(dashboardHTML)
+	_ = cli.Execute(dashboardHTML)
 }

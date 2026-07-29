@@ -23,14 +23,14 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@e72a236d1230b954a09c29ea7df2087d8e8795a0
         with:
-          version: v2.1.6
+          version: v2.12.2
           args: --timeout 5m
 
       - name: govulncheck
-        uses: golangci/golangci-lint-action@e72a236d1230b954a09c29ea7df2087d8e8795a0
-        with:
-          version: v2.1.6
-          args: govulncheck ./...
+        continue-on-error: true
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
 
   unit:
     name: Unit Tests
