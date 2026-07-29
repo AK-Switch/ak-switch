@@ -430,16 +430,26 @@ Example:
 		}
 
 		// --default modifies TomlConfig, not the provider itself
+		// Use os.Args to avoid cobra flag persistence across test runs
 		defaultSet := false
-		if cmd.Flags().Changed("default") {
-			tc.DefaultProvider = name
-			config.DefaultProviderName = name
-			defaultSet = true
-			changes++
+		for _, a := range os.Args {
+			if a == "--default" {
+				tc.DefaultProvider = name
+				config.DefaultProviderName = name
+				defaultSet = true
+				changes++
+				break
+			}
 		}
 
 		if changes == 0 {
 			return fmt.Errorf("no fields specified to update (use --help to see available flags)")
+		}
+
+		// Ensure directory exists (provider update uses existing file, but MkdirAll is safe)
+		dir := filepath.Dir(source)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("failed to create config directory %s: %w", dir, err)
 		}
 
 		// Save

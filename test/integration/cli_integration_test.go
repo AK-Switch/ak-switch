@@ -1415,8 +1415,8 @@ func TestProviderUpdate_NotFound(t *testing.T) {
 }
 
 // TestProviderUpdate_NoFlags 验证不带任何 flag 时返回错误。
-// SKIP: Cobra flag 在进程内 Execute() 调用间持久化（已知问题），
-// 前序 provider add 的 --target 等 flag 残留导致无法测试此路径。
+// SKIP: Cobra flag 在进程内 Execute() 调用间持久化（Cobra #1398）。
+// TODO: 改用子进程模式后移除此 skip。
 func TestProviderUpdate_NoFlags(t *testing.T) {
 	t.Skip("Cobra flag 持久化 bug 阻止进程内测试此路径")
 	_ = runAkswitch
@@ -1648,5 +1648,54 @@ func TestProviderUpdate_DisableThinking(t *testing.T) {
 	}
 	if !tc.Provider["think"].DisableThinking {
 		t.Error("DisableThinking should be true")
+	}
+}
+
+// TestProviderUpdate_ZeroValues verifies that setting int/float fields to zero
+// persists correctly (regression test for omitempty stripping zero values).
+func TestProviderUpdate_ZeroValues(t *testing.T) {
+	cli.ResetConfigEnv()
+	tmpDir := t.TempDir()
+	config.ConfigDir = tmpDir
+	t.Cleanup(func() { config.ConfigDir = "" })
+
+	xdgPath, err := config.XDGConfigPath()
+	if err != nil {
+		t.Fatalf("XDGConfigPath failed: %v", err)
+	}
+	runAkswitch(t, "akswitch", "provider", "add", "zerovals",
+		"--target", "https://zerovals.test/v1",
+		"--port", "9608",
+		"--cooldown-sec", "15",
+		"--max-retries", "3",
+	)
+
+	// Set all int/float fields to zero
+	err = runAkswitch(t, "akswitch", "provider", "update", "zerovals",
+		"--cooldown-sec", "0",
+		"--max-retries", "0",
+		"--backoff-cap-sec", "0",
+		"--backoff-multiplier", "0",
+	)
+	if err != nil {
+		t.Fatalf("provider update zero values failed: %v", err)
+	}
+
+	tc, err := config.LoadTomlConfig(xdgPath)
+	if err != nil {
+		t.Fatalf("LoadTomlConfig failed: %v", err)
+	}
+	p := tc.Provider["zerovals"]
+	if p.CooldownSec != 0 {
+		t.Errorf("CooldownSec = %d, want 0", p.CooldownSec)
+	}
+	if p.MaxRetries != 0 {
+		t.Errorf("MaxRetries = %d, want 0", p.MaxRetries)
+	}
+	if p.BackoffCapSec != 0 {
+		t.Errorf("BackoffCapSec = %d, want 0", p.BackoffCapSec)
+	}
+	if p.BackoffMultiplier != 0 {
+		t.Errorf("BackoffMultiplier = %f, want 0", p.BackoffMultiplier)
 	}
 }
