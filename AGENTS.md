@@ -109,7 +109,7 @@ See [docs/architecture.md](./docs/architecture.md) for detailed design docs.
 - `v0.x.0` — 新功能（minor）
 - `v0.x.1` — bug 修复（patch）
 
-**流程：** CHANGELOG.md 更新 → `git commit` → `make release VERSION=v0.x.x`
+**流程：** `git commit` → `make release VERSION=v0.x.x`
 或从 GitHub Actions 手动触发 `Build & Release` workflow。
 
 ## PR / Commit 格式

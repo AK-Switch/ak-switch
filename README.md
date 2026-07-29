@@ -60,7 +60,7 @@ akswitch start
 | [API 文档](docs/api.md) | 代理端点、管理 API、错误码 |
 | [熔断器架构](docs/architecture.md) | 两层熔断器状态转移、响应矩阵 |
 | [部署指南](docs/deployment.md) | Docker、监控栈、自定义端口 |
-| [变更日志](CHANGELOG.md) | 版本历史与里程碑 |
+| [变更日志](https://github.com/AK-Switch/ak-switch/releases) | GitHub Releases |
 
 ## 项目定位
 
