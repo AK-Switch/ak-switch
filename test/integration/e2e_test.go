@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
