@@ -407,7 +407,27 @@ func (pr *ProviderRouter) clearHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (pr *ProviderRouter) statsHandler(w http.ResponseWriter, r *http.Request) {
-	// Aggregate key stats across all providers
+	pName := r.URL.Query().Get("provider")
+
+	if pName != "" {
+		ps := pr.lookupProvider(pName)
+		if ps == nil {
+			respondJSON(w, http.StatusNotFound, map[string]string{"error": fmt.Sprintf("provider %q not found", pName)})
+			return
+		}
+		pr.mu.RLock()
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"provider":         pName,
+			"active_keys":      ps.Pool.ActiveCount(),
+			"cooling_keys":     ps.Pool.CoolingCount(),
+			"disabled_keys":    ps.Pool.DisabledCount(),
+			"uptime_seconds":   time.Since(pr.startTime).Seconds(),
+		})
+		pr.mu.RUnlock()
+		return
+	}
+
+	// Aggregate across all providers
 	pr.mu.RLock()
 	totalActive := 0
 	totalCooling := 0

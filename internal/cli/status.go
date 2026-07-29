@@ -78,6 +78,9 @@ Otherwise, shows all providers.`,
 
 		// Query stats endpoint
 		statsURL := fmt.Sprintf("http://%s:%d/api/stats", detectServerHost(), port)
+		if len(args) > 0 {
+			statsURL += "?provider=" + args[0]
+		}
 		statsResp, err := client.Get(statsURL)
 		if err == nil {
 			statsBody, _ := io.ReadAll(statsResp.Body)

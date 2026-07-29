@@ -148,6 +148,49 @@ func TestStatusCmd_WithUnknownProvider_ReturnsError(t *testing.T) {
 	}
 }
 
+func TestStatusCmd_WithProvider_FiltersStatsURL(t *testing.T) {
+	var statsPath string
+	output := runStatusCmd(t, []string{"alpha"}, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/health" {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"status": "healthy",
+				"details": map[string]interface{}{
+					"alpha": map[string]interface{}{
+						"keys":              3,
+						"upstream_cb_state": "closed",
+					},
+					"beta": map[string]interface{}{
+						"keys":              2,
+						"upstream_cb_state": "open",
+					},
+				},
+			})
+		}
+		if r.URL.Path == "/api/stats" {
+			statsPath = r.RequestURI
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"total_requests":     100,
+				"successful_requests": 95,
+				"failed_requests":     5,
+				"active_keys":        3,
+				"cooling_keys":       0,
+				"disabled_keys":      1,
+				"uptime_seconds":     3600,
+				"provider":           "alpha",
+			})
+		}
+	})
+
+	if !strings.Contains(statsPath, "provider=alpha") {
+		t.Errorf("expected stats request to include ?provider=alpha, got path: %s", statsPath)
+	}
+	if !strings.Contains(output, "alpha") {
+		t.Errorf("expected output to mention alpha stats, got:\n%s", output)
+	}
+}
+
 func TestFormatProviderTable_SingleProvider(t *testing.T) {
 	det := map[string]interface{}{
 		"alpha": map[string]interface{}{
