@@ -1,4 +1,31 @@
-.PHONY: test-unit test-integration test-e2e test-all release
+.PHONY: build clean lint fmt check help vet test-unit test-integration test-e2e test-all release
+
+# build — compile the akswitch binary
+build:
+	go build -o bin/akswitch ./cmd/akswitch/
+
+# clean — remove build artifacts
+clean:
+	rm -rf bin/ tmp/ *.test
+
+# lint — run golangci-lint
+lint:
+	golangci-lint run ./...
+
+# vet — run go vet
+vet:
+	go vet ./...
+
+# fmt — format Go source files
+fmt:
+	go fmt ./...
+
+# check — run lint, vet, and fmt
+check: lint vet fmt
+
+# help — show available targets
+help:
+	@awk '/^# /{desc=$$0; sub(/^# /,"",desc); next} /^[a-zA-Z_-]+:/{printf "  %-20s %s\n", $$1, desc}' $(MAKEFILE_LIST)
 
 test-unit:
 	go test -tags=unit -count=1 -short ./internal/...
