@@ -26,38 +26,32 @@ go test -tags=e2e -run TestName -timeout=5m -race ./test/integration/  # E2E
 cmd/akswitch/main.go           # 入口
 internal/
   cli/                         # Cobra CLI 命令层
-    root.go, start.go, config.go, key.go, ... # 根命令、启动、配置/密钥/Provider 管理
+    root.go, start.go, config.go, key.go, ...
     selfrestart.go             # 二进制自监控重启
   server/                      # HTTP 代理 + 管理 API
-    proxy_executor.go          # 代理生命周期（Key 选择→转发→重试→Token 计量）
+    proxy_executor.go          # 代理生命周期
     proxy_handler.go           # 路径提取 + 请求分发
     server.go, admin.go        # 引擎初始化、管理 API
     colorhandler.go            # ANSI 彩色日志
     logmanager.go              # 日志级别/格式/文件输出
-  keypool/                     # API Key 轮转（round-robin + cooldown）
-  circuitbreaker/              # 两层熔断（Key 级 + 上游级）
+  keypool/                     # API Key 轮转
+  circuitbreaker/              # 两层熔断
   config/                      # TOML 配置加载
-  
   metrics/                     # Prometheus 指标
-  tracker/                     # Token 校准器（Calibrator）
+  tracker/                     # Token 校准器
   tokenestimator/              # tiktoken 估算
-  logentry/                    # LogEntry 结构体
 docs/
   cli/                         # 自动生成的 CLI 文档
-  api.md, architecture.md, ... # API 端点、熔断器设计等
+  architecture.md, api.md      # 架构设计、API 端点
 ```
 
 ## Architecture
 
-See [docs/architecture.md](./docs/architecture.md) for detailed design docs.
-
-**关键模式：**
-- **ProviderRouter + ProxyExecutor** — 单端口 `/{provider}/...` 路由，ProxyExecutor 执行完整生命周期（Key 选择→转发→重试→Token 计量）
+关键模式（详见 [docs/architecture.md](./docs/architecture.md)）：
+- **ProviderRouter + ProxyExecutor** — 单端口 `/{provider}/...` 路由，ProxyExecutor 执行完整生命周期
 - **两层熔断** — Key 级（429 退避）→ 上游级（502/503 熔断）
 - **配置热重载** — 监听 `.env` 变更，热更新 key pool，不停机
-- **单数据通道** — Prometheus 指标（`/metrics`，聚合趋势）与请求日志（`/logs`，从 JSON 日志文件读取）
 - **启动 key 探针** — 启动时检测 401/403 自动禁用无效 key
-- **Token 校准** — Calibrator 滑动窗口，比较 tiktoken 估算 vs 实际值
 
 ## Code Style & Conventions
 
@@ -65,34 +59,27 @@ See [docs/architecture.md](./docs/architecture.md) for detailed design docs.
 - **错误处理** — 不吞错误，不 panic（`crash.go` 做 panic 恢复）
 - **测试分层** — 每个测试文件必须加 `//go:build unit` / `integration` / `e2e` 标签
 - **CLI 测试模式** — 新增命令加 `TestXxxCmd_Exists`，新增标志加 `TestXxxCmd_HasYyyFlag`
-- **提交信息** — `类型: 描述`（`feat`/`fix`/`refactor`/`chore`/`docs`）
 
 ## Testing
 
-写测试时，用以下四个原则指导决策，而不是记忆具体规则。
+测试设计原则：测试即规格、反馈速度决定分层、服务于变更、测试即文档。
 
-**1. 测试是规格**
-测试定义"应该输出什么"，代码是实现。改动输出格式前，先改测试定义新格式，再改代码。
-
-**2. 反馈速度决定一切**
-测试分层就是为了保证速度。纯函数在 unit 层测，CLI 命令解析在 unit 层测，集成测试 mock upstream 验证完整流程。
-
-**3. 测试服务于变更**
-每个测试都对应一个"未来有人会改这个"的假设。`TestXxxCmd_HasYyyFlag` 对应"未来有人会删这个 flag"。
-
-**4. 测试是文档**
-测试断言直接写出期望值，而不是"不崩就行"。验收测试剥离 ANSI 码后，断言字符串就是终端输出的真实样子。
-
-**策略：**
-- 主攻方向：集成验收测试（mock upstream + 真实代理请求）
-- 测试入口：`testhelper.go` 的 `runCommand()` 或子进程模式
-- CLI 测试：必须包含输出断言，禁止无断言的 `runCommand` 模式
+详细规范见 [docs/guides/testing.md](./docs/guides/testing.md)。单测命令：
+```bash
+go test -tags=unit -run TestName ./internal/cli/          # 单元
+go test -tags=integration -run TestName -race ./test/integration/  # 集成
+go test -tags=e2e -run TestName -timeout=5m -race ./test/integration/  # E2E
+```
 
 ## Boundaries
 
 - ✅ **Always**：修改 CLI 命令/标志、修复 bug、添加测试、更新文档
 - ⚠️ **Ask first**：修改 `internal/server/` 核心逻辑、新增 provider、改数据库/外部服务
 - 🚫 **Never**：直接 push 到 main、force push、修改 keys 存储逻辑、提交敏感信息
+
+**提交规范**：`类型: 描述`（`feat`/`fix`/`refactor`/`chore`/`docs`）。PR 合并后 `go install ./cmd/akswitch/` 更新本地二进制。
+
+**发版**：PR 合并后 `git commit` 更新 CHANGELOG → `make release VERSION=v0.x.x`，或从 GitHub Actions 触发 `Build & Release` workflow。新功能 `v0.x.0`，bug 修复 `v0.x.1`。
 
 ## Common Pitfalls
 
@@ -101,70 +88,11 @@ See [docs/architecture.md](./docs/architecture.md) for detailed design docs.
 - **SSE 流式 token 估算**：sensenova 在 Anthropic 流式响应中不返回 `usage.output_tokens`（始终为 0），所有 token 均基于 tiktoken 估算，精度 ±10-20%。`content_block_delta` 的 `input_json_delta`（工具调用）也需要累积文本，已修复 #144
 - **Calibrator 未启用**：sensenova 不返回实际 token 值，校准器无训练数据，修正系数恒为 1.0
 
-## Release
+## Debug 指南
 
-**时机：** 一个完整的功能或修复 PR 合并到 main 后发版。
+日志位置、格式、LogEntry 字段、运行时配置、常见排查见 [docs/troubleshooting.md](./docs/troubleshooting.md)。
 
-**版本号规则：**
-- `v0.x.0` — 新功能（minor）
-- `v0.x.1` — bug 修复（patch）
-
-**流程：** CHANGELOG.md 更新 → `git commit` → `make release VERSION=v0.x.x`
-或从 GitHub Actions 手动触发 `Build & Release` workflow。
-
-## PR / Commit 格式
-
-提交信息：`类型: 描述`（`feat`/`fix`/`refactor`/`chore`/`docs`）
-
-流程：创建分支 → 实现 + 测试 → Draft PR → review → Ready for Review → auto-merge
-
-## 工作流
-
-main 分支受保护，禁止直接推送。遵循 GitHub Flow + 原子 commit。
-
-### Coder 流程
-
-1. **创建分支** — `git checkout -b feature/xxx main`
-2. **实现代码** — 写功能逻辑
-3. **写测试** — 按 AGENTS.md 中的测试模式添加
-4. **验证新测试** — `go test -tags=unit -run TestXxx ./internal/cli/`
-5. **验证全量** — `make test-all`
-6. **手动验收** — 按改动类型运行对应验证
-7. **提交 Draft PR** — 标题写明改动内容，不等 CI
-8. **审查 PR** — 调用 review agent 审查（非 trivial 变更）
-9. **决策** — 根据审查结果：无阻塞 → Ready for Review + auto-merge；有小问题 → 修复后重推；有大问题 → 报告
-
-### 提交后
-
-- 合并后 `go install ./cmd/akswitch/` 更新本地二进制
-
-## 调试指南
-
-### 日志位置与格式
-
-运行时日志文件由 `config.toml` 的 `log_file` 字段指定（默认为空，仅 stdout）。
-启动时输出：`file logging initialized  path=<路径>`。
-
-请求日志通过 `/api/logs` 端点查看，数据来源为 JSON 日志文件（`log_file` 路径）。
-LogEntry 关键字段：
-
-| 字段 | 说明 |
-|------|------|
-| `key_index` | 1-based key 索引 |
-| `key_name` | key 名称 |
-| `status` | HTTP 状态码 |
-| `retry` | 重试次数（0 = 首次） |
-| `duration_ms` | 总耗时(ms) |
-| `ttfb_ms` | 首字节时间(ms) |
-| `provider` | 提供者名称 |
-
-运行时配置：`akswitch config get/set/list`（无需重启）。
-
-常见排查见 [docs/troubleshooting.md](./docs/troubleshooting.md)。
-
-### 设置日志级别
-
-运行时通过 API 设置（无需重启）：
+**设置日志级别**（无需重启）：
 ```bash
 curl -X POST http://localhost:4000/api/log-level \
   -H "Content-Type: application/json" \
@@ -172,41 +100,20 @@ curl -X POST http://localhost:4000/api/log-level \
 curl -X POST ... -d '{"level":"info"}'  # 恢复 info
 ```
 
-### Dev 模式调试
-
-`akswitch start --dev` 启动独立实例，不干扰生产。典型用途：
-- 查看 stdout 日志（生产实例的日志不可见）
-- 抓取 SSE 原始数据（配合 debug 级别）
-- 测试新功能
-
-```bash
-akswitch start --dev --provider=sensenova
-# 默认端口被占时自动递增，如 4001/4002
-```
-
-> **注意：** `--dev` 实例与生产实例共享全局 `slog.Default()`，日志级别会互相影响。
-
-### 抓取 SSE 流式数据
-
-设置 debug 级别后，服务器日志中会输出 `sse raw line` 条目，包含原始 SSE 事件内容（`data:` 行）。用于诊断 sensenova 等上游的流式响应格式。
+**Dev 模式**：`akswitch start --dev --provider=sensenova` 启动独立实例（端口自动递增），用于查看 stdout 日志和抓取 SSE 原始数据。注意：`--dev` 实例与生产实例共享全局 `slog.Default()`。
 
 ## 日志分析
 
 日志文件为 JSON 格式（每行一条），使用标准工具分析：
-
 - `tail -f <log_file>` — 实时查看日志
 - `grep '"proxy success"' <log_file>` — 筛选请求日志
 - `jq 'select(.status >= 400)' <log_file>` — 筛选失败请求
 
 ## Token 计量
 
-Token 估算基于 tiktoken，在 `internal/tokenestimator/` 中实现。
+Token 估算基于 tiktoken（`internal/tokenestimator/`），流程和限制详见 [docs/architecture.md](./docs/architecture.md#token-校准)。
 
-**流程：** 请求发送前用 tiktoken 估算 input_tokens → 响应到达后从 SSE 事件提取 output_tokens（或估算）→ Calibrator 在滑动窗口中比较估算值与实际值。
-
-**限制：** sensenova 的 Anthropic 流式响应不返回 `usage.output_tokens`（始终为 0），所有 token 均基于 tiktoken 估算，精度 ±10-20%。Calibrator 收不到训练数据，修正系数恒为 1.0。非流式请求返回实际 token 值，可用于校准。
-
-详见 `internal/tracker/calibration.go` 和 `docs/architecture.md`。
+sensenova 流式响应不返回 `usage.output_tokens`（始终为 0），Calibrator 修正系数恒为 1.0。非流式请求返回实际 token 值，可用于校准。
 
 ## CC Switch 关系
 
@@ -215,8 +122,6 @@ Token 估算基于 tiktoken，在 `internal/tokenestimator/` 中实现。
 **分工：**
 - **CC Switch** — 上游聚合、协议转换、多 provider 路由
 - **AK-Switch** — 单 provider 内的 API key 轮转、熔断、Token 计量
-
-AK-Switch 不重复造 CC Switch 的轮子，专注于 key 池管理。
 
 ## Agent 工具
 
