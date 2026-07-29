@@ -176,7 +176,15 @@ var configListCmd = &cobra.Command{
 			baseURL += "?provider=" + url.QueryEscape(args[0])
 		}
 
-		resp, err := client.Get(baseURL)
+		req, err := http.NewRequest(http.MethodGet, baseURL, nil)
+		if err != nil {
+			return fmt.Errorf("server not reachable: %w", err)
+		}
+		if token, tokErr := loadAdminTokenFromConfig(); tokErr == nil && token != "" {
+			req.Header.Set("X-Admin-Token", token)
+		}
+
+		resp, err := client.Do(req)
 		if err != nil {
 			return fmt.Errorf("server not reachable: %w", err)
 		}

@@ -734,6 +734,9 @@ func keyListRuntime(provider string) error {
 
 	body, _ := io.ReadAll(resp.Body)
 
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return fmt.Errorf("auth failed (HTTP %d): check X-Admin-Token in server config", resp.StatusCode)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("API error (HTTP %d): %s", resp.StatusCode, string(body))
 	}
