@@ -56,12 +56,11 @@ func LoadAllTomlProviders(path string) (map[string]*Config, error) {
 	for name, p := range tc.Provider {
 		if p == nil {
 			p = DefaultConfig()
-		} else {
-			// 1. Propagate global fields first (only fills provider zero-values)
-			propagateGlobalFields(&tc, p)
-			// 2. Then fill any remaining zero-values with hardcoded defaults
-			mergeConfig(p)
 		}
+		// 1. Propagate global fields first (only fills provider zero-values)
+		propagateGlobalFields(&tc, p)
+		// 2. Then fill any remaining zero-values with hardcoded defaults
+		mergeConfig(p)
 		result[name] = p
 	}
 	return result, nil

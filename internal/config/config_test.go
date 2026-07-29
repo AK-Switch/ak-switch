@@ -952,6 +952,84 @@ cooldown_sec = 120
 	}
 }
 
+func TestGlobalFields_ZeroGlobalDoesNotOverrideProvider(t *testing.T) {
+	// Global port=0 (zero value) should NOT override provider's explicit port=7070
+	content := `port = 0
+	log_level = ""
+	log_file = ""
+
+	[provider.sense]
+	target = "https://api.sensenova.com"
+	genai = "https://ai.sensenova.com"
+	port = 7070
+	log_level = "debug"
+	`
+	path := writeTempToml(t, content)
+	providers, err := LoadAllTomlProviders(path)
+	if err != nil {
+		t.Fatalf("LoadAllTomlProviders() unexpected error: %v", err)
+	}
+	cfg := providers["sense"]
+	if cfg.Port != 7070 {
+		t.Errorf("Port = %d, want 7070 (provider value should not be clobbered by global 0)", cfg.Port)
+	}
+	if cfg.LogLevel != "debug" {
+		t.Errorf("LogLevel = %q, want %q (provider value should not be clobbered by global empty)", cfg.LogLevel, "debug")
+	}
+}
+
+func TestGlobalFields_Float64Inheritance(t *testing.T) {
+	content := `backoff_multiplier = 3.5
+
+	[provider.sense]
+	target = "https://api.sensenova.com"
+	genai = "https://ai.sensenova.com"
+
+	[provider.nvidia]
+	target = "https://integrate.api.nvidia.com/v1"
+	genai = "https://ai.api.nvidia.com"
+	backoff_multiplier = 2.0
+	`
+	path := writeTempToml(t, content)
+	providers, err := LoadAllTomlProviders(path)
+	if err != nil {
+		t.Fatalf("LoadAllTomlProviders() unexpected error: %v", err)
+	}
+	if providers["sense"].BackoffMultiplier != 3.5 {
+		t.Errorf("sense.BackoffMultiplier = %g, want 3.5 (global)", providers["sense"].BackoffMultiplier)
+	}
+	if providers["nvidia"].BackoffMultiplier != 2.0 {
+		t.Errorf("nvidia.BackoffMultiplier = %g, want 2.0 (provider override)", providers["nvidia"].BackoffMultiplier)
+	}
+}
+
+func TestGlobalFields_EmptyProviderInheritsGlobals(t *testing.T) {
+	// An empty [provider.empty] section (go-toml creates &Config{}) should inherit global values
+	content := `port = 9090
+	max_retries = 5
+	cooldown_sec = 30
+
+	[provider.empty]
+	target = "https://api.example.com"
+	genai = "https://ai.example.com"
+	`
+	path := writeTempToml(t, content)
+	providers, err := LoadAllTomlProviders(path)
+	if err != nil {
+		t.Fatalf("LoadAllTomlProviders() unexpected error: %v", err)
+	}
+	cfg := providers["empty"]
+	if cfg.Port != 9090 {
+		t.Errorf("Port = %d, want 9090 (global)", cfg.Port)
+	}
+	if cfg.MaxRetries != 5 {
+		t.Errorf("MaxRetries = %d, want 5 (global)", cfg.MaxRetries)
+	}
+	if cfg.CooldownSec != 30 {
+		t.Errorf("CooldownSec = %d, want 30 (global)", cfg.CooldownSec)
+	}
+}
+
 // ── FindServerPort ───────────────────────────────
 
 func TestFindServerPort_WithPort(t *testing.T) {
