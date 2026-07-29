@@ -145,7 +145,7 @@ main 分支受保护，禁止直接推送。遵循 GitHub Flow + 原子 commit�
 运行时日志文件由 `config.toml` 的 `log_file` 字段指定（默认为空，仅 stdout）。
 启动时输出：`file logging initialized  path=<路径>`。
 
-请求日志通过 `akswitch logs` 命令查看，数据来源为内存环形缓冲区（`/api/logs`）。
+请求日志通过 `/api/logs` 端点查看，数据来源为 JSON 日志文件（`log_file` 路径）。
 LogEntry 关键字段：
 
 | 字段 | 说明 |
