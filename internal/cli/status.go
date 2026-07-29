@@ -28,19 +28,30 @@ var statusCmd = &cobra.Command{
 
 		// Query health endpoint on the server port
 		healthURL := fmt.Sprintf("http://%s:%d/health", detectServerHost(), port)
-		resp, err := client.Get(healthURL)
+		healthReq, err := http.NewRequest(http.MethodGet, healthURL, nil)
+		if err != nil {
+			return fmt.Errorf("server not reachable at %s: %w", healthURL, err)
+		}
+		if token, tokErr := loadAdminTokenFromConfig(); tokErr == nil && token != "" {
+			healthReq.Header.Set("X-Admin-Token", token)
+		}
+
+		resp, err := client.Do(healthReq)
 		if err != nil {
 			return fmt.Errorf("server not reachable at %s: %w", healthURL, err)
 		}
 		defer resp.Body.Close()
 
 		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			return fmt.Errorf("auth failed (HTTP %d): check X-Admin-Token in server config", resp.StatusCode)
+		}
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("server not running or returned unexpected response (HTTP %d)", resp.StatusCode)
+		}
+
 		var healthData map[string]interface{}
 		if err := json.Unmarshal(body, &healthData); err != nil {
-			// Check if response is non-JSON (e.g., HTML from another service)
-			if len(body) > 0 && body[0] != '{' && body[0] != '[' {
-				return fmt.Errorf("server not running or returned unexpected response (HTTP %d)", resp.StatusCode)
-			}
 			return fmt.Errorf("failed to parse health response: %w", err)
 		}
 

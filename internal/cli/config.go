@@ -199,44 +199,44 @@ var configListCmd = &cobra.Command{
 			return fmt.Errorf("API error (HTTP %d): %s", resp.StatusCode, string(body))
 		}
 
-		// Server returns {"provider": "name", "params": {...}} for single provider
-		// or {"provider1": {...}, "provider2": {...}} for all providers
-		var singleResp struct {
-			Provider string                 `json:"provider"`
-			Params   map[string]interface{} `json:"params"`
-		}
-		if err := json.Unmarshal(body, &singleResp); err == nil && singleResp.Provider != "" && singleResp.Params != nil {
-			if len(args) > 0 {
-				// User requested a specific provider — match it
-				if singleResp.Provider == args[0] {
-					printProviderParams(singleResp.Provider, singleResp.Params)
-					return nil
-				}
-			} else {
-				printProviderParams(singleResp.Provider, singleResp.Params)
-				return nil
-			}
-		}
-
-		// Fall through to multi-provider map parsing
-		var multiResult map[string]map[string]interface{}
-		if err := json.Unmarshal(body, &multiResult); err == nil && len(multiResult) > 0 {
-			names := make([]string, 0, len(multiResult))
-			for n := range multiResult {
-				names = append(names, n)
-			}
-			sort.Strings(names)
-
-			if all {
-				for i, n := range names {
-					if i > 0 {
-						fmt.Println()
+		// Server returns {"providers": {"name": {TargetBase, GenaiBase, Keys}}} for all providers
+		var raw map[string]json.RawMessage
+		if err := json.Unmarshal(body, &raw); err == nil {
+			if providersJSON, ok := raw["providers"]; ok {
+				var providers map[string]config.ConfigPayload
+				if err := json.Unmarshal(providersJSON, &providers); err == nil && len(providers) > 0 {
+					names := make([]string, 0, len(providers))
+					for n := range providers {
+						names = append(names, n)
 					}
-					printProviderParams(n, multiResult[n])
+					sort.Strings(names)
+
+					if all || len(args) == 0 {
+						target := names
+						if !all && len(names) > 0 {
+							target = names[:1]
+						}
+						for i, n := range target {
+							if i > 0 {
+								fmt.Println()
+							}
+							printProviderParams(n, providers[n])
+						}
+						return nil
+					}
+					// args[0] specified — fall through to single-provider handling
 				}
-			} else {
-				printProviderParams(names[0], multiResult[names[0]])
 			}
+		}
+
+		// Server returns {"TargetBase": "...", "GenaiBase": "...", "Keys": [...]} for single provider
+		var cp config.ConfigPayload
+		if err := json.Unmarshal(body, &cp); err == nil && cp.TargetBase != "" {
+			name := ""
+			if len(args) > 0 {
+				name = args[0]
+			}
+			printProviderParams(name, cp)
 			return nil
 		}
 
@@ -419,27 +419,18 @@ var configSetCmd = &cobra.Command{
 	},
 }
 // printProviderParams prints a provider's runtime parameters.
-func printProviderParams(provider string, params map[string]interface{}) {
+func printProviderParams(provider string, cp config.ConfigPayload) {
 	fmt.Printf("Provider: %s\n", provider)
 	fmt.Println()
 
-	keys := make([]string, 0, len(params))
-	for k := range params {
-		keys = append(keys, k)
+	fields := []struct{ label, value string }{
+		{"TargetBase:", cp.TargetBase},
+		{"GenaiBase:", cp.GenaiBase},
+		{"Keys:", fmt.Sprintf("%v", cp.Keys)},
 	}
-	sort.Strings(keys)
-
-	for _, k := range keys {
-		v := params[k]
-		switch val := v.(type) {
-		case float64:
-			if val == float64(int(val)) {
-				fmt.Printf("  %-25s %d\n", k+":", int(val))
-			} else {
-				fmt.Printf("  %-25s %.1f\n", k+":", val)
-			}
-		default:
-			fmt.Printf("  %-25s %v\n", k+":", v)
+	for _, f := range fields {
+		if f.value != "" {
+			fmt.Printf("  %-25s %s\n", f.label, f.value)
 		}
 	}
 }

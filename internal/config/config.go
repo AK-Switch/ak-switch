@@ -53,6 +53,13 @@ type Config struct {
 	CalibrationIntervalSec int `toml:"calibration_interval_sec,omitempty" default:"3600"` // Token 校准间隔（秒，默认 1 小时）
 }
 
+// ConfigPayload is the JSON structure for config API responses.
+type ConfigPayload struct {
+	TargetBase string   `json:"targetBase"`
+	GenaiBase  string   `json:"genaiBase"`
+	Keys       []string `json:"keys"`
+}
+
 // ConfigError carries a category tag for error classification.
 type ConfigError struct {
 	Category string // "config" or "system"

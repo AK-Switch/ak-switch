@@ -59,14 +59,14 @@ func (pr *ProviderRouter) configHandler(w http.ResponseWriter, r *http.Request) 
 		if ps == nil {
 			// Return all providers
 			pr.mu.RLock()
-			result := make(map[string]ConfigPayload)
+			result := make(map[string]config.ConfigPayload)
 			for name, p := range pr.providers {
 				keys := p.Pool.Keys()
 				maskedKeys := make([]string, len(keys))
 				for i, k := range keys {
 					maskedKeys[i] = logentry.MaskKey(k)
 				}
-				result[name] = ConfigPayload{
+				result[name] = config.ConfigPayload{
 					TargetBase: p.Config.TargetBase,
 					GenaiBase:  p.Config.GenaiBase,
 					Keys:       maskedKeys,
@@ -82,7 +82,7 @@ func (pr *ProviderRouter) configHandler(w http.ResponseWriter, r *http.Request) 
 		for i, k := range keys {
 			maskedKeys[i] = logentry.MaskKey(k)
 		}
-		respondJSON(w, http.StatusOK, ConfigPayload{
+		respondJSON(w, http.StatusOK, config.ConfigPayload{
 			TargetBase: ps.Config.TargetBase,
 			GenaiBase:  ps.Config.GenaiBase,
 			Keys:       maskedKeys,
