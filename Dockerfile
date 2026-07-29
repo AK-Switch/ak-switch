@@ -3,6 +3,7 @@
 # =============================================================================
 FROM golang:1.26-alpine AS builder
 RUN apk add --no-cache ca-certificates
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 WORKDIR /src
 COPY . .
 RUN CGO_ENABLED=0 go build -o /akswitch ./cmd/akswitch/
@@ -10,14 +11,19 @@ RUN CGO_ENABLED=0 go build -o /akswitch ./cmd/akswitch/
 # =============================================================================
 # Stage 2: Runtime — Alpine with busybox (built-in) for HEALTHCHECK
 # =============================================================================
-FROM alpine:3.19
+FROM alpine:3.21
+
+# Create non-root user for runtime
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
 # Copy CA certificates (needed for outbound HTTPS to upstream APIs)
 COPY --from=builder /etc/ssl/certs/ /etc/ssl/certs/
 # Copy the Go binary
 COPY --from=builder /akswitch /akswitch
+RUN chown appuser:appgroup /akswitch
 
 EXPOSE 3000
+USER appuser
 ENTRYPOINT ["/akswitch"]
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \

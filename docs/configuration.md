@@ -24,6 +24,15 @@ target = "https://api.sensenova.com/v1"
 | `port` | 否 | `8080` | HTTP 监听端口（所有 provider 共享） |
 | `default_provider` | 否 | `""` | 默认启动的 provider 名称。设置后 `akswitch start` 只启动此 provider；未设置时自动使用第一个 provider（按名称字母序） |
 
+### Provider 名称
+
+Provider 名称（TOML 段名，如 `[provider.nvidia]` 中的 `nvidia`）建议使用**小写字母 + 连字符**（kebab-case），例如：
+
+- `nvidia`、`sensenova`、`stepfun` — 单个单词，全小写
+- `my-provider` — 多个单词用连字符连接
+
+名称区分大小写写入（按 TOML 段名原样使用），全小写可避免路由路径、日志标签和 metrics 标签中出现大小写不一致。
+
 ### Provider 字段
 
 | 字段 | 必填 | 默认值 | 说明 |
