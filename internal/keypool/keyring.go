@@ -4,9 +4,11 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"akswitch/internal/config"
@@ -42,12 +44,28 @@ func initKeyring() error {
 	kr, err := openKeyring(keyring.Config{
 		ServiceName: "akswitch",
 	})
+	var (
+		probeErr error
+		firstErr error
+	)
 	if err == nil {
-		keyringBackend = kr
-		keyringInitConfig = keyringFallbackDir()
-		return nil
+		// Probe the backend to catch file backend with empty FileDir
+		// (headless Linux: openKeyring auto-selects file but dir is unset)
+		_, probeErr = kr.Get("__akswitch_probe__")
+		if probeErr == nil || errors.Is(probeErr, keyring.ErrKeyNotFound) {
+			keyringBackend = kr
+			keyringInitConfig = keyringFallbackDir()
+			return nil
+		}
 	}
-	firstErr := err
+	firstErr = err
+	if probeErr != nil {
+		if strings.Contains(probeErr.Error(), "No directory provided") {
+			firstErr = fmt.Errorf("Tier 1 file backend has no FileDir, falling through: %w", probeErr)
+		} else {
+			firstErr = probeErr
+		}
+	}
 
 	// Tier 2: Fall back to encrypted file backend
 	// (headless Linux, CI, WSL without desktop environment, etc.)
