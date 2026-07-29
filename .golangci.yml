@@ -1,23 +1,22 @@
-run:
-  gofmt:
-    path-prefix: ""
-  govet:
-    path-prefix: ""
-  errcheck:
-    path-prefix: ""
-  staticcheck:
-    path-prefix: ""
-  gosimple:
-    path-prefix: ""
-  ineffassign:
-    path-prefix: ""
-  unconvert:
-    path-prefix: ""
-  misspell:
-    path-prefix: ""
-    locale: US
-  gocritic:
-    path-prefix: ""
+version: '2'
+linters:
+  enable:
+    - gofmt
+    - govet
+    - errcheck
+    - staticcheck
+    - gosimple
+    - ineffassign
+    - unconvert
+    - misspell
+    - gocritic
+  settings:
+    misspell:
+      locale: US
+    gocritic:
+      disabled-checks:
+        - appendAssign
+        - evalOrder
 issues:
   exclude-rules:
     # Allow generated files to be excluded from certain linters
@@ -27,10 +26,3 @@ issues:
     - path: 'zz_generated'
       linters:
         - all
-linters-settings:
-  misspell:
-    locale: US
-  gocritic:
-    disabled-checks:
-      - appendAssign
-      - evalOrder
