@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -1415,11 +1417,55 @@ func TestProviderUpdate_NotFound(t *testing.T) {
 }
 
 // TestProviderUpdate_NoFlags 验证不带任何 flag 时返回错误。
-// SKIP: Cobra flag 在进程内 Execute() 调用间持久化（Cobra #1398）。
-// TODO: 改用子进程模式后移除此 skip。
+// 使用子进程模式避免 Cobra flag 持久化问题（Cobra #1398）。
 func TestProviderUpdate_NoFlags(t *testing.T) {
-	t.Skip("Cobra flag 持久化 bug 阻止进程内测试此路径")
-	_ = runAkswitch
+	cli.ResetConfigEnv()
+	tmpDir := t.TempDir()
+	config.ConfigDir = tmpDir
+	t.Cleanup(func() { config.ConfigDir = "" })
+
+	xdgPath, err := config.XDGConfigPath()
+	if err != nil {
+		t.Fatalf("XDGConfigPath failed: %v", err)
+	}
+
+	// Add provider via in-process call (clean state, no flag persistence issue)
+	if err := runAkswitch(t, "akswitch", "provider", "add", "noflags-test",
+		"--target", "https://noflags.test/v1",
+		"--port", "9610",
+	); err != nil {
+		t.Fatalf("provider add failed: %v", err)
+	}
+
+	// Build binary for subprocess mode (update call avoids Cobra persistence)
+	bin := filepath.Join(t.TempDir(), "akswitch-test.exe")
+	if out, err := exec.Command("go", "build", "-o", bin, "../../cmd/akswitch/").CombinedOutput(); err != nil {
+		t.Fatalf("build failed: %v\n%s", err, out)
+	}
+
+	// Run update with NO flags via subprocess — should fail with non-zero exit code
+	cmd := exec.Command(bin, "provider", "update", "noflags-test")
+	cmd.Env = append(os.Environ(), "AKSWITCH_CONFIG_DIR="+tmpDir)
+	updateOut, _ := cmd.CombinedOutput()
+	if cmd.ProcessState.ExitCode() == 0 {
+		t.Fatal("expected non-zero exit when no flags provided, got success")
+	}
+	if !strings.Contains(string(updateOut), "no fields specified") {
+		t.Errorf("expected 'no fields specified' error, got: %s", updateOut)
+	}
+
+	// Verify provider config is unchanged
+	tc, err := config.LoadTomlConfig(xdgPath)
+	if err != nil {
+		t.Fatalf("LoadTomlConfig failed: %v", err)
+	}
+	p := tc.Provider["noflags-test"]
+	if p == nil {
+		t.Fatal("provider should still exist")
+	}
+	if p.TargetBase != "https://noflags.test/v1" {
+		t.Errorf("TargetBase should be unchanged, got: %q", p.TargetBase)
+	}
 }
 
 // TestProviderUpdate_MultipleFlags 验证多个 flag 可组合修改多个字段。
