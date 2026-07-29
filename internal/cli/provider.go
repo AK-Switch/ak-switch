@@ -328,22 +328,30 @@ Example:
 		port := detectServerPort()
 		host := detectServerHost()
 		healthURL := fmt.Sprintf("http://%s:%d/health", host, port)
-		healthResp, err := client.Get(healthURL)
+		healthReq, err := http.NewRequest(http.MethodGet, healthURL, nil)
+		if err == nil {
+			if token, tokErr := loadAdminTokenFromConfig(); tokErr == nil && token != "" {
+				healthReq.Header.Set("X-Admin-Token", token)
+			}
+		}
+		healthResp, err := client.Do(healthReq)
 		if err == nil {
 			body, _ := io.ReadAll(healthResp.Body)
 			_ = healthResp.Body.Close()
-			var healthData map[string]interface{}
-			if json.Unmarshal(body, &healthData) == nil {
-				if details, ok := healthData["details"]; ok {
-					if det, ok2 := details.(map[string]interface{}); ok2 {
-						if info, ok3 := det[name]; ok3 {
-							if inf, ok4 := info.(map[string]interface{}); ok4 {
-								cbState := "unknown"
-								if cs, ok5 := inf["upstream_cb_state"]; ok5 {
-									cbState = fmt.Sprintf("%v", cs)
+			if healthResp.StatusCode == http.StatusOK {
+				var healthData map[string]interface{}
+				if json.Unmarshal(body, &healthData) == nil {
+					if details, ok := healthData["details"]; ok {
+						if det, ok2 := details.(map[string]interface{}); ok2 {
+							if info, ok3 := det[name]; ok3 {
+								if inf, ok4 := info.(map[string]interface{}); ok4 {
+									cbState := "unknown"
+									if cs, ok5 := inf["upstream_cb_state"]; ok5 {
+										cbState = fmt.Sprintf("%v", cs)
+									}
+									fmt.Printf("  Status:  running  →  http://%s:%d\n", host, port)
+									fmt.Printf("  CB:      %s\n", cbState)
 								}
-								fmt.Printf("  Status:  running  →  http://%s:%d\n", host, port)
-								fmt.Printf("  CB:      %s\n", cbState)
 							}
 						}
 					}
@@ -352,7 +360,13 @@ Example:
 
 			// Stats
 			statsURL := fmt.Sprintf("http://%s:%d/api/stats", host, port)
-			statsResp, err := client.Get(statsURL)
+			statsReq, err := http.NewRequest(http.MethodGet, statsURL, nil)
+			if err == nil {
+				if token, tokErr := loadAdminTokenFromConfig(); tokErr == nil && token != "" {
+					statsReq.Header.Set("X-Admin-Token", token)
+				}
+			}
+			statsResp, err := client.Do(statsReq)
 			if err == nil {
 				statsBody, _ := io.ReadAll(statsResp.Body)
 				_ = statsResp.Body.Close()

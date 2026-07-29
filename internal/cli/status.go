@@ -9,6 +9,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+
 	"github.com/spf13/cobra"
 )
 
@@ -28,16 +29,29 @@ var statusCmd = &cobra.Command{
 
 		// Query health endpoint on the server port
 		healthURL := fmt.Sprintf("http://%s:%d/health", detectServerHost(), port)
-		resp, err := client.Get(healthURL)
+		healthReq, err := http.NewRequest(http.MethodGet, healthURL, nil)
+		if err != nil {
+			return fmt.Errorf("server not reachable at %s: %w", healthURL, err)
+		}
+		if token, tokErr := loadAdminTokenFromConfig(); tokErr == nil && token != "" {
+			healthReq.Header.Set("X-Admin-Token", token)
+		}
+
+		resp, err := client.Do(healthReq)
 		if err != nil {
 			return fmt.Errorf("server not reachable at %s: %w", healthURL, err)
 		}
 		defer func() { _ = resp.Body.Close() }()
 
 		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			return fmt.Errorf("auth failed (HTTP %d): check X-Admin-Token in server config", resp.StatusCode)
+		}
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("server not running or returned unexpected response (HTTP %d)", resp.StatusCode)
+		}
 		var healthData map[string]interface{}
 		if err := json.Unmarshal(body, &healthData); err != nil {
-			// Check if response is non-JSON (e.g., HTML from another service)
 			if len(body) > 0 && body[0] != '{' && body[0] != '[' {
 				return fmt.Errorf("server not running or returned unexpected response (HTTP %d)", resp.StatusCode)
 			}
@@ -48,7 +62,7 @@ var statusCmd = &cobra.Command{
 		fmt.Printf("Status: %s\n", healthData["status"])
 
 		if providers, ok := healthData["providers"]; ok {
-			fmt.Printf("Providers: %v\n", providers)
+			fmt.Printf("Providers: %v)\n", providers)
 		}
 
 		if details, ok := healthData["details"]; ok {
@@ -59,18 +73,34 @@ var statusCmd = &cobra.Command{
 
 		// Query stats endpoint
 		statsURL := fmt.Sprintf("http://%s:%d/api/stats", detectServerHost(), port)
-		statsResp, err := client.Get(statsURL)
-		if err == nil {
-			statsBody, _ := io.ReadAll(statsResp.Body)
-			_ = statsResp.Body.Close()
-			var stats map[string]interface{}
-			if err := json.Unmarshal(statsBody, &stats); err == nil {
-				fmt.Printf("Requests: %v (success: %v, failed: %v)\n",
-					stats["total_requests"], stats["successful_requests"], stats["failed_requests"])
-				fmt.Printf("Active keys: %v, Cooling: %v, Disabled: %v\n",
-					stats["active_keys"], stats["cooling_keys"], stats["disabled_keys"])
-				fmt.Printf("Uptime: %vs\n", stats["uptime_seconds"])
-			}
+		statsReq, err := http.NewRequest(http.MethodGet, statsURL, nil)
+		if err != nil {
+			return fmt.Errorf("server not reachable at %s: %w", statsURL, err)
+		}
+		if token, tokErr := loadAdminTokenFromConfig(); tokErr == nil && token != "" {
+			statsReq.Header.Set("X-Admin-Token", token)
+		}
+
+		statsResp, err := client.Do(statsReq)
+		if err != nil {
+			return fmt.Errorf("server not reachable at %s: %w", statsURL, err)
+		}
+		defer func() { _ = statsResp.Body.Close() }()
+
+		statsBody, _ := io.ReadAll(statsResp.Body)
+		if statsResp.StatusCode == http.StatusUnauthorized || statsResp.StatusCode == http.StatusForbidden {
+			return fmt.Errorf("auth failed (HTTP %d): check X-Admin-Token in server config", statsResp.StatusCode)
+		}
+		if statsResp.StatusCode != http.StatusOK {
+			return fmt.Errorf("stats endpoint returned unexpected response (HTTP %d)", statsResp.StatusCode)
+		}
+		var stats map[string]interface{}
+		if err := json.Unmarshal(statsBody, &stats); err == nil {
+			fmt.Printf("Requests: %v (success: %v, failed: %v)\n",
+				stats["total_requests"], stats["successful_requests"], stats["failed_requests"])
+			fmt.Printf("Active keys: %v, Cooling: %v, Disabled: %v)\n",
+				stats["active_keys"], stats["cooling_keys"], stats["disabled_keys"])
+			fmt.Printf("Uptime: %vs)\n", stats["uptime_seconds"])
 		}
 
 		return nil
@@ -85,7 +115,7 @@ func formatProviderTable(det map[string]interface{}) string {
 	_, _ = fmt.Fprintln(w, "PROVIDER\tKEYS\tCB_STATE")
 	for name, info := range det {
 		if inf, ok3 := info.(map[string]interface{}); ok3 {
-			_, _ = fmt.Fprintf(w, "%s\t%v\t%v\n",
+			_, _ = fmt.Fprintf(w, "%s\t%v\t%v)\n",
 				name, inf["keys"], inf["upstream_cb_state"])
 		}
 	}
