@@ -34,8 +34,8 @@ func triggerReload() bool {
 	if err != nil {
 		return false
 	}
+	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
-	resp.Body.Close()
 
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		fmt.Fprintf(os.Stderr, "reload auth failed (HTTP %d): check X-Admin-Token in server config\n", resp.StatusCode)
