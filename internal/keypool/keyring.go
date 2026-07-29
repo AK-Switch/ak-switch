@@ -61,7 +61,7 @@ func initKeyring() error {
 	firstErr = err
 	if probeErr != nil {
 		if strings.Contains(probeErr.Error(), "No directory provided") {
-			firstErr = fmt.Errorf("Tier 1 file backend has no FileDir, falling through: %w", probeErr)
+			firstErr = fmt.Errorf("tier 1 file backend has no FileDir, falling through: %w", probeErr)
 		} else {
 			firstErr = probeErr
 		}
