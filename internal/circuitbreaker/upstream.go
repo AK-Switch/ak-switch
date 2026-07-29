@@ -123,3 +123,13 @@ func (u *UpstreamCircuitBreaker) SetResetTimeout(d time.Duration) {
 	defer u.mu.Unlock()
 	u.resetTimeout = d
 }
+
+// Reset force-closes the circuit breaker, clearing all failure state.
+// Used by the admin API to manually recover from a tripped upstream CB.
+func (u *UpstreamCircuitBreaker) Reset() {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.failureCount = 0
+	u.state = Closed
+	u.halfOpenProbed = false
+}

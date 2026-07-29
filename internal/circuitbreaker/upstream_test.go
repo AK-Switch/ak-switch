@@ -180,3 +180,27 @@ func TestUpstreamSuccessResetsCounter(t *testing.T) {
 		t.Errorf("state after 3 failures post-reset = %d, want %d (Open)", s, Open)
 	}
 }
+
+// TestUpstreamCBReset verifies that Reset() force-closes an Open circuit breaker,
+// clearing all failure state so the upstream becomes immediately usable.
+func TestUpstreamCBReset(t *testing.T) {
+	u := NewUpstreamCircuitBreaker(3, time.Minute)
+	u.RecordFailure()
+	u.RecordFailure()
+	u.RecordFailure()
+	if s := u.State(); s != Open {
+		t.Fatalf("state = %d, want Open before reset", s)
+	}
+
+	u.Reset()
+
+	if s := u.State(); s != Closed {
+		t.Errorf("state after Reset() = %d, want Closed", s)
+	}
+	if n := u.FailureCount(); n != 0 {
+		t.Errorf("FailureCount after Reset() = %d, want 0", n)
+	}
+	if !u.Allow() {
+		t.Error("Allow() = false after Reset(), want true")
+	}
+}

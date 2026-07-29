@@ -427,6 +427,33 @@ func (pr *ProviderRouter) statsHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (pr *ProviderRouter) upstreamCBResetHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	pName := r.URL.Query().Get("provider")
+	pr.mu.RLock()
+	ps, errMsg := pr.resolveProviderByName(pName)
+	pr.mu.RUnlock()
+	if ps == nil {
+		respondJSON(w, http.StatusNotFound, map[string]string{"error": errMsg})
+		return
+	}
+
+	if !pr.checkAdminToken(w, r, ps.Name) {
+		return
+	}
+
+	ps.Proxy.upCB.Reset()
+	slog.Info("upstream circuit breaker reset", "provider", ps.Name)
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"provider": ps.Name,
+		"reset":    true,
+	})
+}
+
 func (pr *ProviderRouter) reloadHandler(w http.ResponseWriter, r *http.Request) {
 	if !pr.checkAnyAdminToken(w, r) {
 		return
