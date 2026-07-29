@@ -136,7 +136,7 @@ func ActiveHealthCheck(cfg *config.Config, proxy *ProxyEngine, metrics *akswitch
 			metrics.HealthCheckDuration.WithLabelValues(ps.Name).Observe(dur.Seconds())
 
 			if err == nil && resp.StatusCode < 500 {
-				defer func() { _ = resp.Body.Close() }()
+				_ = resp.Body.Close()
 				upCB.RecordSuccess()
 				ps.SetLastHealthCheck(true)
 				metrics.HealthCheckProbes.WithLabelValues(ps.Name, "ok").Inc()
