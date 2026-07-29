@@ -42,7 +42,7 @@ func readRequestBody(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 10<<20) // 10MB limit
 	bodyBytes, err := io.ReadAll(r.Body)
-	r.Body.Close()
+	defer func() { _ = r.Body.Close() }()
 	if err != nil {
 		writeProxyError(w, http.StatusBadRequest, ErrorBadRequest, "request body too large or unreadable")
 		return nil, err

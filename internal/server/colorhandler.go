@@ -104,9 +104,9 @@ func (h *ColorHandler) handleNonCompact(ctx context.Context, r slog.Record) erro
 		if attrs.Len() > 0 {
 			attrs.WriteByte(' ')
 		}
-		attrs.WriteString(fmt.Sprintf("%s%s%s=%s%v%s",
+		fmt.Fprintf(&attrs, "%s%s%s=%s%v%s",
 			colorGray, a.Key, colorReset,
-			colorWhite, a.Value.Any(), colorReset))
+			colorWhite, a.Value.Any(), colorReset)
 		return true
 	})
 
@@ -146,7 +146,7 @@ func (h *ColorHandler) handleNonCompact(ctx context.Context, r slog.Record) erro
 		line += " " + suffix
 	}
 	line += "\n"
-	fmt.Fprint(h.writer, line)
+	_, _ = fmt.Fprint(h.writer, line)
 
 	return nil
 }
@@ -178,7 +178,7 @@ func (h *ColorHandler) handleCompact(ctx context.Context, r slog.Record) error {
 		mc := methodColor(method)
 		line := fmt.Sprintf("%s %s→ %s%s%s %s (%s)%s\n",
 			bracketTS, colorGray, mc, method, colorReset, url, sizeStr, colorReset)
-		fmt.Fprint(h.writer, line)
+		_, _ = fmt.Fprint(h.writer, line)
 		return nil
 
 	case "proxy success":
@@ -218,47 +218,47 @@ func (h *ColorHandler) handleCompact(ctx context.Context, r slog.Record) error {
 		var line strings.Builder
 
 		// Timestamp
-		line.WriteString(fmt.Sprintf("%s[%s]%s ", colorGray, ts, colorReset))
+		fmt.Fprintf(&line, "%s[%s]%s ", colorGray, ts, colorReset)
 
 		// Status code
-		line.WriteString(fmt.Sprintf("%s%d%s ", colorGreen, status, colorReset))
+		fmt.Fprintf(&line, "%s%d%s ", colorGreen, status, colorReset)
 
 		// Provider (only when multiple providers)
 		if !h.singleProvider {
-			line.WriteString(fmt.Sprintf("%s%s%s ", colorGray, provider, colorReset))
+			fmt.Fprintf(&line, "%s%s%s ", colorGray, provider, colorReset)
 		}
 
 		// Key name in parentheses (centered, fixed 12-char field)
-		line.WriteString(fmt.Sprintf("(%s)", keyDisplay))
+		fmt.Fprintf(&line, "(%s)", keyDisplay)
 
 		// Retry
 		if retry > 0 {
-			line.WriteString(fmt.Sprintf(" retry %d", retry))
+			fmt.Fprintf(&line, " retry %d", retry)
 		}
 
 		// Timing: TTFB and total duration, each with own color
 		tc := ttfbColor(ttfbMs)
 		dc := durationColor(durationMs)
-		line.WriteString(fmt.Sprintf(" ttfb=%s%s%s total=%s%s%s",
+		fmt.Fprintf(&line, " ttfb=%s%s%s total=%s%s%s",
 			tc, formatDurationCompact(ttfbMs), colorReset,
-			dc, formatDurationCompact(durationMs), colorReset))
+			dc, formatDurationCompact(durationMs), colorReset)
 
 		// Body size
 		reqSizeStr := formatSizeCompact(reqBodySize)
 		if respBodySize > 0 {
 			respSizeStr := formatSizeCompact(respBodySize)
-			line.WriteString(fmt.Sprintf(" %s%s→%s%s", colorGray, reqSizeStr, respSizeStr, colorReset))
+			fmt.Fprintf(&line, " %s%s→%s%s", colorGray, reqSizeStr, respSizeStr, colorReset)
 		} else {
-			line.WriteString(fmt.Sprintf(" %s%s%s", colorGray, reqSizeStr, colorReset))
+			fmt.Fprintf(&line, " %s%s%s", colorGray, reqSizeStr, colorReset)
 		}
 
 		// Token info
 		if inputTokens > 0 || outputTokens > 0 {
-			line.WriteString(fmt.Sprintf(" %stok=%d+%d%s", colorGray, inputTokens, outputTokens, colorReset))
+			fmt.Fprintf(&line, " %stok=%d+%d%s", colorGray, inputTokens, outputTokens, colorReset)
 		}
 
 		line.WriteString("\n")
-		fmt.Fprint(h.writer, line.String())
+		_, _ = fmt.Fprint(h.writer, line.String())
 		return nil
 
 	case "non-retryable client error":
@@ -276,7 +276,7 @@ func (h *ColorHandler) handleCompact(ctx context.Context, r slog.Record) error {
 		keyDisplay := truncateKeyName(keyName)
 		line := fmt.Sprintf("%s %s✗ %d (%s)%s\n",
 			bracketTS, colorRed, status, keyDisplay, colorReset)
-		fmt.Fprint(h.writer, line)
+		_, _ = fmt.Fprint(h.writer, line)
 		return nil
 
 	default:

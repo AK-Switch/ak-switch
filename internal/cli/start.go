@@ -47,8 +47,7 @@ func startServer(dashboardHTML string, providerFilter string, startAll bool, log
 	// ── PID pre-check ───────────────────────────────
 	if running, pid := checkPidFile(pidFilePath(devMode)); running {
 		slog.Error("akswitch is already running", "pid", pid)
-		fmt.Fprintf(os.Stderr, "akswitch is already running (PID %d). Stop it first with 'akswitch stop'.\n", pid)
-		os.Exit(1)
+		return
 	}
 
 	// ── Resolve providers, config, and selection strategy ──
@@ -62,12 +61,13 @@ func startServer(dashboardHTML string, providerFilter string, startAll bool, log
 			ln, err := net.Listen("tcp", addr)
 			if err == nil {
 				devListener = ln
-				port = port + i
+				port += i
 				break
 			}
 		}
 		if devListener == nil {
 			slog.Error("dev mode: no available port found (tried 10 ports)")
+			//nolint:errcheck,gocritic
 			os.Exit(1)
 		}
 		fmt.Printf("🚧 Dev mode on port %d\n", port)
@@ -201,7 +201,7 @@ func initProviders(router *server.ProviderRouter, providers map[string]*config.C
 			for i := 0; i < pool.Len(); i++ {
 				n, _ := pool.Name(i)
 				if n == dn {
-					pool.Disable(i)
+					_ = pool.Disable(i)
 					slog.Info("restored disabled key", "provider", name, "key_index", i, "key_name", dn)
 				}
 			}
@@ -341,7 +341,7 @@ func checkPidFile(pidFile string) (bool, int) {
 	if err != nil {
 		return false, 0
 	}
-	defer proc.Release()
+	_ = proc.Release()
 	return proc.Signal(syscall.Signal(0)) == nil, pid
 }
 

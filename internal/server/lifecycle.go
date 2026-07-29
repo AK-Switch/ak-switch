@@ -136,13 +136,13 @@ func ActiveHealthCheck(cfg *config.Config, proxy *ProxyEngine, metrics *akswitch
 			metrics.HealthCheckDuration.WithLabelValues(ps.Name).Observe(dur.Seconds())
 
 			if err == nil && resp.StatusCode < 500 {
-				resp.Body.Close()
+				_ = resp.Body.Close()
 				upCB.RecordSuccess()
 				ps.SetLastHealthCheck(true)
 				metrics.HealthCheckProbes.WithLabelValues(ps.Name, "ok").Inc()
 			} else {
 				if err == nil {
-					resp.Body.Close()
+					_ = resp.Body.Close()
 				}
 				upCB.RecordFailure()
 				ps.SetLastHealthCheck(false)
@@ -180,21 +180,22 @@ func StartupKeyProbe(pool *keypool.KeyPool, target string) {
 			slog.Warn("key probe failed (network)", "key_index", i, "key_name", keyName, "error", err)
 			continue
 		}
-		resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-			pool.Disable(i)
+			_ = pool.Disable(i)
 			slog.Warn("key disabled by startup probe", "key_index", i, "key_name", keyName, "status", resp.StatusCode)
 		} else {
 			slog.Info("key health check passed", "key_index", i, "key_name", keyName, "status", resp.StatusCode)
 		}
 	}
 
-	if pool.ActiveCount() == 0 {
+	switch {
+	case pool.ActiveCount() == 0:
 		slog.Error("all keys failed health check, server may not function")
-	} else if pool.DisabledCount() > 0 {
+	case pool.DisabledCount() > 0:
 		slog.Info("startup key probe complete", "active", pool.ActiveCount(), "disabled", pool.DisabledCount())
-	} else {
+	default:
 		slog.Info("startup key probe complete", "active", pool.ActiveCount())
 	}
 }
@@ -246,7 +247,7 @@ func sendCalibrationRequest(calibrator *tracker.Calibrator, pool *keypool.KeyPoo
 		slog.Warn("calibration: request failed", "error", err)
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {

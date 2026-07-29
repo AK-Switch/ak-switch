@@ -11,7 +11,7 @@ import (
 func respondJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
+	_ = json.NewEncoder(w).Encode(data)
 }
 
 // parseKeyIndex extracts and validates a key index from the request path.
@@ -29,13 +29,3 @@ func parseKeyIndex(r *http.Request) (int, error) {
 	return idx - 1, nil // convert to 0-based
 }
 
-// filterEmpty removes empty strings from a slice.
-func filterEmpty(ss []string) []string {
-	filtered := make([]string, 0, len(ss))
-	for _, s := range ss {
-		if s != "" {
-			filtered = append(filtered, s)
-		}
-	}
-	return filtered
-}

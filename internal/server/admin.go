@@ -126,7 +126,7 @@ func (pr *ProviderRouter) keysHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(result)
+		_ = json.NewEncoder(w).Encode(result)
 
 	case http.MethodPost:
 		var body struct {
@@ -144,7 +144,7 @@ func (pr *ProviderRouter) keysHandler(w http.ResponseWriter, r *http.Request) {
 		idx := pool.AddKey(body.Key, body.KeyName)
 		ps.PersistKeys()
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"index": idx,
 			"key":   logentry.MaskKey(body.Key),
 			"name":  body.KeyName,
@@ -168,7 +168,7 @@ func (pr *ProviderRouter) keysHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		ps.PersistKeys()
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"status": "removed"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "removed"})
 
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -240,7 +240,7 @@ func (pr *ProviderRouter) healthHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"status":    status,
 		"providers": len(pr.providers),
 		"details":   result,
@@ -274,7 +274,7 @@ func (pr *ProviderRouter) logsHandler(w http.ResponseWriter, r *http.Request) {
 		respondJSON(w, http.StatusOK, []interface{}{})
 		return
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	if readOffset > 0 {
 		_, err = f.Seek(readOffset, 0)
@@ -299,7 +299,7 @@ func (pr *ProviderRouter) logsHandler(w http.ResponseWriter, r *http.Request) {
 	// Read only the portion of the file we need
 	data := make([]byte, maxRead)
 	// Re-read from the offset we calculated
-	f.Seek(readOffset, 0)
+	_, _ = f.Seek(readOffset, 0)
 	// Skip first partial line again
 	if readOffset > 0 {
 		var buf2 [1]byte
@@ -391,7 +391,7 @@ func (pr *ProviderRouter) logsHandler(w http.ResponseWriter, r *http.Request) {
 
 func (pr *ProviderRouter) dashboardHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
-	w.Write([]byte(pr.dashboardHTML))
+		_, _ = w.Write([]byte(pr.dashboardHTML))
 }
 
 func (pr *ProviderRouter) clearHandler(w http.ResponseWriter, r *http.Request) {

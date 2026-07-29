@@ -49,7 +49,7 @@ func categorizeError(statusCode int, err error) ErrorCategory {
 func writeProxyError(w http.ResponseWriter, status int, code ErrorCode, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"error": map[string]interface{}{
 			"code":    string(code),
 			"message": message,

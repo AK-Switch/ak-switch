@@ -198,7 +198,8 @@ func mergeDefaults(cfg *Config) {
 
 // mergeConfig fills in zero-value fields with defaults from DefaultConfig.
 // This is used after TOML parsing to ensure optional fields have sensible defaults.
-// Deprecated: kept for backward compatibility. mergeDefaults replaces this.
+// Deprecated: mergeConfig is kept for backward compatibility. mergeDefaults replaces this.
+//nolint:gocritic
 func mergeConfig(cfg *Config) {
 	mergeDefaults(cfg)
 }
