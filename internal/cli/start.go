@@ -33,12 +33,13 @@ var startCmd = &cobra.Command{
 		startAll, _ := cmd.Flags().GetBool("all")
 		devMode, _ := cmd.Flags().GetBool("dev")
 		logFormat, _ := cmd.Flags().GetString("log-format")
+		logLevel, _ := cmd.Flags().GetString("log-level")
 		restartLogFormat = logFormat
-		startServer(dashHTML, providerFilter, startAll, logFormat, devMode)
+		startServer(dashHTML, providerFilter, startAll, logFormat, devMode, logLevel)
 	},
 }
 
-func startServer(dashboardHTML string, providerFilter string, startAll bool, logFormat string, devMode bool) {
+func startServer(dashboardHTML string, providerFilter string, startAll bool, logFormat string, devMode bool, logLevel string) {
 	logCompact := logFormat == "compact"
 	// ── Crash recovery ─────────────────────────────
 	defer server.CrashRecover("startServer")
@@ -76,6 +77,11 @@ func startServer(dashboardHTML string, providerFilter string, startAll bool, log
 	for _, cfg := range providers {
 		router.LogManager().InitFileHandler(cfg.LogFile, cfg.LogMaxSize, cfg.LogMaxAge)
 		break
+	}
+
+	// ── Apply log-level override before any provider init logging ──
+	if logLevel != "" {
+		router.LogManager().ApplyLevel(logLevel)
 	}
 
 	// ── Initialize each provider ─────────────────────
@@ -343,6 +349,7 @@ func init() {
 	startCmd.Flags().String("provider", "", "Only start the specified provider")
 	startCmd.Flags().Bool("all", false, "Start all providers (default: first provider alphabetically, or error if none configured)")
 	startCmd.Flags().String("log-format", "compact", "Log output format: default or compact")
+	startCmd.Flags().String("log-level", "", "Log level: debug, info, warn, error (overrides config.toml)")
 	startCmd.Flags().Bool("dev", false, "Start in development mode with auto-incrementing port")
 	rootCmd.AddCommand(startCmd)
 }

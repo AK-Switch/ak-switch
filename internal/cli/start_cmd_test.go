@@ -15,6 +15,7 @@ func TestStartCmd_Flags(t *testing.T) {
 		usage    string // expected substring in usage, empty to skip
 	}{
 		{name: "log-format", flag: "log-format", defValue: "compact", usage: "compact"},
+		{name: "log-level", flag: "log-level", defValue: "", usage: "debug"},
 		{name: "provider", flag: "provider"},
 		{name: "all", flag: "all", defValue: "false"},
 		{name: "dev", flag: "dev", defValue: "false"},
