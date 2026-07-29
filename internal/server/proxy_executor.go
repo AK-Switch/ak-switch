@@ -78,7 +78,7 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 			continue
 		}
 
-		if px.tryKeysInRound(w, r, ps, bodyBytes, target, start) {
+		if px.tryKeysInRound(w, r, ps, bodyBytes, target, start, attempt) {
 			return
 		}
 	}
@@ -101,7 +101,7 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 // tryKeysInRound attempts all available keys in one retry round.
 // Returns true if any key succeeded (response already written to w).
 // Returns false if all keys were exhausted, triggering the next outer retry.
-func (px *ProxyExecutor) tryKeysInRound(w http.ResponseWriter, r *http.Request, ps *ProviderState, bodyBytes []byte, target string, start time.Time) bool {
+func (px *ProxyExecutor) tryKeysInRound(w http.ResponseWriter, r *http.Request, ps *ProviderState, bodyBytes []byte, target string, start time.Time, attempt int) bool {
 	pool := ps.Pool
 	method := r.Method
 
@@ -138,7 +138,6 @@ func (px *ProxyExecutor) tryKeysInRound(w http.ResponseWriter, r *http.Request, 
 
 		resp, err := ps.Proxy.client.Do(req)
 		ttfb := time.Since(start)
-		pool.Release(idx)
 		if err != nil {
 			switch categorizeError(0, err) {
 			case CatClientAbort:
@@ -165,18 +164,18 @@ func (px *ProxyExecutor) tryKeysInRound(w http.ResponseWriter, r *http.Request, 
 			}
 
 		case resp.StatusCode == http.StatusBadGateway || resp.StatusCode == http.StatusServiceUnavailable:
-			px.handleServerError(ps, idx, resp, 0)
+			px.handleServerError(ps, idx, resp, attempt)
 
 		case resp.StatusCode >= 400 && resp.StatusCode < 500 || categorizeError(resp.StatusCode, nil) == CatNonRetryable:
-			px.handleNonRetryable(w, ps, idx, resp, start, method, target, bodyBytes, 0, pool.Keys()[idx], ttfb)
+			px.handleNonRetryable(w, ps, idx, resp, start, method, target, bodyBytes, attempt, pool.Keys()[idx], ttfb)
 			return true
 
 		case resp.StatusCode >= 500:
-			px.handleServerError(ps, idx, resp, 0)
+			px.handleServerError(ps, idx, resp, attempt)
 
 		default:
 			// 2xx/3xx — success
-			px.handleSuccess(w, ps, idx, resp, start, method, target, bodyBytes, 0, pool.Keys()[idx], ttfb)
+			px.handleSuccess(w, ps, idx, resp, start, method, target, bodyBytes, attempt, pool.Keys()[idx], ttfb)
 			return true
 		}
 	}
