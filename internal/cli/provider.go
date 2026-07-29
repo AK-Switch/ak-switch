@@ -100,8 +100,8 @@ Example:
 
 		// Add new provider
 		tc.Provider[name] = &config.Config{
-			TargetBase:  target,
-			GenaiBase:   genai,
+			TargetBase: target,
+			GenaiBase:  genai,
 			CooldownSec: cooldown,
 			MaxRetries:  maxRetries,
 		}
@@ -327,41 +327,40 @@ Example:
 		client := &http.Client{Timeout: 3 * time.Second}
 		port := detectServerPort()
 		host := detectServerHost()
-
 		healthURL := fmt.Sprintf("http://%s:%d/health", host, port)
-		healthReq, err := http.NewRequest(http.MethodGet, healthURL, nil)
+		healthResp, err := client.Get(healthURL)
 		if err == nil {
-			if token, tokErr := loadAdminTokenFromConfig(); tokErr == nil && token != "" {
-				healthReq.Header.Set("X-Admin-Token", token)
-			}
-		}
-		healthResp, err := client.Do(healthReq)
-		if err == nil {
-			healthBody, _ := io.ReadAll(healthResp.Body)
-			healthResp.Body.Close()
-			if healthResp.StatusCode == http.StatusUnauthorized || healthResp.StatusCode == http.StatusForbidden {
-				fmt.Fprintf(os.Stderr, "health check auth failed (HTTP %d): check X-Admin-Token in server config\n", healthResp.StatusCode)
-				fmt.Printf("  Status:  auth required\n")
-			} else if healthResp.StatusCode == http.StatusOK {
-				var healthData map[string]interface{}
-				if json.Unmarshal(healthBody, &healthData) == nil {
-					if details, ok := healthData["details"]; ok {
-						if det, ok2 := details.(map[string]interface{}); ok2 {
-							if info, ok3 := det[name]; ok3 {
-								if inf, ok4 := info.(map[string]interface{}); ok4 {
-									cbState := "unknown"
-									if cs, ok5 := inf["upstream_cb_state"]; ok5 {
-										cbState = fmt.Sprintf("%v", cs)
-									}
-									fmt.Printf("  Status:  running  →  http://%s:%d\n", host, port)
-									fmt.Printf("  CB:      %s\n", cbState)
+			body, _ := io.ReadAll(healthResp.Body)
+			_ = healthResp.Body.Close()
+			var healthData map[string]interface{}
+			if json.Unmarshal(body, &healthData) == nil {
+				if details, ok := healthData["details"]; ok {
+					if det, ok2 := details.(map[string]interface{}); ok2 {
+						if info, ok3 := det[name]; ok3 {
+							if inf, ok4 := info.(map[string]interface{}); ok4 {
+								cbState := "unknown"
+								if cs, ok5 := inf["upstream_cb_state"]; ok5 {
+									cbState = fmt.Sprintf("%v", cs)
 								}
+								fmt.Printf("  Status:  running  →  http://%s:%d\n", host, port)
+								fmt.Printf("  CB:      %s\n", cbState)
 							}
 						}
 					}
 				}
-			} else {
-				fmt.Println("  Status:  not running")
+			}
+
+			// Stats
+			statsURL := fmt.Sprintf("http://%s:%d/api/stats", host, port)
+			statsResp, err := client.Get(statsURL)
+			if err == nil {
+				statsBody, _ := io.ReadAll(statsResp.Body)
+				_ = statsResp.Body.Close()
+				var stats map[string]interface{}
+				if json.Unmarshal(statsBody, &stats) == nil {
+					fmt.Printf("  Requests: %v (success: %v, failed: %v)\n",
+						stats["total_requests"], stats["successful_requests"], stats["failed_requests"])
+				}
 			}
 		} else {
 			fmt.Println("  Status:  not running")
