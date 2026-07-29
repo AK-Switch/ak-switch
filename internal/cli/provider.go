@@ -370,7 +370,7 @@ Example:
 		}
 
 		if sanitized.GenaiBase != "" {
-			fmt.Printf("      GenAI:   %s\n", sanitized.GenaiBase)
+			fmt.Printf("    GenAI:   %s\n", sanitized.GenaiBase)
 		}
 		if sanitized.AdminToken != "" {
 			fmt.Println("    Admin token: (set)")

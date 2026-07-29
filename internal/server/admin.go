@@ -415,7 +415,6 @@ func (pr *ProviderRouter) statsHandler(w http.ResponseWriter, r *http.Request) {
 			respondJSON(w, http.StatusNotFound, map[string]string{"error": fmt.Sprintf("provider %q not found", pName)})
 			return
 		}
-		pr.mu.RLock()
 		respondJSON(w, http.StatusOK, map[string]interface{}{
 			"provider":         pName,
 			"active_keys":      ps.Pool.ActiveCount(),
@@ -423,7 +422,6 @@ func (pr *ProviderRouter) statsHandler(w http.ResponseWriter, r *http.Request) {
 			"disabled_keys":    ps.Pool.DisabledCount(),
 			"uptime_seconds":   time.Since(pr.startTime).Seconds(),
 		})
-		pr.mu.RUnlock()
 		return
 	}
 
