@@ -2,6 +2,18 @@
 
 > 已完成的里程碑记录。当前功能完整，项目已进入维护模式。
 
+## [Unreleased]
+
+### Added
+- Makefile targets: build, clean, lint, fmt, check, help
+- ADR 索引：docs/adr/README.md
+
+### Changed
+- 项目治理文档化（AGENTS.md 提交规范）
+
+### Fixed
+- docs/agents/domain.md 移除对不存在的 CONTEXT.md / CONTEXT-MAP.md 引用
+
 ---
 
 ## v0.2.0（2026-07-27）
