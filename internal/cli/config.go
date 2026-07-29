@@ -98,7 +98,7 @@ var configInitCmd = &cobra.Command{
 var configViewCmd = &cobra.Command{
 	Use:   "view",
 	Short: "Display current configuration",
-	Long: `Read the TOML configuration file and print its contents in a human-readable format.`,
+	Long:  `Read the TOML configuration file and print its contents in a human-readable format.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		source, err := config.XDGConfigPath()
 		if err != nil {
@@ -176,7 +176,15 @@ var configListCmd = &cobra.Command{
 			baseURL += "?provider=" + url.QueryEscape(args[0])
 		}
 
-		resp, err := client.Get(baseURL)
+		req, err := http.NewRequest(http.MethodGet, baseURL, nil)
+		if err != nil {
+			return fmt.Errorf("server not reachable: %w", err)
+		}
+		if token, tokErr := loadAdminTokenFromConfig(); tokErr == nil && token != "" {
+			req.Header.Set("X-Admin-Token", token)
+		}
+
+		resp, err := client.Do(req)
 		if err != nil {
 			return fmt.Errorf("server not reachable: %w", err)
 		}
@@ -184,38 +192,51 @@ var configListCmd = &cobra.Command{
 
 		body, _ := io.ReadAll(resp.Body)
 
-		// Try to parse as multi-provider response first
-		var multiResult map[string]map[string]interface{}
-		if err := json.Unmarshal(body, &multiResult); err == nil && len(multiResult) > 0 {
-			// Check if single-provider response (from ?provider=xxx)
-			if _, hasProvider := multiResult["provider"]; hasProvider {
-				var single struct {
-					Provider string                 `json:"provider"`
-					Params   map[string]interface{} `json:"params"`
-				}
-				if json.Unmarshal(body, &single) == nil && single.Provider != "" {
-					printProviderParams(single.Provider, single.Params)
-					return nil
-				}
-			}
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			return fmt.Errorf("auth failed (HTTP %d): check X-Admin-Token in server config", resp.StatusCode)
+		}
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("API error (HTTP %d): %s", resp.StatusCode, string(body))
+		}
 
-			// Multi-provider: display all or first
-			names := make([]string, 0, len(multiResult))
-			for n := range multiResult {
-				names = append(names, n)
-			}
-			sort.Strings(names)
-
-			if all {
-				for i, n := range names {
-					if i > 0 {
-						fmt.Println()
+		// Server returns {"providers": {"name": {TargetBase, GenaiBase, Keys}}} for all providers
+		var raw map[string]json.RawMessage
+		if err := json.Unmarshal(body, &raw); err == nil {
+			if providersJSON, ok := raw["providers"]; ok {
+				var providers map[string]config.ConfigPayload
+				if err := json.Unmarshal(providersJSON, &providers); err == nil && len(providers) > 0 {
+					names := make([]string, 0, len(providers))
+					for n := range providers {
+						names = append(names, n)
 					}
-					printProviderParams(n, multiResult[n])
+					sort.Strings(names)
+
+					if all || len(args) == 0 {
+						target := names
+						if !all && len(names) > 0 {
+							target = names[:1]
+						}
+						for i, n := range target {
+							if i > 0 {
+								fmt.Println()
+							}
+							printProviderParams(n, providers[n])
+						}
+						return nil
+					}
+					// args[0] specified — fall through to single-provider handling
 				}
-			} else {
-				printProviderParams(names[0], multiResult[names[0]])
 			}
+		}
+
+		// Server returns {"TargetBase": "...", "GenaiBase": "...", "Keys": [...]} for single provider
+		var cp config.ConfigPayload
+		if err := json.Unmarshal(body, &cp); err == nil && cp.TargetBase != "" {
+			name := ""
+			if len(args) > 0 {
+				name = args[0]
+			}
+			printProviderParams(name, cp)
 			return nil
 		}
 
@@ -246,13 +267,29 @@ var configGetCmd = &cobra.Command{
 		}
 		baseURL := fmt.Sprintf("http://%s:%d/api/runtime-config?%s", detectServerHost(), detectServerPort(), params.Encode())
 
-		resp, err := client.Get(baseURL)
+		req, err := http.NewRequest(http.MethodGet, baseURL, nil)
+		if err != nil {
+			return fmt.Errorf("server not reachable: %w", err)
+		}
+		if token, tokErr := loadAdminTokenFromConfig(); tokErr == nil && token != "" {
+			req.Header.Set("X-Admin-Token", token)
+		}
+
+		resp, err := client.Do(req)
 		if err != nil {
 			return fmt.Errorf("server not reachable: %w", err)
 		}
 		defer resp.Body.Close()
 
 		body, _ := io.ReadAll(resp.Body)
+
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			return fmt.Errorf("auth failed (HTTP %d): check X-Admin-Token in server config", resp.StatusCode)
+		}
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("API error (HTTP %d): %s", resp.StatusCode, string(body))
+		}
+
 		var result struct {
 			Provider string      `json:"provider"`
 			Key      string      `json:"key"`
@@ -260,6 +297,10 @@ var configGetCmd = &cobra.Command{
 		}
 		if err := json.Unmarshal(body, &result); err != nil {
 			return fmt.Errorf("failed to parse response: %w", err)
+		}
+
+		if result.Value == nil {
+			return fmt.Errorf("unknown key %q for provider %q", key, result.Provider)
 		}
 
 		switch val := result.Value.(type) {
@@ -319,13 +360,25 @@ var configSetCmd = &cobra.Command{
 		payloadBytes, _ := json.Marshal(payloadMap)
 		payload := string(payloadBytes)
 
-		resp, err := client.Post(baseURL, "application/json", strings.NewReader(payload))
+		req, err := http.NewRequest(http.MethodPost, baseURL, strings.NewReader(payload))
+		if err != nil {
+			return fmt.Errorf("server not reachable: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		if token, tokErr := loadAdminTokenFromConfig(); tokErr == nil && token != "" {
+			req.Header.Set("X-Admin-Token", token)
+		}
+
+		resp, err := client.Do(req)
 		if err != nil {
 			return fmt.Errorf("server not reachable: %w", err)
 		}
 		defer resp.Body.Close()
 
 		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			return fmt.Errorf("auth failed (HTTP %d): check X-Admin-Token in server config", resp.StatusCode)
+		}
 		if resp.StatusCode != http.StatusOK {
 			var errResult struct {
 				Error string `json:"error"`
@@ -365,28 +418,20 @@ var configSetCmd = &cobra.Command{
 		return nil
 	},
 }
+
 // printProviderParams prints a provider's runtime parameters.
-func printProviderParams(provider string, params map[string]interface{}) {
+func printProviderParams(provider string, cp config.ConfigPayload) {
 	fmt.Printf("Provider: %s\n", provider)
 	fmt.Println()
 
-	keys := make([]string, 0, len(params))
-	for k := range params {
-		keys = append(keys, k)
+	fields := []struct{ label, value string }{
+		{"TargetBase:", cp.TargetBase},
+		{"GenaiBase:", cp.GenaiBase},
+		{"Keys:", fmt.Sprintf("%v", cp.Keys)},
 	}
-	sort.Strings(keys)
-
-	for _, k := range keys {
-		v := params[k]
-		switch val := v.(type) {
-		case float64:
-			if val == float64(int(val)) {
-				fmt.Printf("  %-25s %d\n", k+":", int(val))
-			} else {
-				fmt.Printf("  %-25s %.1f\n", k+":", val)
-			}
-		default:
-			fmt.Printf("  %-25s %v\n", k+":", v)
+	for _, f := range fields {
+		if f.value != "" {
+			fmt.Printf("  %-25s %s\n", f.label, f.value)
 		}
 	}
 }

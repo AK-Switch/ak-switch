@@ -225,6 +225,7 @@ func (pr *ProviderRouter) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/keys/{index}/cooldown", pr.cooldownKeyHandler)
 	mux.HandleFunc("DELETE /api/keys/{index}", pr.deleteKeyHandler)
 	mux.HandleFunc("GET /api/stats", pr.statsHandler)
+	mux.HandleFunc("POST /api/stats/reset-upstream-cb", pr.upstreamCBResetHandler)
 	mux.HandleFunc("POST /api/reload", pr.reloadHandler)
 	mux.HandleFunc("/api/log-level", pr.logLevelHandler)
 	mux.HandleFunc("/api/runtime-config", pr.runtimeConfigHandler)

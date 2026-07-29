@@ -59,14 +59,14 @@ func (pr *ProviderRouter) configHandler(w http.ResponseWriter, r *http.Request) 
 		if ps == nil {
 			// Return all providers
 			pr.mu.RLock()
-			result := make(map[string]ConfigPayload)
+			result := make(map[string]config.ConfigPayload)
 			for name, p := range pr.providers {
 				keys := p.Pool.Keys()
 				maskedKeys := make([]string, len(keys))
 				for i, k := range keys {
 					maskedKeys[i] = logentry.MaskKey(k)
 				}
-				result[name] = ConfigPayload{
+				result[name] = config.ConfigPayload{
 					TargetBase: p.Config.TargetBase,
 					GenaiBase:  p.Config.GenaiBase,
 					Keys:       maskedKeys,
@@ -82,7 +82,7 @@ func (pr *ProviderRouter) configHandler(w http.ResponseWriter, r *http.Request) 
 		for i, k := range keys {
 			maskedKeys[i] = logentry.MaskKey(k)
 		}
-		respondJSON(w, http.StatusOK, ConfigPayload{
+		respondJSON(w, http.StatusOK, config.ConfigPayload{
 			TargetBase: ps.Config.TargetBase,
 			GenaiBase:  ps.Config.GenaiBase,
 			Keys:       maskedKeys,
@@ -407,7 +407,9 @@ func (pr *ProviderRouter) clearHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (pr *ProviderRouter) statsHandler(w http.ResponseWriter, r *http.Request) {
-	// Aggregate key stats across all providers
+	if !pr.checkAnyAdminToken(w, r) {
+		return
+	}
 	pr.mu.RLock()
 	totalActive := 0
 	totalCooling := 0
@@ -424,6 +426,33 @@ func (pr *ProviderRouter) statsHandler(w http.ResponseWriter, r *http.Request) {
 		"cooling_keys":   totalCooling,
 		"disabled_keys":  totalDisabled,
 		"uptime_seconds": time.Since(pr.startTime).Seconds(),
+	})
+}
+
+func (pr *ProviderRouter) upstreamCBResetHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	pName := r.URL.Query().Get("provider")
+	pr.mu.RLock()
+	ps, errMsg := pr.resolveProviderByName(pName)
+	pr.mu.RUnlock()
+	if ps == nil {
+		respondJSON(w, http.StatusNotFound, map[string]string{"error": errMsg})
+		return
+	}
+
+	if !pr.checkAdminToken(w, r, ps.Name) {
+		return
+	}
+
+	ps.Proxy.upCB.Reset()
+	slog.Info("upstream circuit breaker reset", "provider", ps.Name)
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"provider": ps.Name,
+		"reset":    true,
 	})
 }
 
@@ -752,6 +781,7 @@ func (pr *ProviderRouter) getRuntimeParams(ps *ProviderState) map[string]interfa
 		"backoff_multiplier":    ps.Config.BackoffMultiplier,
 		"cb_reset_sec":          ps.Config.CBResetSec,
 		"upstream_cb_threshold": ps.Config.UpstreamCBThreshold,
+		"log_level":             ps.Config.LogLevel,
 	}
 }
 

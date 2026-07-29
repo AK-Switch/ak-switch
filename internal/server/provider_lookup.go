@@ -5,13 +5,6 @@ import (
 	"net/http"
 )
 
-// ConfigPayload is the JSON structure for config API responses.
-type ConfigPayload struct {
-	TargetBase string   `json:"targetBase"`
-	GenaiBase  string   `json:"genaiBase"`
-	Keys       []string `json:"keys"`
-}
-
 // lookupProvider returns the ProviderState for a given provider name.
 func (pr *ProviderRouter) lookupProvider(name string) *ProviderState {
 	pr.mu.RLock()

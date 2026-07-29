@@ -4,10 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
+	"akswitch/internal/config"
 	"akswitch/internal/keypool"
 	"akswitch/internal/logentry"
 
@@ -18,7 +22,7 @@ import (
 type KeyMutation int
 
 const (
-	KeyEnable  KeyMutation = iota
+	KeyEnable KeyMutation = iota
 	KeyDisable
 	KeyRemove
 )
@@ -89,6 +93,7 @@ func init() {
 	keyCmd.AddCommand(keyUpdateCmd)
 	keyCmd.AddCommand(keyRenameCmd)
 	keyCmd.AddCommand(keyImportCmd)
+	keyCmd.AddCommand(keyCooldownCmd)
 	keyImportCmd.Flags().StringP("file", "f", "", "Import keys from a JSON file")
 	keyImportCmd.Flags().StringP("name", "n", "", "Display name for imported keys")
 	keyImportCmd.Flags().Bool("insecure-storage", false, "Store keys in plaintext (WARNING: not encrypted)")
@@ -102,6 +107,9 @@ func init() {
 
 	keyAddCmd.Flags().StringP("name", "n", "", "Display name for the key")
 	keyAddCmd.Flags().Bool("insecure-storage", false, "Store keys in plaintext (WARNING: not encrypted)")
+	keyListCmd.Flags().Bool("runtime", false, "Query live status from running server (shows cooldown, RPM)")
+	addKeyIndexFlags(keyCooldownCmd)
+	keyCmd.AddCommand(keyUpstreamCBResetCmd)
 }
 
 var keyCmd = &cobra.Command{
@@ -251,11 +259,11 @@ Examples:
 		}
 
 		// Auto-number duplicate names before dedup
-			entries = autoNumberNames(entries, store)
+		entries = autoNumberNames(entries, store)
 
-			// Dedup against existing keys
-			newEntries, skipped := dedupEntries(entries, store)
-			store.Keys = append(store.Keys, newEntries...)
+		// Dedup against existing keys
+		newEntries, skipped := dedupEntries(entries, store)
+		store.Keys = append(store.Keys, newEntries...)
 
 		if insecure {
 			if err := keypool.SaveKeysInsecure(provider, store); err != nil {
@@ -267,25 +275,25 @@ Examples:
 			}
 		}
 
-			// Build stats output
-			added := len(newEntries)
-			total := len(store.Keys)
-			names := make([]string, 0, added)
-			for _, e := range newEntries {
-				if e.Name != "" {
-					names = append(names, e.Name)
-				}
+		// Build stats output
+		added := len(newEntries)
+		total := len(store.Keys)
+		names := make([]string, 0, added)
+		for _, e := range newEntries {
+			if e.Name != "" {
+				names = append(names, e.Name)
 			}
-			nameList := ""
-			if len(names) > 0 {
-				nameList = fmt.Sprintf(" (%s)", strings.Join(names, ", "))
-			}
-			fmt.Printf("Imported %d key(s) to provider %q\n", len(entries), provider)
-			fmt.Printf("  ✅ Added: %d%s\n", added, nameList)
-			if skipped > 0 {
+		}
+		nameList := ""
+		if len(names) > 0 {
+			nameList = fmt.Sprintf(" (%s)", strings.Join(names, ", "))
+		}
+		fmt.Printf("Imported %d key(s) to provider %q\n", len(entries), provider)
+		fmt.Printf("  ✅ Added: %d%s\n", added, nameList)
+		if skipped > 0 {
 			fmt.Printf("  ⏭️  Skipped: %d (already exists)\n", skipped)
-			}
-			fmt.Printf("  Total: %d keys\n", total)
+		}
+		fmt.Printf("  Total: %d keys\n", total)
 		triggerReload()
 		return nil
 	},
@@ -409,11 +417,42 @@ Examples:
 	},
 }
 
+var keyCooldownCmd = &cobra.Command{
+	Use:   "cooldown <provider> <index>",
+	Short: "Force a key into cooldown",
+	Long: `Force an API key into cooldown for the configured cooldown duration.
+Use --by-name to look up a key by its display name instead.
+
+Calls the running server's management API.
+
+Examples:
+  akswitch key cooldown nvidia 1
+  akswitch key cooldown nvidia my-key --by-name`,
+	Args: cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		provider := args[0]
+		idx, err := resolveKeyIndex(cmd, args)
+		if err != nil {
+			return err
+		}
+
+		// Try runtime API
+		runtimeErr := callKeyRuntimeAPI(provider, idx, "cooldown")
+		if runtimeErr == nil {
+			return nil
+		}
+
+		return fmt.Errorf("server not running — start akswitch to use runtime cooldown: %w", runtimeErr)
+	},
+}
+
 var keyListCmd = &cobra.Command{
 	Use:   "list <provider>",
 	Short: "List API keys for a provider",
 	Long: `Display all API keys for the specified provider with their index,
 masked value, status, and optional name.
+
+Use --runtime to query the running server for live status including cooldown info.
 
 Example output:
   Keys for provider "nvidia":
@@ -423,6 +462,11 @@ Example output:
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		provider := args[0]
+		runtime, _ := cmd.Flags().GetBool("runtime")
+
+		if runtime {
+			return keyListRuntime(provider)
+		}
 
 		store, err := keypool.LoadKeys(provider)
 		if err != nil {
@@ -517,6 +561,57 @@ var keyEnableCmd = &cobra.Command{
 	},
 }
 
+// resetUpstreamCB sends a POST to the running server to reset the upstream
+// circuit breaker for the specified provider.
+func resetUpstreamCB(provider string) error {
+	port := detectServerPort()
+	client := &http.Client{Timeout: 5 * time.Second}
+	url := fmt.Sprintf("http://%s:%d/api/stats/reset-upstream-cb?provider=%s",
+		detectServerHost(), port, url.QueryEscape(provider))
+
+	req, err := http.NewRequest(http.MethodPost, url, nil)
+	if err != nil {
+		return err
+	}
+	if token, tokErr := loadAdminToken(provider); tokErr == nil && token != "" {
+		req.Header.Set("X-Admin-Token", token)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("server not reachable: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return fmt.Errorf("auth failed (HTTP %d): check X-Admin-Token in server config", resp.StatusCode)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("API error (HTTP %d): %s", resp.StatusCode, string(body))
+	}
+	return nil
+}
+
+var keyUpstreamCBResetCmd = &cobra.Command{
+	Use:   "upstream-cb-reset <provider>",
+	Short: "Reset the upstream circuit breaker for a provider",
+	Long: `Force-close the upstream circuit breaker for a provider.
+
+The upstream circuit breaker opens after repeated 502/503 responses.
+This command resets it so the provider can resume sending requests
+immediately without waiting for the recovery timeout.
+
+Examples:
+  akswitch key upstream-cb-reset nvidia
+  akswitch key upstream-cb-reset sensenova`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return resetUpstreamCB(args[0])
+	},
+}
+
 // resolveKeyIndex resolves a key index from command arguments.
 // If --by-name is set, looks up the index by name; otherwise parses it as an integer.
 func resolveKeyIndex(cmd *cobra.Command, args []string) (int, error) {
@@ -553,6 +648,131 @@ func findKeyIndexByName(store *keypool.KeyStore, name string) (int, error) {
 		return 0, fmt.Errorf("multiple keys (%d) found with name %q, use index instead", len(matches), name)
 	}
 	return matches[0], nil
+}
+
+// loadAdminToken loads the admin token for a specific provider from the TOML config.
+// Used for provider-scoped endpoints (checkAdminToken on the server side).
+func loadAdminToken(provider string) (string, error) {
+	xdgPath, err := config.XDGConfigPath()
+	if err != nil {
+		return "", err
+	}
+	tc, err := config.LoadTomlConfig(xdgPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	if p, ok := tc.Provider[provider]; ok {
+		return p.AdminToken, nil
+	}
+	return "", nil
+}
+
+// callKeyRuntimeAPI sends a key operation request to the running server.
+// Supported operations: "cooldown", "enable", "disable".
+// Returns nil on success, error if server is unreachable or API returns an error.
+func callKeyRuntimeAPI(provider string, idx int, operation string) error {
+	client := &http.Client{Timeout: 5 * time.Second}
+	baseURL := fmt.Sprintf("http://%s:%d/api/keys/%d/%s?provider=%s",
+		detectServerHost(), detectServerPort(), idx, operation, url.QueryEscape(provider))
+
+	var reqBody io.Reader
+	if operation == "cooldown" {
+		reqBody = strings.NewReader(`{}`)
+	}
+
+	method := http.MethodPost
+	if operation == "cooldown" {
+		method = http.MethodPut
+	}
+	req, err := http.NewRequest(method, baseURL, reqBody)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if token, tokErr := loadAdminToken(provider); tokErr == nil && token != "" {
+		req.Header.Set("X-Admin-Token", token)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("server not reachable: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return fmt.Errorf("auth failed (HTTP %d): check X-Admin-Token in server config", resp.StatusCode)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("API error (HTTP %d): %s", resp.StatusCode, string(body))
+	}
+	return nil
+}
+
+// keyListRuntime queries the running server's /api/keys endpoint for live status.
+func keyListRuntime(provider string) error {
+	client := &http.Client{Timeout: 5 * time.Second}
+	url := fmt.Sprintf("http://%s:%d/api/keys?provider=%s", detectServerHost(), detectServerPort(), url.QueryEscape(provider))
+
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("server not reachable: %w", err)
+	}
+	if token, tokErr := loadAdminToken(provider); tokErr == nil && token != "" {
+		req.Header.Set("X-Admin-Token", token)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("server not reachable: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return fmt.Errorf("auth failed (HTTP %d): check X-Admin-Token in server config", resp.StatusCode)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("API error (HTTP %d): %s", resp.StatusCode, string(body))
+	}
+
+	var keys []map[string]interface{}
+	if err := json.Unmarshal(body, &keys); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	if len(keys) == 0 {
+		fmt.Printf("No keys found for provider %q\n", provider)
+		return nil
+	}
+
+	fmt.Printf("Keys for provider %q (runtime):\n", provider)
+	for _, k := range keys {
+		idxFloat, ok := k["index"].(float64)
+		if !ok {
+			continue
+		}
+		idx := int(idxFloat) - 1
+		masked, _ := k["key"].(string)
+		status, _ := k["status"].(string)
+		rpmFloat, ok := k["requests_1m"].(float64)
+		if !ok {
+			continue
+		}
+		name, _ := k["name"].(string)
+
+		line := fmt.Sprintf("  [%d] %s  (%s, %d rpm)", idx, masked, status, int(rpmFloat))
+		if name != "" {
+			line += fmt.Sprintf("  name: %s", name)
+		}
+		fmt.Println(line)
+	}
+	return nil
 }
 
 // parseJSONL parses newline-delimited JSON (JSONL) data into KeyEntry slices.
