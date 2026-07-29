@@ -4,6 +4,17 @@
 
 ---
 
+## [Unreleased]
+
+### 全局配置继承（PR #191）
+- TOML 顶层配置字段自动继承到所有 `[provider.*]` 段，provider 可选择性覆盖
+- 用 `propagateGlobalFields` 反射函数替代手写字段传播，新增字段只需在两边 struct 同步添加
+- 继承优先级：provider 显式值 > 全局值 > `DefaultConfig()` 硬编码默认值
+- 新增边界测试：全局零值不覆盖 provider、float64 字段继承、空 provider 段继承全局值
+- **注意：** `Host`、`LogFile`、`LogMaxSize`、`LogMaxAge` 的继承语义从 v1 的"全局优先"变为"provider 优先"——已有配置中显式设置了这些字段的 provider 升级后行为不变，依赖全局覆盖行为的用户需注意
+
+---
+
 ## v0.2.0（2026-07-27）
 
 ### 架构重构（PR #131）
