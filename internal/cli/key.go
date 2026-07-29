@@ -724,12 +724,12 @@ func keyListRuntime(provider string) error {
 	}
 	defer resp.Body.Close()
 
+	body, _ := io.ReadAll(resp.Body)
+
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("API error (HTTP %d): %s", resp.StatusCode, string(body))
 	}
 
-	body, _ := io.ReadAll(resp.Body)
 	var keys []map[string]interface{}
 	if err := json.Unmarshal(body, &keys); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
