@@ -8,12 +8,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	"akswitch/internal/cli"
 	"akswitch/internal/config"
-"akswitch/internal/keypool"
+	"akswitch/internal/keypool"
 )
 
 // TestCLI_Root_NoArgs 验证 "akswitch" 无参数的行为。
@@ -1438,7 +1439,10 @@ func TestProviderUpdate_NoFlags(t *testing.T) {
 	}
 
 	// Build binary for subprocess mode (update call avoids Cobra persistence)
-	bin := filepath.Join(t.TempDir(), "akswitch-test.exe")
+	bin := filepath.Join(t.TempDir(), "akswitch-test")
+	if runtime.GOOS == "windows" {
+		bin += ".exe"
+	}
 	if out, err := exec.Command("go", "build", "-o", bin, "../../cmd/akswitch/").CombinedOutput(); err != nil {
 		t.Fatalf("build failed: %v\n%s", err, out)
 	}

@@ -69,8 +69,10 @@ func LoadAllTomlProviders(path string) (map[string]*Config, error) {
 			mergeConfig(p)
 			p.Port = port
 		}
-		// Top-level host overrides per-provider host
-		p.Host = host
+		// Top-level host used as fallback when provider-level host is empty
+		if p.Host == "" {
+			p.Host = host
+		}
 		// Top-level log fields override per-provider log fields
 		if tc.LogFile != "" {
 			p.LogFile = tc.LogFile

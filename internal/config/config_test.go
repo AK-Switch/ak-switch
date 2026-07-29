@@ -46,7 +46,6 @@ func TestValidate_RequiredFields(t *testing.T) {
 	}{
 		{name: "empty keys", modify: func(cfg *Config) { cfg.Keys = nil }},
 		{name: "empty target base", modify: func(cfg *Config) { cfg.TargetBase = "" }},
-		{name: "empty genai base", modify: func(cfg *Config) { cfg.GenaiBase = "" }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

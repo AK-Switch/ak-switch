@@ -100,9 +100,6 @@ func (c *Config) Validate() error {
 	if c.TargetBase == "" {
 		return &ConfigError{Category: "config", Message: "配置错误: TARGET_BASE_URL 为必填字段，请设置上游 API 基础地址"}
 	}
-	if c.GenaiBase == "" {
-		return &ConfigError{Category: "config", Message: "配置错误: GENAI_BASE_URL 为必填字段，请设置 GenAI API 基础地址"}
-	}
 	if len(c.Keys) == 0 {
 		return &ConfigError{Category: "config", Message: "配置错误: 至少需要一个 API Key（请通过 akswitch key add 添加）"}
 	}
