@@ -583,8 +583,12 @@ func resetUpstreamCB(provider string) error {
 	}
 	defer resp.Body.Close()
 
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return fmt.Errorf("auth failed (HTTP %d): check X-Admin-Token in server config", resp.StatusCode)
+	}
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("API error (HTTP %d): %s", resp.StatusCode, string(body))
 	}
 	return nil
@@ -646,8 +650,8 @@ func findKeyIndexByName(store *keypool.KeyStore, name string) (int, error) {
 	return matches[0], nil
 }
 
-// loadAdminToken loads the admin token for a provider from the TOML config.
-// Returns empty string if the config file doesn't exist or the provider has no token set.
+// loadAdminToken loads the admin token for a specific provider from the TOML config.
+// Used for provider-scoped endpoints (checkAdminToken on the server side).
 func loadAdminToken(provider string) (string, error) {
 	xdgPath, err := config.XDGConfigPath()
 	if err != nil {
@@ -698,8 +702,12 @@ func callKeyRuntimeAPI(provider string, idx int, operation string) error {
 	}
 	defer resp.Body.Close()
 
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return fmt.Errorf("auth failed (HTTP %d): check X-Admin-Token in server config", resp.StatusCode)
+	}
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("API error (HTTP %d): %s", resp.StatusCode, string(body))
 	}
 	return nil

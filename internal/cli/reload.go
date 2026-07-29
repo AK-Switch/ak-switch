@@ -22,7 +22,10 @@ func triggerReload() bool {
 	if err != nil {
 		return false
 	}
-	if token, tokErr := loadAdminTokenFromConfig(); tokErr == nil && token != "" {
+	token, tokErr := loadAdminTokenFromConfig()
+	if tokErr != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to load admin token from config: %v\n", tokErr)
+	} else if token != "" {
 		req.Header.Set("X-Admin-Token", token)
 	}
 
@@ -34,8 +37,9 @@ func triggerReload() bool {
 	return resp.StatusCode == http.StatusOK
 }
 
-// loadAdminTokenFromConfig loads the admin token from the TOML config file.
-// Returns empty string if the config doesn't exist or has no admin token.
+// loadAdminTokenFromConfig loads any admin token from the TOML config file.
+// Returns the first non-empty token found across all providers.
+// Used for global endpoints (checkAnyAdminToken on the server side).
 func loadAdminTokenFromConfig() (string, error) {
 	xdgPath, err := config.XDGConfigPath()
 	if err != nil {
