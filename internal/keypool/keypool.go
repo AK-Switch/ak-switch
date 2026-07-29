@@ -148,6 +148,18 @@ func (p *KeyPool) Next() (int, string, bool) {
 	return bestIdx, p.keys[bestIdx], true
 }
 
+// NextIndex returns the starting index for round-robin selection without consuming.
+// Returns -1 if the pool is empty.
+func (p *KeyPool) NextIndex() int {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	n := len(p.keys)
+	if n == 0 {
+		return -1
+	}
+	return int((atomic.LoadUint64(&p.counter)) % uint64(n))
+}
+
 // RequestsInLastMinute returns the number of requests made by a key in the last 60 seconds.
 // Caller must hold at least RLock.
 func (p *KeyPool) RequestsInLastMinute(idx int) int {
