@@ -4,9 +4,11 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"akswitch/internal/config"
@@ -21,8 +23,10 @@ func defaultOpenKeyring(cfg keyring.Config) (keyring.Keyring, error) {
 }
 
 var (
-	keyringMu      sync.Mutex
-	keyringBackend keyring.Keyring
+	keyringMu         sync.Mutex
+	keyringBackend    keyring.Keyring
+	keyringInitConfig string
+	testKeyringSet    bool
 )
 
 // initKeyring lazily opens the system keyring backend.
@@ -32,7 +36,7 @@ var (
 func initKeyring() error {
 	keyringMu.Lock()
 	defer keyringMu.Unlock()
-	if keyringBackend != nil {
+	if keyringBackend != nil && (testKeyringSet || keyringInitConfig == keyringFallbackDir()) {
 		return nil
 	}
 
@@ -40,11 +44,28 @@ func initKeyring() error {
 	kr, err := openKeyring(keyring.Config{
 		ServiceName: "akswitch",
 	})
+	var (
+		probeErr error
+		firstErr error
+	)
 	if err == nil {
-		keyringBackend = kr
-		return nil
+		// Probe the backend to catch file backend with empty FileDir
+		// (headless Linux: openKeyring auto-selects file but dir is unset)
+		_, probeErr = kr.Get("__akswitch_probe__")
+		if probeErr == nil || errors.Is(probeErr, keyring.ErrKeyNotFound) {
+			keyringBackend = kr
+			keyringInitConfig = keyringFallbackDir()
+			return nil
+		}
 	}
-	firstErr := err
+	firstErr = err
+	if probeErr != nil {
+		if strings.Contains(probeErr.Error(), "No directory provided") {
+			firstErr = fmt.Errorf("tier 1 file backend has no FileDir, falling through: %w", probeErr)
+		} else {
+			firstErr = probeErr
+		}
+	}
 
 	// Tier 2: Fall back to encrypted file backend
 	// (headless Linux, CI, WSL without desktop environment, etc.)
@@ -65,6 +86,7 @@ func initKeyring() error {
 	}
 
 	keyringBackend = kr
+	keyringInitConfig = keyringFallbackDir()
 	return nil
 }
 
@@ -104,16 +126,20 @@ func fallbackPasswordFunc(passwordFile string) keyring.PromptFunc {
 
 // setTestKeyring replaces the keyring backend for testing.
 // Must be called before the function under test, paired with resetTestKeyring.
+//nolint:unused // used by test files in the same package
 func setTestKeyring(kr keyring.Keyring) {
 	keyringMu.Lock()
 	keyringBackend = kr
+	testKeyringSet = true
 	keyringMu.Unlock()
 }
 
 // resetTestKeyring clears the keyring backend (for testing).
+//nolint:unused // used by test files in the same package
 func resetTestKeyring() {
 	keyringMu.Lock()
 	keyringBackend = nil
+	testKeyringSet = false
 	keyringMu.Unlock()
 }
 

@@ -180,7 +180,7 @@ var configListCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("server not reachable: %w", err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		body, _ := io.ReadAll(resp.Body)
 
@@ -250,7 +250,7 @@ var configGetCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("server not reachable: %w", err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		body, _ := io.ReadAll(resp.Body)
 		var result struct {
@@ -323,7 +323,7 @@ var configSetCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("server not reachable: %w", err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		body, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode != http.StatusOK {

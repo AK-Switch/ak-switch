@@ -32,7 +32,7 @@ var statusCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("server not reachable at %s: %w", healthURL, err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		body, _ := io.ReadAll(resp.Body)
 		var healthData map[string]interface{}
@@ -62,7 +62,7 @@ var statusCmd = &cobra.Command{
 		statsResp, err := client.Get(statsURL)
 		if err == nil {
 			statsBody, _ := io.ReadAll(statsResp.Body)
-			statsResp.Body.Close()
+			_ = statsResp.Body.Close()
 			var stats map[string]interface{}
 			if err := json.Unmarshal(statsBody, &stats); err == nil {
 				fmt.Printf("Requests: %v (success: %v, failed: %v)\n",
@@ -82,13 +82,13 @@ var statusCmd = &cobra.Command{
 func formatProviderTable(det map[string]interface{}) string {
 	var buf bytes.Buffer
 	w := tabwriter.NewWriter(&buf, 0, 0, 3, ' ', 0)
-	fmt.Fprintln(w, "PROVIDER\tKEYS\tCB_STATE")
+	_, _ = fmt.Fprintln(w, "PROVIDER\tKEYS\tCB_STATE")
 	for name, info := range det {
 		if inf, ok3 := info.(map[string]interface{}); ok3 {
-			fmt.Fprintf(w, "%s\t%v\t%v\n",
+			_, _ = fmt.Fprintf(w, "%s\t%v\t%v\n",
 				name, inf["keys"], inf["upstream_cb_state"])
 		}
 	}
-	w.Flush()
+	_ = w.Flush()
 	return buf.String()
 }

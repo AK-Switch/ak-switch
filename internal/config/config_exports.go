@@ -15,7 +15,7 @@ func ResetConfigEnv() {
 		"HEALTH_CHECK_INTERVAL_SEC", "HEALTH_CHECK_PATH", "HEALTH_CHECK_TIMEOUT_SEC",
 		"HTTP_TIMEOUT_SEC",
 	} {
-		os.Unsetenv(k)
+		_ = os.Unsetenv(k)
 	}
 	DefaultProviderName = ""
 }

@@ -80,7 +80,7 @@ var stopCmd = &cobra.Command{
 			}
 			time.Sleep(500 * time.Millisecond)
 		}
-		proc.Release()
+		_ = proc.Release()
 
 		if exited {
 			fmt.Println("AK Switch stopped gracefully")
@@ -109,6 +109,7 @@ func processRunning(pid int) bool {
 	if err != nil {
 		return false
 	}
+	//nolint:errcheck
 	defer proc.Release()
 	return proc.Signal(syscall.Signal(0)) == nil
 }

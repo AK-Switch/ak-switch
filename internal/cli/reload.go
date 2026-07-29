@@ -18,5 +18,5 @@ func triggerReload() {
 		// Server not running, silently ignore
 		return
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 }

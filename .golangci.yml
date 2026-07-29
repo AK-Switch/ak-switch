@@ -1,0 +1,16 @@
+version: '2'
+linters:
+  enable:
+    - govet
+    - errcheck
+    - staticcheck
+    - ineffassign
+    - unconvert
+    - misspell
+    - gocritic
+  settings:
+    misspell:
+      locale: US
+    gocritic:
+      disabled-checks:
+        - appendAssign
