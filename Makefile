@@ -1,4 +1,4 @@
-.PHONY: build clean lint fmt check help test-unit test-integration test-e2e test-all release
+.PHONY: build clean lint fmt check help vet test-unit test-integration test-e2e test-all release
 
 # build — compile the akswitch binary
 build:
@@ -12,12 +12,16 @@ clean:
 lint:
 	golangci-lint run ./...
 
+# vet — run go vet
+vet:
+	go vet ./...
+
 # fmt — format Go source files
 fmt:
 	go fmt ./...
 
-# check — run lint and vet
-check: lint fmt
+# check — run lint, vet, and fmt
+check: lint vet fmt
 
 # help — show available targets
 help:
