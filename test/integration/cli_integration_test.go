@@ -1504,6 +1504,44 @@ func TestProviderUpdate_DefaultFlag(t *testing.T) {
 	}
 }
 
+// TestProviderUpdate_OutputNotMarkedDefault 验证更新已为 default 的 provider
+//（不传 --default）时，输出不含 (default) 标记。
+func TestProviderUpdate_OutputNotMarkedDefault(t *testing.T) {
+	cli.ResetConfigEnv()
+	tmpDir := t.TempDir()
+	config.ConfigDir = tmpDir
+	t.Cleanup(func() { config.ConfigDir = "" })
+
+	runAkswitch(t, "akswitch", "provider", "add", "the-default",
+		"--target", "https://old.test/v1",
+		"--port", "9608",
+		"--default",
+	)
+
+	var stdout bytes.Buffer
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := runAkswitch(t, "akswitch", "provider", "update", "the-default",
+		"--target", "https://new.test/v1")
+
+	w.Close()
+	os.Stdout = oldStdout
+	io.Copy(&stdout, r)
+
+	if err != nil {
+		t.Fatalf("provider update failed: %v", err)
+	}
+	output := stdout.String()
+	if strings.Contains(output, "(default)") {
+		t.Errorf("output should not contain (default) when --default was not passed, got:\n%s", output)
+	}
+	if !strings.Contains(output, "updated") {
+		t.Errorf("output should contain 'updated', got:\n%s", output)
+	}
+}
+
 // TestProviderUpdate_AdminToken verifies --admin-token flag sets and clears admin token.
 func TestProviderUpdate_AdminToken(t *testing.T) {
 	cli.ResetConfigEnv()

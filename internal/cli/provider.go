@@ -430,9 +430,11 @@ Example:
 		}
 
 		// --default modifies TomlConfig, not the provider itself
+		defaultSet := false
 		if cmd.Flags().Changed("default") {
 			tc.DefaultProvider = name
 			config.DefaultProviderName = name
+			defaultSet = true
 			changes++
 		}
 
@@ -445,7 +447,7 @@ Example:
 			return fmt.Errorf("failed to save config: %w", err)
 		}
 
-		if tc.DefaultProvider == name {
+		if defaultSet {
 			fmt.Printf("Provider %q updated in %s (default)\n", name, source)
 		} else {
 			fmt.Printf("Provider %q updated in %s\n", name, source)
