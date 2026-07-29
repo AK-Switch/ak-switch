@@ -1,8 +1,8 @@
 # AK Switch — API Key 轮转代理
 
-[![Go Version](https://img.shields.io/github/go-mod/go-version/bigmanBass666/akswitch)](https://go.dev)
-[![Tests](https://img.shields.io/github/actions/workflow/status/bigmanBass666/akswitch/go.yml?branch=main&label=tests)](https://github.com/bigmanBass666/akswitch/actions)
-[![Release](https://img.shields.io/github/v/release/bigmanBass666/akswitch)](https://github.com/bigmanBass666/akswitch/releases)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/AK-Switch/ak-switch)](https://go.dev)
+[![Tests](https://img.shields.io/github/actions/workflow/status/AK-Switch/ak-switch/go.yml?branch=main&label=tests)](https://github.com/AK-Switch/ak-switch/actions)
+[![Release](https://img.shields.io/github/v/release/AK-Switch/ak-switch)](https://github.com/AK-Switch/ak-switch/releases)
 
 > 专注单 provider 内 API Key 的智能轮转与熔断，与 [ccswitch](https://github.com/farion1231/cc-switch) 互补。
 > ccswitch 负责 provider 级路由与故障转移，AK Switch 负责 provider 内 key 级轮转与限流处理。

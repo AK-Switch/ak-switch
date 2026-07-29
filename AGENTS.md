@@ -8,16 +8,21 @@ Go 语言 API key 轮转代理，嵌入 CC Switch 作为 provider，用于多 ke
 |------|------|
 | `go install ./cmd/akswitch/` | 编译安装到 `$(go env GOPATH)/bin` |
 | `go mod verify` | 确认依赖完整性 |
-| `make test-unit` | 单元测试（标签 `unit`） |
-| `make test-integration` | 集成测试（标签 `integration`，mock upstream） |
-| `make test-e2e` | E2E 测试（标签 `e2e`，需真实上游） |
+| `make build` | 编译到 `bin/` |
+| `make test-unit` | 单元测试（标签 `unit`，上限 `<=1s`） |
+| `make test-integration` | 集成测试（标签 `integration`，mock upstream，上限 `<=10s`） |
+| `make test-e2e` | E2E 测试（标签 `e2e`，需真实上游，上限 `<=2m`） |
 | `make test-all` | 全量测试（unit → integration → e2e） |
 
-单测执行：
 ```bash
-go test -tags=unit -run TestName ./internal/cli/          # 单元
-go test -tags=integration -run TestName -race ./test/integration/  # 集成
-go test -tags=e2e -run TestName -timeout=5m -race ./test/integration/  # E2E
+# 单测
+go test -tags=unit -count=1 -short ./internal/...
+
+# 集成
+go test -tags=integration -count=1 -race ./test/integration/
+
+# E2E
+go test -tags=e2e -count=1 -timeout=5m -race ./test/integration/
 ```
 
 ## Project Structure
@@ -40,6 +45,7 @@ internal/
   metrics/                     # Prometheus 指标
   tracker/                     # Token 校准器
   tokenestimator/              # tiktoken 估算
+  logentry/                    # LogEntry 结构体
 docs/
   cli/                         # 自动生成的 CLI 文档
   architecture.md, api.md      # 架构设计、API 端点
@@ -50,7 +56,7 @@ docs/
 关键模式（详见 [docs/architecture.md](./docs/architecture.md)）：
 - **ProviderRouter + ProxyExecutor** — 单端口 `/{provider}/...` 路由，ProxyExecutor 执行完整生命周期
 - **两层熔断** — Key 级（429 退避）→ 上游级（502/503 熔断）
-- **配置热重载** — 监听 `.env` 变更，热更新 key pool，不停机
+- **配置热重载** — 监听 `config.toml` 变更，热更新 key pool，不停机
 - **启动 key 探针** — 启动时检测 401/403 自动禁用无效 key
 
 ## Code Style & Conventions
@@ -86,11 +92,18 @@ main 分支受保护，禁止直接推送。遵循 GitHub Flow + 原子 commit�
 
 提交后 `go install ./cmd/akswitch/` 更新本地二进制。
 
+## Dev Environment
+
+- Go 1.23+（构建使用 Go 1.26）
+- 主要开发平台：Windows
+- 跨平台：Linux、macOS（通过 GitHub Actions CI 验证）
+- 无需外部依赖（纯 Go 标准库 + Cobra CLI + Prometheus client）
+
 ## Boundaries
 
-- ✅ **Always**：修改 CLI 命令/标志、修复 bug、添加测试、更新文档
-- ⚠️ **Ask first**：修改 `internal/server/` 核心逻辑、新增 provider、改数据库/外部服务
-- 🚫 **Never**：直接 push 到 main、force push、修改 keys 存储逻辑、提交敏感信息
+- **Always**：修改 CLI 命令/标志、修复 bug、添加测试、更新文档
+- **Ask first**：修改 `internal/server/` 核心逻辑、新增 provider、改数据库/外部服务
+- **Never**：直接 push 到 main、force push、修改 keys 存储逻辑、提交敏感信息
 
 **提交规范**：`类型: 描述`（`feat`/`fix`/`refactor`/`chore`/`docs`）。
 
@@ -117,18 +130,31 @@ curl -X POST ... -d '{"level":"info"}'  # 恢复 info
 
 **Dev 模式**：`akswitch start --dev --provider=sensenova` 启动独立实例（端口自动递增），用于查看 stdout 日志和抓取 SSE 原始数据。注意：`--dev` 实例与生产实例共享全局 `slog.Default()`。
 
-## 日志分析
-
-日志文件为 JSON 格式（每行一条），使用标准工具分析：
-- `tail -f <log_file>` — 实时查看日志
-- `grep '"proxy success"' <log_file>` — 筛选请求日志
-- `jq 'select(.status >= 400)' <log_file>` — 筛选失败请求
+**抓取 SSE 流式数据**：设置 debug 级别后，服务器日志中会输出 `sse raw line` 条目，包含原始 SSE 事件内容（`data:` 行）。
 
 ## Token 计量
 
-Token 估算基于 tiktoken（`internal/tokenestimator/`），流程和限制详见 [docs/architecture.md](./docs/architecture.md#token-校准)。
+Token 估算基于 tiktoken，在 `internal/tokenestimator/` 中实现。
 
-sensenova 流式响应不返回 `usage.output_tokens`（始终为 0），Calibrator 修正系数恒为 1.0。非流式请求返回实际 token 值，可用于校准。
+**流程：** 请求发送前估算 input_tokens → 响应到达后提取/估算 output_tokens → Calibrator 在滑动窗口中校准。
+
+**限制：** sensenova 的 Anthropic 流式响应不返回 `usage.output_tokens`（始终为 0），所有 token 均基于 tiktoken 估算，精度 ±10-20%。Calibrator 修正系数恒为 1.0。非流式请求返回实际值，可用于校准。
+
+详见 `internal/tracker/calibration.go` 和 [docs/architecture.md](./docs/architecture.md)。
+
+## 文档纪律
+
+每次变更都必须同步更新文档。这是**纪律，不是建议**。
+
+| 变更类型 | 必须同步更新 | 时机 |
+|---------|------------|------|
+| 新增/修改 CLI 命令或标志 | `docs/cli-reference.md` | 同一 PR |
+| 新增/修改配置字段 | `docs/configuration.md` | 同一 PR |
+| 新增/修改 API 端点 | `docs/api.md` | 同一 PR |
+| 发版 / 里程碑完成 | `CHANGELOG.md` | 发版前 |
+| 新增功能影响架构 | `docs/architecture.md` | 同一 PR |
+
+**核心原则：** 文档和代码在同一次合并中到达 main。先合并代码后补文档 = 文档永远补不上。
 
 ## CC Switch 关系
 
@@ -137,9 +163,3 @@ sensenova 流式响应不返回 `usage.output_tokens`（始终为 0），Calibra
 **分工：**
 - **CC Switch** — 上游聚合、协议转换、多 provider 路由
 - **AK-Switch** — 单 provider 内的 API key 轮转、熔断、Token 计量
-
-## Agent 工具
-
-- Issue tracker: `docs/agents/issue-tracker.md`
-- Triage 标签: `docs/agents/triage-labels.md`
-- 领域文档: `docs/agents/domain.md`
