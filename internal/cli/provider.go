@@ -24,6 +24,7 @@ func init() {
 	providerCmd.AddCommand(providerRemoveCmd)
 	providerCmd.AddCommand(providerDefaultCmd)
 	providerCmd.AddCommand(providerInfoCmd)
+	providerCmd.AddCommand(providerUpdateCmd)
 
 	providerAddCmd.Flags().StringP("target", "t", "", "Upstream target URL (required)")
 	providerAddCmd.Flags().IntP("port", "p", 0, "HTTP listen port (required for first provider)")
@@ -31,6 +32,22 @@ func init() {
 	providerAddCmd.Flags().IntP("cooldown-sec", "c", 60, "Cooldown seconds after rate-limit")
 	providerAddCmd.Flags().IntP("max-retries", "r", 3, "Max retry attempts for upstream")
 	providerAddCmd.Flags().Bool("default", false, "Set this provider as the default")
+
+	providerUpdateCmd.Flags().StringP("target", "t", "", "Upstream target URL")
+	providerUpdateCmd.Flags().String("genai", "", "GenAI base URL")
+	providerUpdateCmd.Flags().IntP("cooldown-sec", "c", -1, "Cooldown seconds after rate-limit (-1 to skip)")
+	providerUpdateCmd.Flags().IntP("max-retries", "r", -1, "Max retry attempts for upstream (-1 to skip)")
+	providerUpdateCmd.Flags().Int("backoff-cap-sec", -1, "Backoff cap seconds (-1 to skip)")
+	providerUpdateCmd.Flags().Float64("backoff-multiplier", -1, "Backoff multiplier (-1 to skip)")
+	providerUpdateCmd.Flags().Int("cb-reset-sec", -1, "Circuit breaker reset seconds (-1 to skip)")
+	providerUpdateCmd.Flags().Int("upstream-cb-threshold", -1, "Upstream CB failure threshold (-1 to skip)")
+	providerUpdateCmd.Flags().Int("http-timeout-sec", -1, "HTTP timeout seconds (-1 to skip)")
+	providerUpdateCmd.Flags().Int("health-check-interval-sec", -1, "Health check interval seconds (-1 to skip)")
+	providerUpdateCmd.Flags().String("admin-token", "", "Admin authentication token (empty to clear)")
+	providerUpdateCmd.Flags().Bool("disable-thinking", false, "Disable thinking mode")
+	providerUpdateCmd.Flags().String("genai-model", "", "Generative AI model name")
+	providerUpdateCmd.Flags().String("keys-file", "", "Keys file path (empty for default)")
+	providerUpdateCmd.Flags().Bool("default", false, "Set this provider as the default")
 }
 
 var providerCmd = &cobra.Command{
@@ -275,6 +292,165 @@ when no --provider or --all flag is given.`,
 		}
 
 		fmt.Printf("Default provider set to %q\n", name)
+		return nil
+	},
+}
+
+var providerUpdateCmd = &cobra.Command{
+	Use:   "update <name>",
+	Short: "Update provider configuration",
+	Long: `Update one or more fields of an existing provider in config.toml.
+
+Only the fields specified by flags are modified; all other fields retain their
+current values. If no flags are provided, an error is returned.
+
+Example:
+  akswitch provider update nvidia --target https://new-url.example.com/v1
+  akswitch provider update sensenova --cooldown-sec 30 --max-retries 5
+  akswitch provider update nvidia --genai https://new-genai.example.com/v1 --default`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		name := args[0]
+
+		source, err := config.XDGConfigPath()
+		if err != nil {
+			return fmt.Errorf("failed to determine XDG config path: %w", err)
+		}
+		if _, statErr := os.Stat(source); statErr != nil {
+			return fmt.Errorf("no configuration file found at %s", source)
+		}
+
+		// Load
+		tc, err := config.LoadTomlConfig(source)
+		if err != nil {
+			return fmt.Errorf("failed to load config: %w", err)
+		}
+
+		// Validate provider exists
+		prov, exists := tc.Provider[name]
+		if !exists {
+			return fmt.Errorf("provider %q not found in %s", name, source)
+		}
+
+		// Read flags — use sentinel -1 to detect "flag not provided"
+		changes := 0
+
+		if cmd.Flags().Changed("target") {
+			target, _ := cmd.Flags().GetString("target")
+			if target == "" {
+				return fmt.Errorf("--target/-t cannot be empty")
+			}
+			prov.TargetBase = target
+			changes++
+		}
+
+		if cmd.Flags().Changed("genai") {
+			prov.GenaiBase, _ = cmd.Flags().GetString("genai")
+			changes++
+		}
+		if cmd.Flags().Changed("cooldown-sec") {
+			v, _ := cmd.Flags().GetInt("cooldown-sec")
+			if v < 0 {
+				return fmt.Errorf("--cooldown-sec must be >= 0")
+			}
+			prov.CooldownSec = v
+			changes++
+		}
+		if cmd.Flags().Changed("max-retries") {
+			v, _ := cmd.Flags().GetInt("max-retries")
+			if v < 0 {
+				return fmt.Errorf("--max-retries must be >= 0")
+			}
+			prov.MaxRetries = v
+			changes++
+		}
+		if cmd.Flags().Changed("backoff-cap-sec") {
+			v, _ := cmd.Flags().GetInt("backoff-cap-sec")
+			if v < 0 {
+				return fmt.Errorf("--backoff-cap-sec must be >= 0")
+			}
+			prov.BackoffCapSec = v
+			changes++
+		}
+		if cmd.Flags().Changed("backoff-multiplier") {
+			v, _ := cmd.Flags().GetFloat64("backoff-multiplier")
+			if v < 0 {
+				return fmt.Errorf("--backoff-multiplier must be >= 0")
+			}
+			prov.BackoffMultiplier = v
+			changes++
+		}
+		if cmd.Flags().Changed("cb-reset-sec") {
+			v, _ := cmd.Flags().GetInt("cb-reset-sec")
+			if v < 0 {
+				return fmt.Errorf("--cb-reset-sec must be >= 0")
+			}
+			prov.CBResetSec = v
+			changes++
+		}
+		if cmd.Flags().Changed("upstream-cb-threshold") {
+			v, _ := cmd.Flags().GetInt("upstream-cb-threshold")
+			if v < 0 {
+				return fmt.Errorf("--upstream-cb-threshold must be >= 0")
+			}
+			prov.UpstreamCBThreshold = v
+			changes++
+		}
+		if cmd.Flags().Changed("http-timeout-sec") {
+			v, _ := cmd.Flags().GetInt("http-timeout-sec")
+			if v < 0 {
+				return fmt.Errorf("--http-timeout-sec must be >= 0")
+			}
+			prov.HTTPTimeoutSec = v
+			changes++
+		}
+		if cmd.Flags().Changed("health-check-interval-sec") {
+			v, _ := cmd.Flags().GetInt("health-check-interval-sec")
+			if v < 0 {
+				return fmt.Errorf("--health-check-interval-sec must be >= 0")
+			}
+			prov.HealthCheckIntervalSec = v
+			changes++
+		}
+		if cmd.Flags().Changed("admin-token") {
+			prov.AdminToken, _ = cmd.Flags().GetString("admin-token")
+			changes++
+		}
+		if cmd.Flags().Changed("disable-thinking") {
+			prov.DisableThinking, _ = cmd.Flags().GetBool("disable-thinking")
+			changes++
+		}
+		if cmd.Flags().Changed("genai-model") {
+			prov.GenaiModel, _ = cmd.Flags().GetString("genai-model")
+			changes++
+		}
+		if cmd.Flags().Changed("keys-file") {
+			prov.KeysFile, _ = cmd.Flags().GetString("keys-file")
+			changes++
+		}
+
+		// --default modifies TomlConfig, not the provider itself
+		if cmd.Flags().Changed("default") {
+			tc.DefaultProvider = name
+			config.DefaultProviderName = name
+			changes++
+		}
+
+		if changes == 0 {
+			return fmt.Errorf("no fields specified to update (use --help to see available flags)")
+		}
+
+		// Save
+		if err := config.SaveTomlConfig(tc, source); err != nil {
+			return fmt.Errorf("failed to save config: %w", err)
+		}
+
+		if tc.DefaultProvider == name {
+			fmt.Printf("Provider %q updated in %s (default)\n", name, source)
+		} else {
+			fmt.Printf("Provider %q updated in %s\n", name, source)
+		}
+		triggerReload()
 		return nil
 	},
 }
