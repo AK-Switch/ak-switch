@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"strings"
 	"testing"
 
 	"akswitch/internal/keypool"
@@ -21,11 +22,27 @@ func TestKeyAddCmd_Flags(t *testing.T) {
 }
 
 func TestProviderAddCmd_Flags(t *testing.T) {
-	flags := []string{"target", "port", "genai", "cooldown-sec", "max-retries", "default"}
+	flags := []struct {
+		name     string
+		required bool
+	}{
+		{name: "target", required: true},
+		{name: "port"},
+		{name: "genai", required: true},
+		{name: "cooldown-sec"},
+		{name: "max-retries"},
+		{name: "default"},
+	}
 	for _, f := range flags {
-		t.Run(f, func(t *testing.T) {
-			if providerAddCmd.Flags().Lookup(f) == nil {
-				t.Fatalf("expected --%s flag on provider add command", f)
+		t.Run(f.name, func(t *testing.T) {
+			if providerAddCmd.Flags().Lookup(f.name) == nil {
+				t.Fatalf("expected --%s flag on provider add command", f.name)
+			}
+			if f.required {
+				flag := providerAddCmd.Flags().Lookup(f.name)
+				if !strings.Contains(flag.Usage, "(required)") {
+					t.Errorf("--%s flag usage should contain '(required)', got: %s", f.name, flag.Usage)
+				}
 			}
 		})
 	}

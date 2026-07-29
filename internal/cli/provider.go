@@ -27,7 +27,7 @@ func init() {
 
 	providerAddCmd.Flags().StringP("target", "t", "", "Upstream target URL (required)")
 	providerAddCmd.Flags().IntP("port", "p", 0, "HTTP listen port (required for first provider)")
-	providerAddCmd.Flags().StringP("genai", "g", "", "GenAI base URL (optional)")
+	providerAddCmd.Flags().StringP("genai", "g", "", "GenAI base URL (required)")
 	providerAddCmd.Flags().IntP("cooldown-sec", "c", 60, "Cooldown seconds after rate-limit")
 	providerAddCmd.Flags().IntP("max-retries", "r", 3, "Max retry attempts for upstream")
 	providerAddCmd.Flags().Bool("default", false, "Set this provider as the default")
@@ -62,6 +62,9 @@ Example:
 
 		if target == "" {
 			return fmt.Errorf("--target/-t is required")
+		}
+		if genai == "" {
+			return fmt.Errorf("--genai/-g is required")
 		}
 
 		source, err := config.XDGConfigPath()
@@ -366,10 +369,6 @@ Example:
 			fmt.Println("  Status:  not running")
 		}
 
-		// Config section
-		fmt.Println("\n  Config:")
-		fmt.Printf("    Target:  %s\n", sanitized.TargetBase)
-		fmt.Printf("    Port:    %d\n", sanitized.Port)
 		if sanitized.GenaiBase != "" {
 			fmt.Printf("    GenAI:   %s\n", sanitized.GenaiBase)
 		}

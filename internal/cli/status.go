@@ -17,9 +17,13 @@ func init() {
 }
 
 var statusCmd = &cobra.Command{
-	Use:   "status",
+	Use:   "status [provider]",
 	Short: "Show runtime status",
-	Long:  `Query the running akswitch server and display health, key counts, and request statistics.`,
+	Long:  `Query the running akswitch server and display health, key counts, and request statistics.
+
+If a provider name is given, shows status for that provider only.
+Otherwise, shows all providers.`,
+	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client := &http.Client{Timeout: 3 * time.Second}
 
@@ -37,24 +41,39 @@ var statusCmd = &cobra.Command{
 		body, _ := io.ReadAll(resp.Body)
 		var healthData map[string]interface{}
 		if err := json.Unmarshal(body, &healthData); err != nil {
-			// Check if response is non-JSON (e.g., HTML from another service)
 			if len(body) > 0 && body[0] != '{' && body[0] != '[' {
 				return fmt.Errorf("server not running or returned unexpected response (HTTP %d)", resp.StatusCode)
 			}
 			return fmt.Errorf("failed to parse health response: %w", err)
 		}
 
+		// Filter by provider if specified
+		var details map[string]interface{}
+		if d, ok := healthData["details"].(map[string]interface{}); ok {
+			if len(args) > 0 {
+				if providerDetail, exists := d[args[0]]; exists {
+					details = map[string]interface{}{args[0]: providerDetail}
+				} else {
+					return fmt.Errorf("provider %q not found", args[0])
+				}
+			} else {
+				details = d
+			}
+		}
+
 		fmt.Printf("Server: http://%s:%d\n", detectServerHost(), port)
 		fmt.Printf("Status: %s\n", healthData["status"])
 
 		if providers, ok := healthData["providers"]; ok {
-			fmt.Printf("Providers: %v\n", providers)
+			if len(args) > 0 {
+				fmt.Printf("Provider: %s\n", args[0])
+			} else {
+				fmt.Printf("Providers: %v\n", providers)
+			}
 		}
 
-		if details, ok := healthData["details"]; ok {
-			if det, ok2 := details.(map[string]interface{}); ok2 {
-				fmt.Print(formatProviderTable(det))
-			}
+		if details != nil {
+			fmt.Print(formatProviderTable(details))
 		}
 
 		// Query stats endpoint

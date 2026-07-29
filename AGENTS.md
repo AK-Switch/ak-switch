@@ -88,6 +88,20 @@ See [docs/architecture.md](./docs/architecture.md) for detailed design docs.
 - 测试入口：`testhelper.go` 的 `runCommand()` 或子进程模式
 - CLI 测试：必须包含输出断言，禁止无断言的 `runCommand` 模式
 
+## CLI Design Rules
+
+新增或修改 CLI 命令前必须阅读本节，并同步更新 [docs/cli-design-rules.md](./docs/cli-design-rules.md)。
+
+- **verb-first 子命令**：动作在前，资源在后。`provider add`、`key list`、`config get`。
+- **provider 作为 args[0]**：需要 provider 的命令，provider 名是第一个位置参数。`status [provider]`、`config list [provider]`。
+- **不做动态子命令**：provider 名不注册为 Cobra 子命令（如 `akswitch sensenova status`）。
+- **required 字段**：`RunE` 入口处验证，flag 文档标注 `(required)`。添加时和启动时必须一致。
+- **optional 字段**：flag 文档标注 `(optional)`，空值合法。
+- **无使用场景的字段直接删除**：不留"可能以后用得上"的死代码。有实际功能的字段保留并修复矛盾（如 `GenaiBase`：server 层用于 /genai/ 路径路由，flag 文档和验证已统一为 required）。
+- **provider 命名**：`[a-z0-9-]`，大写字母在 `provider add` 时警告（#193）。
+- **错误信息**：说清问题和解决方案。`--target/-t is required` 而非 `invalid flags`。
+- **测试**：新增命令加 `TestXxxCmd_Exists`，新增标志加 `TestXxxCmd_HasYyyFlag`，必须包含输出断言。
+
 ## Boundaries
 
 - ✅ **Always**：修改 CLI 命令/标志、修复 bug、添加测试、更新文档

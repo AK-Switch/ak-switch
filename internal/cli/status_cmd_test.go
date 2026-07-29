@@ -3,9 +3,150 @@
 package cli
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
+
+	"akswitch/internal/config"
+	"path/filepath"
 )
+
+func TestStatusCmd_Exists(t *testing.T) {
+	if statusCmd == nil {
+		t.Fatal("expected statusCmd to be defined")
+	}
+}
+
+func TestStatusCmd_Use(t *testing.T) {
+	if statusCmd.Use != "status [provider]" {
+		t.Errorf("statusCmd.Use = %q, want %q", statusCmd.Use, "status [provider]")
+	}
+}
+
+func runStatusCmd(t *testing.T, args []string, handler http.HandlerFunc) string {
+	t.Helper()
+
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	_, portStr, _ := net.SplitHostPort(ts.Listener.Addr().String())
+
+	tmpDir := t.TempDir()
+	tomlPath := filepath.Join(tmpDir, "config.toml")
+	content := fmt.Sprintf("port = %s\nhost = \"127.0.0.1\"\n\n[provider]\n[provider.test]\ntarget = \"http://example.com\"\ngenai = \"http://example.com\"\n", portStr)
+	if err := os.WriteFile(tomlPath, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write config.toml: %v", err)
+	}
+
+	oldConfigDir := config.ConfigDir
+	config.ConfigDir = tmpDir
+	t.Cleanup(func() { config.ConfigDir = oldConfigDir })
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldStdout := os.Stdout
+	os.Stdout = w
+	oldStderr := os.Stderr
+	os.Stderr = w
+
+	cmdArgs := append([]string{"status"}, args...)
+	rootCmd.SetArgs(cmdArgs)
+	err = rootCmd.Execute()
+
+	w.Close()
+	os.Stdout = oldStdout
+	os.Stderr = oldStderr
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	r.Close()
+
+	if err != nil {
+		return "ERROR: " + err.Error()
+	}
+	return buf.String()
+}
+
+func TestStatusCmd_NoProvider_ShowsAll(t *testing.T) {
+	output := runStatusCmd(t, []string{}, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/health" {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"status": "healthy",
+				"details": map[string]interface{}{
+					"alpha": map[string]interface{}{
+						"keys":              3,
+						"upstream_cb_state": "closed",
+					},
+					"beta": map[string]interface{}{
+						"keys":              2,
+						"upstream_cb_state": "closed",
+					},
+				},
+			})
+		}
+	})
+
+	if !strings.Contains(output, "alpha") {
+		t.Errorf("expected output to contain 'alpha', got:\n%s", output)
+	}
+	if !strings.Contains(output, "beta") {
+		t.Errorf("expected output to contain 'beta', got:\n%s", output)
+	}
+}
+
+func TestStatusCmd_WithProvider_FiltersOutput(t *testing.T) {
+	output := runStatusCmd(t, []string{"alpha"}, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/health" {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"status": "healthy",
+				"details": map[string]interface{}{
+					"alpha": map[string]interface{}{
+						"keys":              3,
+						"upstream_cb_state": "closed",
+					},
+					"beta": map[string]interface{}{
+						"keys":              2,
+						"upstream_cb_state": "open",
+					},
+				},
+			})
+		}
+	})
+
+	if !strings.Contains(output, "alpha") {
+		t.Errorf("expected output to contain 'alpha', got:\n%s", output)
+	}
+	if strings.Contains(output, "beta") {
+		t.Errorf("expected output NOT to contain 'beta' when filtering by alpha, got:\n%s", output)
+	}
+}
+
+func TestStatusCmd_WithUnknownProvider_ReturnsError(t *testing.T) {
+	output := runStatusCmd(t, []string{"nonexistent"}, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/health" {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"status":  "healthy",
+				"details": map[string]interface{}{},
+			})
+		}
+	})
+
+	if !strings.Contains(output, "not found") {
+		t.Errorf("expected error output to contain 'not found', got:\n%s", output)
+	}
+}
 
 func TestFormatProviderTable_SingleProvider(t *testing.T) {
 	det := map[string]interface{}{
