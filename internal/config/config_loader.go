@@ -2,8 +2,10 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/pelletier/go-toml/v2"
 )
@@ -80,6 +82,15 @@ func LoadAllTomlProviders(path string) (map[string]*Config, error) {
 			p.LogMaxAge = tc.LogMaxAge
 		}
 		result[name] = p
+	}
+	// Warn about provider names containing uppercase letters.
+	// Provider names are used in route paths, log labels, and metrics;
+	// lowercase kebab-case is the recommended convention.
+	for name := range tc.Provider {
+		if strings.ToLower(name) != name {
+			slog.Warn("provider name contains uppercase letters; consider using lowercase kebab-case",
+				"provider", name)
+		}
 	}
 	return result, nil
 }
