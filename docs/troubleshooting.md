@@ -18,11 +18,11 @@
    ```
 3. 如果未设置，日志仅输出到 stderr，可通过 `akswitch start --dev` 查看标准输出。
 
-### `akswitch logs` 看不到日志
+### `/api/logs` 看不到日志
 
-`akswitch logs` 从 HTTP API `/api/logs` 读取内存环形缓冲区，**不是**运行时日志文件。
+`/api/logs` 从 JSON 日志文件读取最后 1MB 内容，**不是**运行时日志。
 
-- 它展示的是**请求记录**（每个 HTTP 请求一条），不是运行时日志（slog）
+- 它展示的是**请求记录**（每个 HTTP 请求一条 JSON），不是运行时日志（slog）
 - 运行时日志（slog）输出到文件或 stderr，通过 `akswitch log-level` 控制级别
 - 请求日志（LogEntry）始终记录，不受日志级别影响
 
