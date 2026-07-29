@@ -62,14 +62,29 @@ docs/
 
 ## Testing
 
-测试设计原则：测试即规格、反馈速度决定分层、服务于变更、测试即文档。
+四个设计原则：
+1. **测试即规格** — 测试定义"应该输出什么"，代码是实现。改动输出格式前，先改测试定义新格式。
+2. **反馈速度决定分层** — 纯函数在 unit 层测，CLI 解析在 unit 层测，集成 mock upstream 验证完整流程。
+3. **测试服务于变更** — 每个测试对应一个"未来有人会改这个"的假设，如 `TestXxxCmd_HasYyyFlag` 对应"未来有人删这个 flag"。
+4. **测试即文档** — 断言直接写出期望值，而不是"不崩就行"。
 
-详细规范见 [docs/guides/testing.md](./docs/guides/testing.md)。单测命令：
-```bash
-go test -tags=unit -run TestName ./internal/cli/          # 单元
-go test -tags=integration -run TestName -race ./test/integration/  # 集成
-go test -tags=e2e -run TestName -timeout=5m -race ./test/integration/  # E2E
-```
+策略：集成验收为主（mock upstream + 真实代理请求），测试入口用 `testhelper.go` 的 `runCommand()`，CLI 测试必须包含输出断言。
+
+## Workflow
+
+main 分支受保护，禁止直接推送。遵循 GitHub Flow + 原子 commit。
+
+1. **创建分支** — `git checkout -b feature/xxx main`
+2. **实现代码** — 写功能逻辑
+3. **写测试** — 按上方 Testing 原则添加
+4. **验证新测试** — `go test -tags=unit -run TestXxx ./internal/cli/`
+5. **验证全量** — `make test-all`
+6. **手动验收** — 按改动类型运行对应验证
+7. **提交 Draft PR** — 标题写明改动内容，不等 CI
+8. **审查 PR** — 调用 review agent 审查（非 trivial 变更）
+9. **决策** — 无阻塞 → Ready for Review + auto-merge；有小问题 → 修复后重推；有大问题 → 报告
+
+提交后 `go install ./cmd/akswitch/` 更新本地二进制。
 
 ## Boundaries
 
@@ -77,7 +92,7 @@ go test -tags=e2e -run TestName -timeout=5m -race ./test/integration/  # E2E
 - ⚠️ **Ask first**：修改 `internal/server/` 核心逻辑、新增 provider、改数据库/外部服务
 - 🚫 **Never**：直接 push 到 main、force push、修改 keys 存储逻辑、提交敏感信息
 
-**提交规范**：`类型: 描述`（`feat`/`fix`/`refactor`/`chore`/`docs`）。PR 合并后 `go install ./cmd/akswitch/` 更新本地二进制。
+**提交规范**：`类型: 描述`（`feat`/`fix`/`refactor`/`chore`/`docs`）。
 
 **发版**：PR 合并后 `git commit` 更新 CHANGELOG → `make release VERSION=v0.x.x`，或从 GitHub Actions 触发 `Build & Release` workflow。新功能 `v0.x.0`，bug 修复 `v0.x.1`。
 
