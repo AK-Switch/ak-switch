@@ -779,6 +779,7 @@ func (pr *ProviderRouter) getRuntimeParams(ps *ProviderState) map[string]interfa
 		"backoff_multiplier":    ps.Config.BackoffMultiplier,
 		"cb_reset_sec":          ps.Config.CBResetSec,
 		"upstream_cb_threshold": ps.Config.UpstreamCBThreshold,
+		"log_level":             ps.Config.LogLevel,
 	}
 }
 

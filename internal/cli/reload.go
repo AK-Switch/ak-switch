@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"time"
@@ -33,8 +34,18 @@ func triggerReload() bool {
 	if err != nil {
 		return false
 	}
+	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
-	return resp.StatusCode == http.StatusOK
+
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		fmt.Fprintf(os.Stderr, "reload auth failed (HTTP %d): check X-Admin-Token in server config\n", resp.StatusCode)
+		return false
+	}
+	if resp.StatusCode != http.StatusOK {
+		fmt.Fprintf(os.Stderr, "reload failed (HTTP %d): %s\n", resp.StatusCode, string(body))
+		return false
+	}
+	return true
 }
 
 // loadAdminTokenFromConfig loads any admin token from the TOML config file.

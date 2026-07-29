@@ -184,22 +184,35 @@ var configListCmd = &cobra.Command{
 
 		body, _ := io.ReadAll(resp.Body)
 
-		// Try to parse as multi-provider response first
-		var multiResult map[string]map[string]interface{}
-		if err := json.Unmarshal(body, &multiResult); err == nil && len(multiResult) > 0 {
-			// Check if single-provider response (from ?provider=xxx)
-			if _, hasProvider := multiResult["provider"]; hasProvider {
-				var single struct {
-					Provider string                 `json:"provider"`
-					Params   map[string]interface{} `json:"params"`
-				}
-				if json.Unmarshal(body, &single) == nil && single.Provider != "" {
-					printProviderParams(single.Provider, single.Params)
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			return fmt.Errorf("auth failed (HTTP %d): check X-Admin-Token in server config", resp.StatusCode)
+		}
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("API error (HTTP %d): %s", resp.StatusCode, string(body))
+		}
+
+		// Server returns {"provider": "name", "params": {...}} for single provider
+		// or {"provider1": {...}, "provider2": {...}} for all providers
+		var singleResp struct {
+			Provider string                 `json:"provider"`
+			Params   map[string]interface{} `json:"params"`
+		}
+		if err := json.Unmarshal(body, &singleResp); err == nil && singleResp.Provider != "" && singleResp.Params != nil {
+			if len(args) > 0 {
+				// User requested a specific provider — match it
+				if singleResp.Provider == args[0] {
+					printProviderParams(singleResp.Provider, singleResp.Params)
 					return nil
 				}
+			} else {
+				printProviderParams(singleResp.Provider, singleResp.Params)
+				return nil
 			}
+		}
 
-			// Multi-provider: display all or first
+		// Fall through to multi-provider map parsing
+		var multiResult map[string]map[string]interface{}
+		if err := json.Unmarshal(body, &multiResult); err == nil && len(multiResult) > 0 {
 			names := make([]string, 0, len(multiResult))
 			for n := range multiResult {
 				names = append(names, n)
@@ -246,13 +259,29 @@ var configGetCmd = &cobra.Command{
 		}
 		baseURL := fmt.Sprintf("http://%s:%d/api/runtime-config?%s", detectServerHost(), detectServerPort(), params.Encode())
 
-		resp, err := client.Get(baseURL)
+		req, err := http.NewRequest(http.MethodGet, baseURL, nil)
+		if err != nil {
+			return fmt.Errorf("server not reachable: %w", err)
+		}
+		if token, tokErr := loadAdminTokenFromConfig(); tokErr == nil && token != "" {
+			req.Header.Set("X-Admin-Token", token)
+		}
+
+		resp, err := client.Do(req)
 		if err != nil {
 			return fmt.Errorf("server not reachable: %w", err)
 		}
 		defer resp.Body.Close()
 
 		body, _ := io.ReadAll(resp.Body)
+
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			return fmt.Errorf("auth failed (HTTP %d): check X-Admin-Token in server config", resp.StatusCode)
+		}
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("API error (HTTP %d): %s", resp.StatusCode, string(body))
+		}
+
 		var result struct {
 			Provider string      `json:"provider"`
 			Key      string      `json:"key"`
@@ -260,6 +289,10 @@ var configGetCmd = &cobra.Command{
 		}
 		if err := json.Unmarshal(body, &result); err != nil {
 			return fmt.Errorf("failed to parse response: %w", err)
+		}
+
+		if result.Value == nil {
+			return fmt.Errorf("unknown key %q for provider %q", key, result.Provider)
 		}
 
 		switch val := result.Value.(type) {
@@ -319,13 +352,25 @@ var configSetCmd = &cobra.Command{
 		payloadBytes, _ := json.Marshal(payloadMap)
 		payload := string(payloadBytes)
 
-		resp, err := client.Post(baseURL, "application/json", strings.NewReader(payload))
+		req, err := http.NewRequest(http.MethodPost, baseURL, strings.NewReader(payload))
+		if err != nil {
+			return fmt.Errorf("server not reachable: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		if token, tokErr := loadAdminTokenFromConfig(); tokErr == nil && token != "" {
+			req.Header.Set("X-Admin-Token", token)
+		}
+
+		resp, err := client.Do(req)
 		if err != nil {
 			return fmt.Errorf("server not reachable: %w", err)
 		}
 		defer resp.Body.Close()
 
 		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			return fmt.Errorf("auth failed (HTTP %d): check X-Admin-Token in server config", resp.StatusCode)
+		}
 		if resp.StatusCode != http.StatusOK {
 			var errResult struct {
 				Error string `json:"error"`
