@@ -450,11 +450,11 @@ target = "https://api.example.com"
 	}
 	// CooldownSec should use default from DefaultConfig
 	if cfg.CooldownSec != 15 {
-		t.Errorf("CooldownSec = %d, want default 60", cfg.CooldownSec)
+		t.Errorf("CooldownSec = %d, want default 15", cfg.CooldownSec)
 	}
 	// MaxRetries should use default from DefaultConfig
 	if cfg.MaxRetries != 2 {
-		t.Errorf("MaxRetries = %d, want default 3", cfg.MaxRetries)
+		t.Errorf("MaxRetries = %d, want default 2", cfg.MaxRetries)
 	}
 }
 
@@ -582,10 +582,10 @@ func TestTomlProviderConfig_DefaultValues(t *testing.T) {
 		t.Errorf("Port = %d, want default 8080", cfg.Port)
 	}
 	if cfg.CooldownSec != 15 {
-		t.Errorf("CooldownSec = %d, want default 60", cfg.CooldownSec)
+		t.Errorf("CooldownSec = %d, want default 15", cfg.CooldownSec)
 	}
 	if cfg.MaxRetries != 2 {
-		t.Errorf("MaxRetries = %d, want default 3", cfg.MaxRetries)
+		t.Errorf("MaxRetries = %d, want default 2", cfg.MaxRetries)
 	}
 	if cfg.DisableThinking {
 		t.Error("DisableThinking = true, want default false")
@@ -893,10 +893,62 @@ genai = "https://ai.example.com"
 		t.Errorf("Port = %d, want default 8080", cfg.Port)
 	}
 	if cfg.CooldownSec != 15 {
-		t.Errorf("CooldownSec = %d, want default 60", cfg.CooldownSec)
+		t.Errorf("CooldownSec = %d, want default 15", cfg.CooldownSec)
 	}
 	if cfg.MaxRetries != 2 {
-		t.Errorf("MaxRetries = %d, want default 3", cfg.MaxRetries)
+		t.Errorf("MaxRetries = %d, want default 2", cfg.MaxRetries)
+	}
+}
+
+func TestGlobalFields_InheritAndOverride(t *testing.T) {
+	content := `port = 9090
+max_retries = 5
+cooldown_sec = 30
+http_timeout_sec = 60
+
+[provider.sense]
+target = "https://api.sensenova.com"
+genai = "https://ai.sensenova.com"
+
+[provider.nvidia]
+target = "https://integrate.api.nvidia.com/v1"
+genai = "https://ai.api.nvidia.com"
+cooldown_sec = 120
+`
+	path := writeTempToml(t, content)
+	providers, err := LoadAllTomlProviders(path)
+	if err != nil {
+		t.Fatalf("LoadAllTomlProviders() unexpected error: %v", err)
+	}
+
+	sense := providers["sense"]
+	nv := providers["nvidia"]
+
+	// Global fields inherited by both providers
+	if sense.Port != 9090 {
+		t.Errorf("sense.Port = %d, want 9090 (global)", sense.Port)
+	}
+	if nv.Port != 9090 {
+		t.Errorf("nvidia.Port = %d, want 9090 (global)", nv.Port)
+	}
+	if sense.MaxRetries != 5 {
+		t.Errorf("sense.MaxRetries = %d, want 5 (global)", sense.MaxRetries)
+	}
+	if nv.MaxRetries != 5 {
+		t.Errorf("nvidia.MaxRetries = %d, want 5 (global)", nv.MaxRetries)
+	}
+	if sense.HTTPTimeoutSec != 60 {
+		t.Errorf("sense.HTTPTimeoutSec = %d, want 60 (global)", sense.HTTPTimeoutSec)
+	}
+	if nv.HTTPTimeoutSec != 60 {
+		t.Errorf("nvidia.HTTPTimeoutSec = %d, want 60 (global)", nv.HTTPTimeoutSec)
+	}
+	// Global CooldownSec=30 inherited by sense, overridden by nvidia
+	if sense.CooldownSec != 30 {
+		t.Errorf("sense.CooldownSec = %d, want 30 (global)", sense.CooldownSec)
+	}
+	if nv.CooldownSec != 120 {
+		t.Errorf("nvidia.CooldownSec = %d, want 120 (provider override)", nv.CooldownSec)
 	}
 }
 

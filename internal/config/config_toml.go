@@ -11,14 +11,26 @@ import (
 // ---- TOML 配置支持 ----
 
 // TomlConfig 对应整个 config.toml 文件结构。
+// 顶层字段作为全局默认值：每个 [provider.*] 段未显式设置的字段自动继承全局值。
 type TomlConfig struct {
-	Port            int                  `toml:"port,omitempty"`
-	Host            string               `toml:"host,omitempty"`
-	DefaultProvider string               `toml:"default_provider,omitempty"`
-	LogFile         string               `toml:"log_file,omitempty"`
-	LogMaxSize      int                  `toml:"log_max_size,omitempty"`
-	LogMaxAge       int                  `toml:"log_max_age,omitempty"`
-	Provider        map[string]*Config `toml:"provider"`
+	// Global defaults — inherited by all providers unless overridden in [provider.X]
+	Port                   int     `toml:"port,omitempty"`
+	Host                   string  `toml:"host,omitempty"`
+	LogFile                string  `toml:"log_file,omitempty"`
+	LogMaxSize             int     `toml:"log_max_size,omitempty"`
+	LogMaxAge              int     `toml:"log_max_age,omitempty"`
+	DefaultProvider        string  `toml:"default_provider,omitempty"`
+	MaxRetries             int     `toml:"max_retries,omitempty"`
+	CooldownSec            int     `toml:"cooldown_sec,omitempty"`
+	HTTPTimeoutSec         int     `toml:"http_timeout_sec,omitempty"`
+	LogLevel               string  `toml:"log_level,omitempty"`
+	BackoffCapSec          int     `toml:"backoff_cap_sec,omitempty"`
+	BackoffMultiplier      float64 `toml:"backoff_multiplier,omitempty"`
+	CBResetSec             int     `toml:"cb_reset_sec,omitempty"`
+	UpstreamCBThreshold    int     `toml:"upstream_cb_threshold,omitempty"`
+	HealthCheckIntervalSec int     `toml:"health_check_interval_sec,omitempty"`
+
+	Provider map[string]*Config `toml:"provider"`
 }
 
 // DefaultProviderName 保存从 TOML 配置中读取的默认 provider 名称。

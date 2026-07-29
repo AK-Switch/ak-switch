@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 
 	"github.com/pelletier/go-toml/v2"
 )
@@ -52,32 +53,14 @@ func LoadAllTomlProviders(path string) (map[string]*Config, error) {
 		}
 	}
 	result := make(map[string]*Config, len(tc.Provider))
-	port := tc.Port
-	if port == 0 {
-		port = DefaultConfig().Port
-	}
-	host := tc.Host
-	if host == "" {
-		host = DefaultConfig().Host
-	}
 	for name, p := range tc.Provider {
 		if p == nil {
 			p = DefaultConfig()
 		} else {
+			// 1. Propagate global fields first (only fills provider zero-values)
+			propagateGlobalFields(&tc, p)
+			// 2. Then fill any remaining zero-values with hardcoded defaults
 			mergeConfig(p)
-			p.Port = port
-		}
-		// Top-level host overrides per-provider host
-		p.Host = host
-		// Top-level log fields override per-provider log fields
-		if tc.LogFile != "" {
-			p.LogFile = tc.LogFile
-		}
-		if tc.LogMaxSize > 0 {
-			p.LogMaxSize = tc.LogMaxSize
-		}
-		if tc.LogMaxAge > 0 {
-			p.LogMaxAge = tc.LogMaxAge
 		}
 		result[name] = p
 	}
@@ -97,6 +80,39 @@ func FindServerHost(xdgPath string) string {
 		}
 	}
 	return ""
+}
+
+// propagateGlobalFields copies non-zero fields from the global TomlConfig into
+// the provider Config, but only when the provider field is still at its zero
+// value. This means: top-level values act as defaults, provider-level values
+// always win.
+//
+// The two structs (TomlConfig and Config) share most field names; fields that
+// exist only on one side (e.g. DefaultProvider) are skipped automatically.
+func propagateGlobalFields(tc *TomlConfig, p *Config) {
+	tv := reflect.ValueOf(tc).Elem()
+	pv := reflect.ValueOf(p).Elem()
+	pt := pv.Type()
+
+	for i := 0; i < pt.NumField(); i++ {
+		field := pt.Field(i)
+		tomlTag := field.Tag.Get("toml")
+		if tomlTag == "-" {
+			continue // runtime-only field, not a TOML field
+		}
+
+		// Look up the same-named field on TomlConfig
+		gv := tv.FieldByName(field.Name)
+		if !gv.IsValid() {
+			continue // no corresponding global field
+		}
+
+		// Only propagate when global value is non-zero AND provider value is zero
+		pf := pv.Field(i)
+		if !gv.IsZero() && pf.IsZero() && pf.CanSet() {
+			pf.Set(gv)
+		}
+	}
 }
 
 // FindServerPort finds the first non-zero port from TOML providers.
