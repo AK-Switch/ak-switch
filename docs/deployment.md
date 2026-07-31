@@ -46,11 +46,11 @@ docker compose up -d
 
 ### 服务端口
 
-| 服务 | 端口 | 说明 |
-|------|------|------|
-| AK Switch | `3000` | API Key 代理 |
-| Prometheus | `9090` | 指标采集（`akswitch:3000/metrics`） |
-| Grafana | `3001` | 预置监控面板 |
+| 服务 | 环境变量 | 默认值 | 说明 |
+|------|---------|--------|------|
+| AK Switch | `PORT` | `3000` | 代理端口（容器内固定 3000） |
+| Prometheus | `PROMETHEUS_PORT` | `9090` | 指标采集 |
+| Grafana | `GRAFANA_PORT` | `3001` | 面板端口（容器内固定 3000） |
 
 ### 自定义全部端口
 

@@ -1,5 +1,9 @@
 # Token Metering Best Practices for LLM API Gateways
 
+设计参考资料。本文档记录了 2026-07-18 的调研过程与行业对比，用于支持 token 计量相关的设计决策。
+
+部分结论已并入 [AGENTS.md](../AGENTS.md#token-计量) 和 [architecture.md](../architecture.md#token-用量追踪与-calibrator-校准)。
+
 > 调研日期：2026-07-18
 > 调研范围：主流 LLM API 网关 / 可观测性平台的 token 计量方案
 
