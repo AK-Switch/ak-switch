@@ -581,7 +581,7 @@ func resetUpstreamCB(provider string) error {
 	if err != nil {
 		return fmt.Errorf("server not reachable: %w", err)
 	}
-	defer resp.Body.Close()
+	_ = resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
 
@@ -700,7 +700,7 @@ func callKeyRuntimeAPI(provider string, idx int, operation string) error {
 	if err != nil {
 		return fmt.Errorf("server not reachable: %w", err)
 	}
-	defer resp.Body.Close()
+	_ = resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
 
@@ -730,7 +730,7 @@ func keyListRuntime(provider string) error {
 	if err != nil {
 		return fmt.Errorf("server not reachable: %w", err)
 	}
-	defer resp.Body.Close()
+	_ = resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
 
