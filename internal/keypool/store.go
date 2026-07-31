@@ -147,7 +147,9 @@ func LoadKeys(provider string) (*KeyStore, error) {
 
 	// Migrate to keyring — best-effort; if it fails, keep old file
 	if saveErr := saveToKeyring(provider, oldStore); saveErr == nil {
-		os.Rename(oldPath, oldPath+".bak")
+		src, _ := os.ReadFile(oldPath)
+		os.WriteFile(oldPath+".bak", src, 0644)
+		os.Remove(oldPath)
 		return oldStore, nil
 	}
 
