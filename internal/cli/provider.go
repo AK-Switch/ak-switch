@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"akswitch/internal/config"
@@ -24,6 +25,7 @@ func init() {
 	providerCmd.AddCommand(providerRemoveCmd)
 	providerCmd.AddCommand(providerDefaultCmd)
 	providerCmd.AddCommand(providerInfoCmd)
+	providerCmd.AddCommand(providerUpdateCmd)
 
 	providerAddCmd.Flags().StringP("target", "t", "", "Upstream target URL (required)")
 	providerAddCmd.Flags().IntP("port", "p", 0, "HTTP listen port (required for first provider)")
@@ -31,6 +33,22 @@ func init() {
 	providerAddCmd.Flags().IntP("cooldown-sec", "c", 60, "Cooldown seconds after rate-limit")
 	providerAddCmd.Flags().IntP("max-retries", "r", 3, "Max retry attempts for upstream")
 	providerAddCmd.Flags().Bool("default", false, "Set this provider as the default")
+
+	providerUpdateCmd.Flags().StringP("target", "t", "", "Upstream target URL")
+	providerUpdateCmd.Flags().String("genai", "", "GenAI base URL")
+	providerUpdateCmd.Flags().IntP("cooldown-sec", "c", -1, "Cooldown seconds after rate-limit (-1 to skip)")
+	providerUpdateCmd.Flags().IntP("max-retries", "r", -1, "Max retry attempts for upstream (-1 to skip)")
+	providerUpdateCmd.Flags().Int("backoff-cap-sec", -1, "Backoff cap seconds (-1 to skip)")
+	providerUpdateCmd.Flags().Float64("backoff-multiplier", -1, "Backoff multiplier (-1 to skip)")
+	providerUpdateCmd.Flags().Int("cb-reset-sec", -1, "Circuit breaker reset seconds (-1 to skip)")
+	providerUpdateCmd.Flags().Int("upstream-cb-threshold", -1, "Upstream CB failure threshold (-1 to skip)")
+	providerUpdateCmd.Flags().Int("http-timeout-sec", -1, "HTTP timeout seconds (-1 to skip)")
+	providerUpdateCmd.Flags().Int("health-check-interval-sec", -1, "Health check interval seconds (-1 to skip)")
+	providerUpdateCmd.Flags().String("admin-token", "", "Admin authentication token (empty to clear)")
+	providerUpdateCmd.Flags().Bool("disable-thinking", false, "Disable thinking mode")
+	providerUpdateCmd.Flags().String("genai-model", "", "Generative AI model name")
+	providerUpdateCmd.Flags().String("keys-file", "", "Keys file path (empty for default)")
+	providerUpdateCmd.Flags().Bool("default", false, "Set this provider as the default")
 }
 
 var providerCmd = &cobra.Command{
@@ -279,6 +297,177 @@ when no --provider or --all flag is given.`,
 	},
 }
 
+var providerUpdateCmd = &cobra.Command{
+	Use:   "update <name>",
+	Short: "Update provider configuration",
+	Long: `Update one or more fields of an existing provider in config.toml.
+
+Only the fields specified by flags are modified; all other fields retain their
+current values. If no flags are provided, an error is returned.
+
+Example:
+  akswitch provider update nvidia --target https://new-url.example.com/v1
+  akswitch provider update sensenova --cooldown-sec 30 --max-retries 5
+  akswitch provider update nvidia --genai https://new-genai.example.com/v1 --default`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		name := args[0]
+
+		source, err := config.XDGConfigPath()
+		if err != nil {
+			return fmt.Errorf("failed to determine XDG config path: %w", err)
+		}
+		if _, statErr := os.Stat(source); statErr != nil {
+			return fmt.Errorf("no configuration file found at %s", source)
+		}
+
+		// Load
+		tc, err := config.LoadTomlConfig(source)
+		if err != nil {
+			return fmt.Errorf("failed to load config: %w", err)
+		}
+
+		// Validate provider exists
+		prov, exists := tc.Provider[name]
+		if !exists {
+			return fmt.Errorf("provider %q not found in %s", name, source)
+		}
+
+		// Read flags via os.Args scan to avoid Cobra Changed() persistence (Cobra #1398)
+		changes := 0
+
+		if hasCLIFlag("target") {
+			target := getCLIFlagValue("target")
+			if target == "" {
+				return fmt.Errorf("--target/-t cannot be empty")
+			}
+			prov.TargetBase = target
+			changes++
+		}
+
+		if hasCLIFlag("genai") {
+			prov.GenaiBase = getCLIFlagValue("genai")
+			changes++
+		}
+		if hasCLIFlag("cooldown-sec") {
+			v, _ := cmd.Flags().GetInt("cooldown-sec")
+			if v < -1 {
+				return fmt.Errorf("--cooldown-sec must be >= -1")
+			}
+			prov.CooldownSec = v
+			changes++
+		}
+		if hasCLIFlag("max-retries") {
+			v, _ := cmd.Flags().GetInt("max-retries")
+			if v < -1 {
+				return fmt.Errorf("--max-retries must be >= -1")
+			}
+			prov.MaxRetries = v
+			changes++
+		}
+		if hasCLIFlag("backoff-cap-sec") {
+			v, _ := cmd.Flags().GetInt("backoff-cap-sec")
+			if v < -1 {
+				return fmt.Errorf("--backoff-cap-sec must be >= -1")
+			}
+			prov.BackoffCapSec = v
+			changes++
+		}
+		if hasCLIFlag("backoff-multiplier") {
+			v, _ := cmd.Flags().GetFloat64("backoff-multiplier")
+			if v < -1 {
+				return fmt.Errorf("--backoff-multiplier must be >= -1")
+			}
+			prov.BackoffMultiplier = v
+			changes++
+		}
+		if hasCLIFlag("cb-reset-sec") {
+			v, _ := cmd.Flags().GetInt("cb-reset-sec")
+			if v < -1 {
+				return fmt.Errorf("--cb-reset-sec must be >= -1")
+			}
+			prov.CBResetSec = v
+			changes++
+		}
+		if hasCLIFlag("upstream-cb-threshold") {
+			v, _ := cmd.Flags().GetInt("upstream-cb-threshold")
+			if v < -1 {
+				return fmt.Errorf("--upstream-cb-threshold must be >= -1")
+			}
+			prov.UpstreamCBThreshold = v
+			changes++
+		}
+		if hasCLIFlag("http-timeout-sec") {
+			v, _ := cmd.Flags().GetInt("http-timeout-sec")
+			if v < -1 {
+				return fmt.Errorf("--http-timeout-sec must be >= -1")
+			}
+			prov.HTTPTimeoutSec = v
+			changes++
+		}
+		if hasCLIFlag("health-check-interval-sec") {
+			v, _ := cmd.Flags().GetInt("health-check-interval-sec")
+			if v < -1 {
+				return fmt.Errorf("--health-check-interval-sec must be >= -1")
+			}
+			prov.HealthCheckIntervalSec = v
+			changes++
+		}
+		if hasCLIFlag("admin-token") {
+			prov.AdminToken, _ = cmd.Flags().GetString("admin-token")
+			changes++
+		}
+		if hasCLIFlag("disable-thinking") {
+			prov.DisableThinking, _ = cmd.Flags().GetBool("disable-thinking")
+			changes++
+		}
+		if hasCLIFlag("genai-model") {
+			prov.GenaiModel = getCLIFlagValue("genai-model")
+			changes++
+		}
+		if hasCLIFlag("keys-file") {
+			prov.KeysFile = getCLIFlagValue("keys-file")
+			changes++
+		}
+
+		// --default modifies TomlConfig, not the provider itself
+		// Use os.Args to avoid cobra flag persistence across test runs
+		defaultSet := false
+		for _, a := range os.Args {
+			if a == "--default" {
+				tc.DefaultProvider = name
+				config.DefaultProviderName = name
+				defaultSet = true
+				changes++
+				break
+			}
+		}
+
+		if changes == 0 {
+			return fmt.Errorf("no fields specified to update (use --help to see available flags)")
+		}
+
+		// Ensure directory exists (provider update uses existing file, but MkdirAll is safe)
+		dir := filepath.Dir(source)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("failed to create config directory %s: %w", dir, err)
+		}
+
+		// Save
+		if err := config.SaveTomlConfig(tc, source); err != nil {
+			return fmt.Errorf("failed to save config: %w", err)
+		}
+
+		if defaultSet {
+			fmt.Printf("Provider %q updated in %s (default)\n", name, source)
+		} else {
+			fmt.Printf("Provider %q updated in %s\n", name, source)
+		}
+		triggerReload()
+		return nil
+	},
+}
+
 var providerInfoCmd = &cobra.Command{
 	Use:   "info <name>",
 	Short: "Show detailed information about a provider",
@@ -438,4 +627,62 @@ Example:
 
 		return nil
 	},
+}
+
+// hasCLIFlag checks whether a flag was explicitly passed on the command line
+// by scanning os.Args. This avoids Cobra bug #1398 where Flags().Changed()
+// persists across Execute() calls within the same process.
+func hasCLIFlag(name string) bool {
+	for _, a := range os.Args {
+		if a == "--"+name || a == "-"+flagShortName(name) {
+			return true
+		}
+		// Handle --flag=value form
+		if len(a) > len(name)+2 && a[:2] == "--" {
+			rest := a[2:]
+			if idx := strings.Index(rest, "="); idx > 0 {
+				if rest[:idx] == name {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// getCLIFlagValue returns the value of a string flag from os.Args.
+// Supports --flag value, --flag=value, and -f value forms.
+func getCLIFlagValue(name string) string {
+	short := flagShortName(name)
+	for i, a := range os.Args {
+		// --flag=value
+		if len(a) > len(name)+2 && a[:2] == "--" {
+			rest := a[2:]
+			if idx := strings.Index(rest, "="); idx > 0 && rest[:idx] == name {
+				return rest[idx+1:]
+			}
+		}
+		// --flag value
+		if a == "--"+name && i+1 < len(os.Args) {
+			return os.Args[i+1]
+		}
+		// -f value
+		if a == "-"+short && i+1 < len(os.Args) {
+			return os.Args[i+1]
+		}
+	}
+	return ""
+}
+
+// flagShortName maps long flag names to their short forms (if any).
+func flagShortName(name string) string {
+	switch name {
+	case "target":
+		return "t"
+	case "cooldown-sec":
+		return "c"
+	case "max-retries":
+		return "r"
+	}
+	return ""
 }

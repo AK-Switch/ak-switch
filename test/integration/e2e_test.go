@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -35,7 +36,10 @@ import (
 func TestFullE2E_RealUserSimulation(t *testing.T) {
 	// ── Build binary ─────────────────────────────────────
 	t.Log("Building akswitch binary...")
-	bin := filepath.Join(t.TempDir(), "akswitch-e2e.exe")
+	bin := filepath.Join(t.TempDir(), "akswitch-e2e")
+	if runtime.GOOS == "windows" {
+		bin += ".exe"
+	}
 	if out, err := exec.Command("go", "build", "-o", bin, "../../cmd/akswitch/").CombinedOutput(); err != nil {
 		t.Fatalf("build failed: %v\n%s", err, out)
 	}

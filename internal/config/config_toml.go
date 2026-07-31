@@ -12,12 +12,12 @@ import (
 
 // TomlConfig 对应整个 config.toml 文件结构。
 type TomlConfig struct {
-	Port            int                  `toml:"port,omitempty"`
+	Port            int                  `toml:"port"`
 	Host            string               `toml:"host,omitempty"`
 	DefaultProvider string               `toml:"default_provider,omitempty"`
 	LogFile         string               `toml:"log_file,omitempty"`
-	LogMaxSize      int                  `toml:"log_max_size,omitempty"`
-	LogMaxAge       int                  `toml:"log_max_age,omitempty"`
+	LogMaxSize      int                  `toml:"log_max_size"`
+	LogMaxAge       int                  `toml:"log_max_age"`
 	Provider        map[string]*Config `toml:"provider"`
 }
 

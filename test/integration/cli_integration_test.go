@@ -6,12 +6,15 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	"akswitch/internal/cli"
 	"akswitch/internal/config"
-"akswitch/internal/keypool"
+	"akswitch/internal/keypool"
 )
 
 // TestCLI_Root_NoArgs 验证 "akswitch" 无参数的行为。
@@ -1349,5 +1352,400 @@ func TestCLI_ProviderInfo_NotFound(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "not found") {
 		t.Errorf("error should contain 'not found', got: %v", err)
+	}
+}
+
+// ── provider update 集成测试 ─────────────────────
+
+// TestProviderUpdate_Target 验证 "akswitch provider update <name> --target <url>"
+// 能正确修改 provider 的 target 并持久化。
+func TestProviderUpdate_Target(t *testing.T) {
+	cli.ResetConfigEnv()
+	tmpDir := t.TempDir()
+	config.ConfigDir = tmpDir
+	t.Cleanup(func() { config.ConfigDir = "" })
+
+	xdgPath, err := config.XDGConfigPath()
+	if err != nil {
+		t.Fatalf("XDGConfigPath failed: %v", err)
+	}
+	runAkswitch(t, "akswitch", "provider", "add", "upd-target",
+		"--target", "https://old.example.com/v1",
+		"--port", "9601",
+	)
+
+	err = runAkswitch(t, "akswitch", "provider", "update", "upd-target",
+		"--target", "https://new.example.com/v1")
+	if err != nil {
+		t.Fatalf("provider update --target failed: %v", err)
+	}
+
+	tc, err := config.LoadTomlConfig(xdgPath)
+	if err != nil {
+		t.Fatalf("LoadTomlConfig failed: %v", err)
+	}
+	if tc.Provider["upd-target"].TargetBase != "https://new.example.com/v1" {
+		t.Errorf("TargetBase = %q, want %q",
+			tc.Provider["upd-target"].TargetBase, "https://new.example.com/v1")
+	}
+}
+
+// TestProviderUpdate_NotFound 验证更新不存在的 provider 返回错误。
+func TestProviderUpdate_NotFound(t *testing.T) {
+	cli.ResetConfigEnv()
+	tmpDir := t.TempDir()
+	config.ConfigDir = tmpDir
+	t.Cleanup(func() { config.ConfigDir = "" })
+
+	xdgPath, err := config.XDGConfigPath()
+	if err != nil {
+		t.Fatalf("XDGConfigPath failed: %v", err)
+	}
+	runAkswitch(t, "akswitch", "config", "init", "-p", xdgPath)
+
+	err = runAkswitch(t, "akswitch", "provider", "update", "no-such-provider",
+		"--target", "https://example.com/v1")
+	if err == nil {
+		t.Fatal("expected error for updating nonexistent provider, got nil")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("error should contain 'not found', got: %v", err)
+	}
+	// Verify the error mentions the config file path
+	if !strings.Contains(err.Error(), xdgPath) {
+		t.Errorf("error should mention config file path %q, got: %v", xdgPath, err)
+	}
+}
+
+// TestProviderUpdate_NoFlags 验证不带任何 flag 时返回错误。
+// 使用子进程模式避免 Cobra flag 持久化问题（Cobra #1398）。
+func TestProviderUpdate_NoFlags(t *testing.T) {
+	cli.ResetConfigEnv()
+	tmpDir := t.TempDir()
+	config.ConfigDir = tmpDir
+	t.Cleanup(func() { config.ConfigDir = "" })
+
+	xdgPath, err := config.XDGConfigPath()
+	if err != nil {
+		t.Fatalf("XDGConfigPath failed: %v", err)
+	}
+
+	// Add provider via in-process call (clean state, no flag persistence issue)
+	if err := runAkswitch(t, "akswitch", "provider", "add", "noflags-test",
+		"--target", "https://noflags.test/v1",
+		"--port", "9610",
+	); err != nil {
+		t.Fatalf("provider add failed: %v", err)
+	}
+
+	// Build binary for subprocess mode (update call avoids Cobra persistence)
+	bin := filepath.Join(t.TempDir(), "akswitch-test")
+	if runtime.GOOS == "windows" {
+		bin += ".exe"
+	}
+	if out, err := exec.Command("go", "build", "-o", bin, "../../cmd/akswitch/").CombinedOutput(); err != nil {
+		t.Fatalf("build failed: %v\n%s", err, out)
+	}
+
+	// Run update with NO flags via subprocess — should fail with non-zero exit code
+	cmd := exec.Command(bin, "provider", "update", "noflags-test")
+	cmd.Env = append(os.Environ(), "AKSWITCH_CONFIG_DIR="+tmpDir)
+	updateOut, _ := cmd.CombinedOutput()
+	if cmd.ProcessState.ExitCode() == 0 {
+		t.Fatal("expected non-zero exit when no flags provided, got success")
+	}
+	if !strings.Contains(string(updateOut), "no fields specified") {
+		t.Errorf("expected 'no fields specified' error, got: %s", updateOut)
+	}
+
+	// Verify provider config is unchanged
+	tc, err := config.LoadTomlConfig(xdgPath)
+	if err != nil {
+		t.Fatalf("LoadTomlConfig failed: %v", err)
+	}
+	p := tc.Provider["noflags-test"]
+	if p == nil {
+		t.Fatal("provider should still exist")
+	}
+	if p.TargetBase != "https://noflags.test/v1" {
+		t.Errorf("TargetBase should be unchanged, got: %q", p.TargetBase)
+	}
+}
+
+// TestProviderUpdate_MultipleFlags 验证多个 flag 可组合修改多个字段。
+func TestProviderUpdate_MultipleFlags(t *testing.T) {
+	cli.ResetConfigEnv()
+	tmpDir := t.TempDir()
+	config.ConfigDir = tmpDir
+	t.Cleanup(func() { config.ConfigDir = "" })
+
+	xdgPath, err := config.XDGConfigPath()
+	if err != nil {
+		t.Fatalf("XDGConfigPath failed: %v", err)
+	}
+	runAkswitch(t, "akswitch", "provider", "add", "multi-flags",
+		"--target", "https://old.test/v1",
+		"--genai", "https://old-genai.test",
+		"--cooldown-sec", "10",
+		"--max-retries", "1",
+		"--port", "9603",
+	)
+
+	err = runAkswitch(t, "akswitch", "provider", "update", "multi-flags",
+		"--target", "https://new.test/v1",
+		"--cooldown-sec", "99",
+		"--max-retries", "7",
+		"--backoff-cap-sec", "200",
+	)
+	if err != nil {
+		t.Fatalf("provider update with multiple flags failed: %v", err)
+	}
+
+	tc, err := config.LoadTomlConfig(xdgPath)
+	if err != nil {
+		t.Fatalf("LoadTomlConfig failed: %v", err)
+	}
+	p := tc.Provider["multi-flags"]
+	if p.TargetBase != "https://new.test/v1" {
+		t.Errorf("TargetBase = %q, want %q", p.TargetBase, "https://new.test/v1")
+	}
+	if p.CooldownSec != 99 {
+		t.Errorf("CooldownSec = %d, want 99", p.CooldownSec)
+	}
+	if p.MaxRetries != 7 {
+		t.Errorf("MaxRetries = %d, want 7", p.MaxRetries)
+	}
+	if p.BackoffCapSec != 200 {
+		t.Errorf("BackoffCapSec = %d, want 200", p.BackoffCapSec)
+	}
+	// Fields not in the update command should be unchanged
+	if p.GenaiBase != "https://old-genai.test" {
+		t.Errorf("GenaiBase should be unchanged, got: %q", p.GenaiBase)
+	}
+}
+
+// TestProviderUpdate_DefaultFlag 验证 --default flag 设置默认 provider。
+func TestProviderUpdate_DefaultFlag(t *testing.T) {
+	cli.ResetConfigEnv()
+	tmpDir := t.TempDir()
+	config.ConfigDir = tmpDir
+	t.Cleanup(func() { config.ConfigDir = "" })
+
+	xdgPath, err := config.XDGConfigPath()
+	if err != nil {
+		t.Fatalf("XDGConfigPath failed: %v", err)
+	}
+	runAkswitch(t, "akswitch", "provider", "add", "default-candidate",
+		"--target", "https://dc.test/v1",
+		"--port", "9604",
+	)
+
+	err = runAkswitch(t, "akswitch", "provider", "update", "default-candidate", "--default")
+	if err != nil {
+		t.Fatalf("provider update --default failed: %v", err)
+	}
+
+	tc, err := config.LoadTomlConfig(xdgPath)
+	if err != nil {
+		t.Fatalf("LoadTomlConfig failed: %v", err)
+	}
+	if tc.DefaultProvider != "default-candidate" {
+		t.Errorf("DefaultProvider = %q, want %q", tc.DefaultProvider, "default-candidate")
+	}
+}
+
+// TestProviderUpdate_OutputNotMarkedDefault 验证更新已为 default 的 provider
+//（不传 --default）时，输出不含 (default) 标记。
+func TestProviderUpdate_OutputNotMarkedDefault(t *testing.T) {
+	cli.ResetConfigEnv()
+	tmpDir := t.TempDir()
+	config.ConfigDir = tmpDir
+	t.Cleanup(func() { config.ConfigDir = "" })
+
+	runAkswitch(t, "akswitch", "provider", "add", "the-default",
+		"--target", "https://old.test/v1",
+		"--port", "9608",
+		"--default",
+	)
+
+	var stdout bytes.Buffer
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := runAkswitch(t, "akswitch", "provider", "update", "the-default",
+		"--target", "https://new.test/v1")
+
+	w.Close()
+	os.Stdout = oldStdout
+	io.Copy(&stdout, r)
+
+	if err != nil {
+		t.Fatalf("provider update failed: %v", err)
+	}
+	output := stdout.String()
+	if strings.Contains(output, "(default)") {
+		t.Errorf("output should not contain (default) when --default was not passed, got:\n%s", output)
+	}
+	if !strings.Contains(output, "updated") {
+		t.Errorf("output should contain 'updated', got:\n%s", output)
+	}
+}
+
+// TestProviderUpdate_AdminToken verifies --admin-token flag sets and clears admin token.
+func TestProviderUpdate_AdminToken(t *testing.T) {
+	cli.ResetConfigEnv()
+	tmpDir := t.TempDir()
+	config.ConfigDir = tmpDir
+	t.Cleanup(func() { config.ConfigDir = "" })
+
+	xdgPath, err := config.XDGConfigPath()
+	if err != nil {
+		t.Fatalf("XDGConfigPath failed: %v", err)
+	}
+	runAkswitch(t, "akswitch", "provider", "add", "admintoken",
+		"--target", "https://admintoken.test/v1",
+		"--port", "9605",
+	)
+
+	// Set admin token
+	err = runAkswitch(t, "akswitch", "provider", "update", "admintoken",
+		"--admin-token", "secret123")
+	if err != nil {
+		t.Fatalf("provider update --admin-token set failed: %v", err)
+	}
+
+	tc, err := config.LoadTomlConfig(xdgPath)
+	if err != nil {
+		t.Fatalf("LoadTomlConfig failed: %v", err)
+	}
+	if tc.Provider["admintoken"].AdminToken != "secret123" {
+		t.Errorf("AdminToken = %q, want %q", tc.Provider["admintoken"].AdminToken, "secret123")
+	}
+
+	// Clear admin token
+	err = runAkswitch(t, "akswitch", "provider", "update", "admintoken",
+		"--admin-token", "")
+	if err != nil {
+		t.Fatalf("provider update --admin-token clear failed: %v", err)
+	}
+
+	tc, err = config.LoadTomlConfig(xdgPath)
+	if err != nil {
+		t.Fatalf("LoadTomlConfig failed: %v", err)
+	}
+	if tc.Provider["admintoken"].AdminToken != "" {
+		t.Errorf("AdminToken = %q, want empty after clear", tc.Provider["admintoken"].AdminToken)
+	}
+}
+
+// TestProviderUpdate_FloatFlag verifies --backoff-multiplier float flag.
+func TestProviderUpdate_FloatFlag(t *testing.T) {
+	cli.ResetConfigEnv()
+	tmpDir := t.TempDir()
+	config.ConfigDir = tmpDir
+	t.Cleanup(func() { config.ConfigDir = "" })
+
+	xdgPath, err := config.XDGConfigPath()
+	if err != nil {
+		t.Fatalf("XDGConfigPath failed: %v", err)
+	}
+	runAkswitch(t, "akswitch", "provider", "add", "floatflag",
+		"--target", "https://float.test/v1",
+		"--port", "9606",
+	)
+
+	err = runAkswitch(t, "akswitch", "provider", "update", "floatflag",
+		"--backoff-multiplier", "3.5")
+	if err != nil {
+		t.Fatalf("provider update --backoff-multiplier failed: %v", err)
+	}
+
+	tc, err := config.LoadTomlConfig(xdgPath)
+	if err != nil {
+		t.Fatalf("LoadTomlConfig failed: %v", err)
+	}
+	if tc.Provider["floatflag"].BackoffMultiplier != 3.5 {
+		t.Errorf("BackoffMultiplier = %f, want 3.5", tc.Provider["floatflag"].BackoffMultiplier)
+	}
+}
+
+// TestProviderUpdate_DisableThinking verifies --disable-thinking bool flag.
+func TestProviderUpdate_DisableThinking(t *testing.T) {
+	cli.ResetConfigEnv()
+	tmpDir := t.TempDir()
+	config.ConfigDir = tmpDir
+	t.Cleanup(func() { config.ConfigDir = "" })
+
+	xdgPath, err := config.XDGConfigPath()
+	if err != nil {
+		t.Fatalf("XDGConfigPath failed: %v", err)
+	}
+	runAkswitch(t, "akswitch", "provider", "add", "think",
+		"--target", "https://think.test/v1",
+		"--port", "9607",
+	)
+
+	// Set disable-thinking to true
+	err = runAkswitch(t, "akswitch", "provider", "update", "think", "--disable-thinking")
+	if err != nil {
+		t.Fatalf("provider update --disable-thinking failed: %v", err)
+	}
+
+	tc, err := config.LoadTomlConfig(xdgPath)
+	if err != nil {
+		t.Fatalf("LoadTomlConfig failed: %v", err)
+	}
+	if !tc.Provider["think"].DisableThinking {
+		t.Error("DisableThinking should be true")
+	}
+}
+
+// TestProviderUpdate_ZeroValues verifies that setting int/float fields to zero
+// persists correctly (regression test for omitempty stripping zero values).
+func TestProviderUpdate_ZeroValues(t *testing.T) {
+	cli.ResetConfigEnv()
+	tmpDir := t.TempDir()
+	config.ConfigDir = tmpDir
+	t.Cleanup(func() { config.ConfigDir = "" })
+
+	xdgPath, err := config.XDGConfigPath()
+	if err != nil {
+		t.Fatalf("XDGConfigPath failed: %v", err)
+	}
+	runAkswitch(t, "akswitch", "provider", "add", "zerovals",
+		"--target", "https://zerovals.test/v1",
+		"--port", "9608",
+		"--cooldown-sec", "15",
+		"--max-retries", "3",
+	)
+
+	// Set all int/float fields to zero
+	err = runAkswitch(t, "akswitch", "provider", "update", "zerovals",
+		"--cooldown-sec", "0",
+		"--max-retries", "0",
+		"--backoff-cap-sec", "0",
+		"--backoff-multiplier", "0",
+	)
+	if err != nil {
+		t.Fatalf("provider update zero values failed: %v", err)
+	}
+
+	tc, err := config.LoadTomlConfig(xdgPath)
+	if err != nil {
+		t.Fatalf("LoadTomlConfig failed: %v", err)
+	}
+	p := tc.Provider["zerovals"]
+	if p.CooldownSec != 0 {
+		t.Errorf("CooldownSec = %d, want 0", p.CooldownSec)
+	}
+	if p.MaxRetries != 0 {
+		t.Errorf("MaxRetries = %d, want 0", p.MaxRetries)
+	}
+	if p.BackoffCapSec != 0 {
+		t.Errorf("BackoffCapSec = %d, want 0", p.BackoffCapSec)
+	}
+	if p.BackoffMultiplier != 0 {
+		t.Errorf("BackoffMultiplier = %f, want 0", p.BackoffMultiplier)
 	}
 }

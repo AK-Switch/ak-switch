@@ -2,6 +2,7 @@ package main
 
 import (
 	_ "embed"
+	"os"
 
 	"akswitch/internal/cli"
 )
@@ -10,5 +11,7 @@ import (
 var dashboardHTML string
 
 func main() {
-	cli.Execute(dashboardHTML)
+	if err := cli.Execute(dashboardHTML); err != nil {
+		os.Exit(1)
+	}
 }
