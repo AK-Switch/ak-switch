@@ -59,6 +59,19 @@ docs/
 - **配置热重载** — 监听 `config.toml` 变更，热更新 key pool，不停机
 - **启动 key 探针** — 启动时检测 401/403 自动禁用无效 key
 
+## CLI 标志速查
+
+| 命令 | 标志 | 说明 |
+|------|------|------|
+| `akswitch start` | `--log-format=default` | stdout 标准模式（默认 `compact`） |
+| `akswitch start` | `--provider=NAME` | 只启动指定 provider |
+| `akswitch start` | `--all` | 启动所有 provider（默认只启动一个） |
+| `akswitch logs` | `--verbose` | 显示完整 method/URL（默认隐藏） |
+| `akswitch logs` | `--since=RFC3339` | 只显示此时间后的条目 |
+| `akswitch logs` | `--last=N` | 只显示最后 N 条 |
+
+`--log-format=compact` 在 `start.go` 的 `init()` 注册（`startCmd.Flags().String(...)`），通过 `startServer` -> `ApplyLogLevel` 传入 `ColorHandler` 的 `compact` 字段控制日志行格式。
+
 ## Code Style & Conventions
 
 - **Go 标准格式** — `gofmt`，tab 缩进

@@ -62,7 +62,7 @@ var statusCmd = &cobra.Command{
 		fmt.Printf("Status: %s\n", healthData["status"])
 
 		if providers, ok := healthData["providers"]; ok {
-			fmt.Printf("Providers: %v)\n", providers)
+			fmt.Printf("Providers: %v\n", providers)
 		}
 
 		if details, ok := healthData["details"]; ok {
@@ -98,9 +98,9 @@ var statusCmd = &cobra.Command{
 		if err := json.Unmarshal(statsBody, &stats); err == nil {
 			fmt.Printf("Requests: %v (success: %v, failed: %v)\n",
 				stats["total_requests"], stats["successful_requests"], stats["failed_requests"])
-			fmt.Printf("Active keys: %v, Cooling: %v, Disabled: %v)\n",
+			fmt.Printf("Active keys: %v, Cooling: %v, Disabled: %v\n",
 				stats["active_keys"], stats["cooling_keys"], stats["disabled_keys"])
-			fmt.Printf("Uptime: %vs)\n", stats["uptime_seconds"])
+			fmt.Printf("Uptime: %vs\n", stats["uptime_seconds"])
 		}
 
 		return nil
@@ -115,7 +115,7 @@ func formatProviderTable(det map[string]interface{}) string {
 	_, _ = fmt.Fprintln(w, "PROVIDER\tKEYS\tCB_STATE")
 	for name, info := range det {
 		if inf, ok3 := info.(map[string]interface{}); ok3 {
-			_, _ = fmt.Fprintf(w, "%s\t%v\t%v)\n",
+			_, _ = fmt.Fprintf(w, "%s\t%v\t%v\n",
 				name, inf["keys"], inf["upstream_cb_state"])
 		}
 	}
