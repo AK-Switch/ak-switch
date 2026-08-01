@@ -107,6 +107,23 @@ func (p *KeyPool) TimeUntilAvailable() time.Duration {
 	return soonest
 }
 
+// AvailableKeys returns the indices of all keys that are not disabled and not in cooldown.
+// Does not mark keys as in-use. Caller should Release(idx) after using each key.
+func (p *KeyPool) AvailableKeys() []int {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	var result []int
+	for i, cb := range p.cbs {
+		if cb.State() == circuitbreaker.Permanent {
+			continue
+		}
+		if cb.Allow() {
+			result = append(result, i)
+		}
+	}
+	return result
+}
+
 // Next returns the next available and unreserved key in round-robin order.
 // Returns index, key, and ok=false if none available.
 // The selected key is marked as in-use; caller must call Release(idx) when done.

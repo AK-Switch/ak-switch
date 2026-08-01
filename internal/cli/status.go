@@ -18,17 +18,24 @@ func init() {
 }
 
 var statusCmd = &cobra.Command{
-	Use:   "status",
+	Use:   "status [provider]",
 	Short: "Show runtime status",
-	Long:  `Query the running akswitch server and display health, key counts, and request statistics.`,
+	Long:  `Query the running akswitch server and display health, key counts, and request statistics.` + "\n" + `Optional provider name filters output to a single provider.`,
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client := &http.Client{Timeout: 3 * time.Second}
-
-		// Determine the server port from config or default
 		port := detectServerPort()
+		host := detectServerHost()
 
-		// Query health endpoint on the server port
-		healthURL := fmt.Sprintf("http://%s:%d/health", detectServerHost(), port)
+		providerName := ""
+		if len(args) > 0 {
+			providerName = args[0]
+		}
+
+		healthURL := fmt.Sprintf("http://%s:%d/health", host, port)
+		if providerName != "" {
+			healthURL += "?provider=" + providerName
+		}
 		healthReq, err := http.NewRequest(http.MethodGet, healthURL, nil)
 		if err != nil {
 			return fmt.Errorf("server not reachable at %s: %w", healthURL, err)
@@ -58,7 +65,7 @@ var statusCmd = &cobra.Command{
 			return fmt.Errorf("failed to parse health response: %w", err)
 		}
 
-		fmt.Printf("Server: http://%s:%d\n", detectServerHost(), port)
+		fmt.Printf("Server: http://%s:%d\n", host, port)
 		fmt.Printf("Status: %s\n", healthData["status"])
 
 		if providers, ok := healthData["providers"]; ok {
@@ -72,7 +79,10 @@ var statusCmd = &cobra.Command{
 		}
 
 		// Query stats endpoint
-		statsURL := fmt.Sprintf("http://%s:%d/api/stats", detectServerHost(), port)
+		statsURL := fmt.Sprintf("http://%s:%d/api/stats", host, port)
+		if providerName != "" {
+			statsURL += "?provider=" + providerName
+		}
 		statsReq, err := http.NewRequest(http.MethodGet, statsURL, nil)
 		if err != nil {
 			return fmt.Errorf("server not reachable at %s: %w", statsURL, err)

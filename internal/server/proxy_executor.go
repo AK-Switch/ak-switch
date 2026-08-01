@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"math/rand"
 	"net/http"
 	"strconv"
 	"strings"
@@ -73,124 +72,91 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 		slog.Debug("proxy request debug", "provider", ps.Name, "method", r.Method, "path", r.URL.Path, "auth", maskedAuth, "body_size", len(bodyBytes), "body_preview", bodyPreview)
 	}
 
-	for attempt := 0; attempt < cfg.MaxRetries; attempt++ {
+	for round := 0; round < cfg.MaxRetries; round++ {
 		if !upCB.Allow() {
-			slog.Warn("upstream circuit breaker open, backing off", "provider", ps.Name, "retry", attempt, "max", cfg.MaxRetries)
+			slog.Warn("upstream circuit breaker open, backing off", "provider", ps.Name, "round", round, "max", cfg.MaxRetries)
 			time.Sleep(time.Second)
 			continue
 		}
 
-		idx, key, ok := pool.Next()
-		keyName, _ := pool.Name(idx)
-		if !ok {
-			wait := pool.TimeUntilAvailable()
-			if wait < 0 {
-				px.writeAllKeysExhausted(w, ps, r.Method, start)
+		available := pool.AvailableKeys()
+		if len(available) == 0 {
+			px.writeAllKeysExhausted(w, ps, r.Method, start)
+			return
+		}
+
+		for _, idx := range available {
+
+			keyName, _ := pool.Name(idx)
+
+			req, err := http.NewRequestWithContext(r.Context(), r.Method, target, bytes.NewReader(bodyBytes))
+			if err != nil {
+				px.metrics.UpstreamErrors.WithLabelValues("network").Inc()
+				writeProxyError(w, http.StatusInternalServerError, ErrorUpstreamError, "failed to build upstream request")
+				px.recordProxyMetrics(r.Method, "5xx", "", start)
 				return
 			}
-			jitter := time.Duration(rand.Intn(500)) * time.Millisecond
-			slog.Warn("all keys cooling", "provider", ps.Name, "wait", (wait+jitter).Round(time.Second), "retry", attempt, "max", cfg.MaxRetries)
-			time.Sleep(wait + jitter)
-			continue
-		}
-		if !pool.CB(idx).Allow() {
-			pool.Release(idx) // release since we're skipping this key
-			remaining := pool.CB(idx).CooldownRemaining()
-			if remaining < 0 {
-				allPerma := true
-				for i := range pool.Keys() {
-					if pool.CB(i).State() != circuitbreaker.Permanent {
-						allPerma = false
-						break
-					}
+			copyHeaders(req.Header, r.Header)
+			req.Header.Set("Authorization", "Bearer "+pool.Keys()[idx])
+
+			resp, err := client.Do(req)
+			if err != nil {
+				switch categorizeError(0, err) {
+				case CatClientAbort:
+					slog.Debug("client aborted request", "provider", ps.Name, "key_index", idx, "key_name", keyName, "error", err)
+					return
+				default:
+					slog.Warn("key network error", "provider", ps.Name, "key_index", idx, "key_name", keyName, "error", err)
+					px.metrics.UpstreamErrors.WithLabelValues("network").Inc()
+					upCB.RecordFailure()
+					continue
 				}
-				if allPerma {
-					px.writeAllKeysExhausted(w, ps, r.Method, start)
+			}
+
+			// ── Response status dispatch ──
+			switch {
+			case resp.StatusCode == http.StatusTooManyRequests:
+				if px.handleRateLimited(w, ps, idx, resp, cfg, start, r.Method, target, bodyBytes) {
 					return
 				}
 				continue
-			}
-			if remaining > 0 {
-				_ = pool.Cooldown(idx, remaining)
-			}
-			continue
-		}
 
-		req, err := http.NewRequestWithContext(r.Context(), r.Method, target, bytes.NewReader(bodyBytes))
-		if err != nil {
-			px.metrics.UpstreamErrors.WithLabelValues("network").Inc()
-			writeProxyError(w, http.StatusInternalServerError, ErrorUpstreamError, "failed to build upstream request")
-			px.recordProxyMetrics(r.Method, "5xx", "", start)
-			return
-		}
-		copyHeaders(req.Header, r.Header)
-		req.Header.Set("Authorization", "Bearer "+key)
-
-		resp, err := client.Do(req)
-		ttfb := time.Since(start)
-		pool.Release(idx) // done with the key, allow other goroutines to select it
-		if err != nil {
-			switch categorizeError(0, err) {
-			case CatClientAbort:
-				slog.Debug("client aborted request", "provider", ps.Name, "key_index", idx, "key_name", keyName, "error", err)
-				return
-			default:
-				slog.Warn("key network error", "provider", ps.Name, "key_index", idx, "key_name", keyName, "error", err)
-				px.metrics.UpstreamErrors.WithLabelValues("network").Inc()
-				upCB.RecordFailure()
+			case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
+				if px.handleAuthRejected(w, ps, idx, resp, start, r.Method, target, bodyBytes) {
+					return
+				}
 				continue
-			}
-		}
 
-		// ── Response status dispatch ──
-		switch {
-		case resp.StatusCode == http.StatusTooManyRequests:
-			
-			if px.handleRateLimited(w, ps, idx, resp, cfg, start, r.Method, target, bodyBytes) {
+			case resp.StatusCode == http.StatusBadGateway || resp.StatusCode == http.StatusServiceUnavailable:
+				px.handleServerError(ps, idx, resp, round)
+				continue
+
+			case (resp.StatusCode >= 400 && resp.StatusCode < 500) || categorizeError(resp.StatusCode, nil) == CatNonRetryable:
+				px.handleNonRetryable(w, ps, idx, resp, start, r.Method, target, bodyBytes, round, pool.Keys()[idx], time.Since(start))
+				return
+
+			case resp.StatusCode >= 500:
+				px.handleServerError(ps, idx, resp, round)
+				continue
+
+			default:
+				px.handleSuccess(w, ps, idx, resp, start, r.Method, target, bodyBytes, round, pool.Keys()[idx], time.Since(start))
 				return
 			}
-			continue
-
-		case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
-			
-			if px.handleAuthRejected(w, ps, idx, resp, start, r.Method, target, bodyBytes) {
-				return
-			}
-			continue
-
-		case resp.StatusCode == http.StatusBadGateway || resp.StatusCode == http.StatusServiceUnavailable:
-			
-			px.handleServerError(ps, idx, resp, attempt)
-			continue
-
-		case resp.StatusCode >= 400 && resp.StatusCode < 500 || categorizeError(resp.StatusCode, nil) == CatNonRetryable:
-			px.handleNonRetryable(w, ps, idx, resp, start, r.Method, target, bodyBytes, attempt, key, ttfb)
-			return
-
-		case resp.StatusCode >= 500:
-			
-			px.handleServerError(ps, idx, resp, attempt)
-			continue
-
-		default:
-			// 2xx/3xx — success
-			px.handleSuccess(w, ps, idx, resp, start, r.Method, target, bodyBytes, attempt, key, ttfb)
-			return
 		}
 	}
 
-	// Retry exhausted
 	writeProxyError(w, http.StatusServiceUnavailable, ErrorExhaustedRetries, fmt.Sprintf("%s 重试已耗尽，所有 Key 无响应", ps.Name))
 
 	px.metrics.RetryCount.WithLabelValues(ps.Name).Add(float64(cfg.MaxRetries))
 	slog.Warn("proxy retry exhausted",
-			"provider", ps.Name,
-			"method", r.Method,
-			"url", target,
-			"status", 503,
-			"retry", cfg.MaxRetries,
-			"duration_ms", time.Since(start).Milliseconds(),
-		)
+		"provider", ps.Name,
+		"method", r.Method,
+		"url", target,
+		"status", 503,
+		"rounds", cfg.MaxRetries,
+		"duration_ms", time.Since(start).Milliseconds(),
+	)
 	px.recordProxyMetrics(r.Method, "5xx", "", start)
 }
 

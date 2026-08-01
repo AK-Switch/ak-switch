@@ -196,6 +196,10 @@ func (pr *ProviderRouter) healthHandler(w http.ResponseWriter, r *http.Request) 
 	overallOK := true
 
 	for name, ps := range pr.providers {
+		if pName != "" && name != pName {
+			continue
+		}
+
 		upCB := ps.Proxy.upCB
 
 		var cbState string
@@ -239,10 +243,15 @@ func (pr *ProviderRouter) healthHandler(w http.ResponseWriter, r *http.Request) 
 		status = "degraded"
 	}
 
+	if pName != "" && len(result) == 0 {
+		respondJSON(w, http.StatusNotFound, map[string]string{"error": fmt.Sprintf("provider %q not found", pName)})
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"status":    status,
-		"providers": len(pr.providers),
+		"providers": len(result),
 		"details":   result,
 	})
 }
@@ -410,11 +419,15 @@ func (pr *ProviderRouter) statsHandler(w http.ResponseWriter, r *http.Request) {
 	if !pr.checkAnyAdminToken(w, r) {
 		return
 	}
+	pName := r.URL.Query().Get("provider")
 	pr.mu.RLock()
 	totalActive := 0
 	totalCooling := 0
 	totalDisabled := 0
-	for _, ps := range pr.providers {
+	for name, ps := range pr.providers {
+		if pName != "" && name != pName {
+			continue
+		}
 		totalActive += ps.Pool.ActiveCount()
 		totalCooling += ps.Pool.CoolingCount()
 		totalDisabled += ps.Pool.DisabledCount()
