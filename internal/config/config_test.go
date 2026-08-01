@@ -452,8 +452,8 @@ target = "https://api.example.com"
 		t.Errorf("CooldownSec = %d, want default 60", cfg.CooldownSec)
 	}
 	// MaxRetries should use default from DefaultConfig
-	if cfg.MaxRetries != 2 {
-		t.Errorf("MaxRetries = %d, want default 3", cfg.MaxRetries)
+	if cfg.MaxRetries != 1 {
+		t.Errorf("MaxRetries = %d, want default 1", cfg.MaxRetries)
 	}
 }
 
@@ -583,8 +583,8 @@ func TestTomlProviderConfig_DefaultValues(t *testing.T) {
 	if cfg.CooldownSec != 15 {
 		t.Errorf("CooldownSec = %d, want default 60", cfg.CooldownSec)
 	}
-	if cfg.MaxRetries != 2 {
-		t.Errorf("MaxRetries = %d, want default 3", cfg.MaxRetries)
+	if cfg.MaxRetries != 1 {
+		t.Errorf("MaxRetries = %d, want default 1", cfg.MaxRetries)
 	}
 	if cfg.DisableThinking {
 		t.Error("DisableThinking = true, want default false")
@@ -894,8 +894,8 @@ genai = "https://ai.example.com"
 	if cfg.CooldownSec != 15 {
 		t.Errorf("CooldownSec = %d, want default 60", cfg.CooldownSec)
 	}
-	if cfg.MaxRetries != 2 {
-		t.Errorf("MaxRetries = %d, want default 3", cfg.MaxRetries)
+	if cfg.MaxRetries != 1 {
+		t.Errorf("MaxRetries = %d, want default 1", cfg.MaxRetries)
 	}
 }
 

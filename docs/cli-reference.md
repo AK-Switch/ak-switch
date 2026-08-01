@@ -64,14 +64,34 @@ Provider: agnes
 
 ### status 输出示例
 
+`akswitch status` 返回所有 provider 的健康状态和统计。
+
 ```
 Server: http://127.0.0.1:4000
 Status: ok
+Providers: 2
 PROVIDER       KEYS  CB_STATE
 nvidia         6     closed
 sensenova      6     closed
 Requests: 2588 (success: 2577, failed: 11)
 Active keys: 12, Cooling: 0, Disabled: 0
+Uptime: 32559s
+```
+
+传入可选的 provider 名称可过滤输出：
+
+```
+akswitch status sensenova
+```
+
+```
+Server: http://127.0.0.1:4000
+Status: ok
+Providers: 1
+PROVIDER       KEYS  CB_STATE
+sensenova      6     closed
+Requests: 1294 (success: 1288, failed: 6)
+Active keys: 6, Cooling: 0, Disabled: 0
 Uptime: 32559s
 ```
 

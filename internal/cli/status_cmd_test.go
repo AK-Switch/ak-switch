@@ -7,6 +7,29 @@ import (
 	"testing"
 )
 
+func TestStatusCmd_Exists(t *testing.T) {
+	if statusCmd == nil {
+		t.Fatal("statusCmd is nil")
+	}
+	if statusCmd.Use != "status [provider]" {
+		t.Errorf("statusCmd.Use = %q, want %q", statusCmd.Use, "status [provider]")
+	}
+}
+
+func TestStatusCmd_HasProviderArg(t *testing.T) {
+	if statusCmd.Args == nil {
+		t.Fatal("statusCmd.Args is nil, expected MaximumNArgs(1)")
+	}
+	err := statusCmd.Args(nil, []string{"sensenova"})
+	if err != nil {
+		t.Errorf("statusCmd accepted 1 arg but Args validator returned error: %v", err)
+	}
+	err = statusCmd.Args(nil, []string{"a", "b"})
+	if err == nil {
+		t.Error("statusCmd accepted 2 args, expected MaximumNArgs(1) to reject")
+	}
+}
+
 func TestFormatProviderTable_SingleProvider(t *testing.T) {
 	det := map[string]interface{}{
 		"alpha": map[string]interface{}{
