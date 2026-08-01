@@ -73,7 +73,7 @@ func DefaultConfig() *Config {
 	return &Config{
 		Port:                8080,
 		Host:                "127.0.0.1",
-		MaxRetries:          2,
+		MaxRetries:          1,
 		LogLevel:            "info",
 		CooldownSec:         15,
 		HTTPTimeoutSec:      30,
