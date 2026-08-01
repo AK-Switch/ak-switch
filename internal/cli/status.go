@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -55,7 +56,7 @@ var statusCmd = &cobra.Command{
 			return fmt.Errorf("auth failed (HTTP %d): check X-Admin-Token in server config", resp.StatusCode)
 		}
 		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("server not running or returned unexpected response (HTTP %d)", resp.StatusCode)
+			return fmt.Errorf("server returned (HTTP %d): %s", resp.StatusCode, strings.TrimSpace(string(body)))
 		}
 		var healthData map[string]interface{}
 		if err := json.Unmarshal(body, &healthData); err != nil {

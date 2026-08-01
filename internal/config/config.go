@@ -29,7 +29,7 @@ type Config struct {
 	AdminToken           string   `toml:"admin_token,omitempty"`     // Optional admin authentication token
 	DisableThinking      bool     `toml:"disable_thinking,omitempty"` // Disable thinking mode
 	GenaiModel           string   `toml:"genai_model,omitempty"`     // Generative AI model name
-	MaxRetries           int      `toml:"max_retries" default:"2"`
+	MaxRetries           int      `toml:"max_retries" default:"1"`
 	LogLevel             string   `toml:"log_level,omitempty" default:"info"`
 	CooldownSec          int      `toml:"cooldown_sec" default:"15"`
 	HTTPTimeoutSec       int      `toml:"http_timeout_sec" default:"30"`

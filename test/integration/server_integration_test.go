@@ -472,8 +472,8 @@ func TestProxyMaxRetriesConfig(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	// MaxRetries=2 -> 2 rounds over all 3 keys, all return 503 -> 503
-	srv := setupServer(t, upstream, []string{"test-key-a", "test-key-b", "test-key-c"}, 2, 60)
+	// MaxRetries=1 -> 1 round over all 3 keys, all return 503 -> 503
+	srv := setupServer(t, upstream, []string{"test-key-a", "test-key-b", "test-key-c"}, 1, 60)
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/test/v1/models")
@@ -483,7 +483,7 @@ func TestProxyMaxRetriesConfig(t *testing.T) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusServiceUnavailable {
-		t.Fatalf("expected 503 after exhausting MaxRetries=2, got %d", resp.StatusCode)
+		t.Fatalf("expected 503 after exhausting MaxRetries=1, got %d", resp.StatusCode)
 	}
 
 	var body struct {

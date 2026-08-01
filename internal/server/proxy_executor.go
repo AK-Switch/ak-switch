@@ -108,6 +108,7 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 
 			resp, err := client.Do(req)
 			if err != nil {
+				pool.Release(idx)
 				switch categorizeError(0, err) {
 				case CatClientAbort:
 					slog.Debug("client aborted request", "provider", ps.Name, "key_index", idx, "key_name", keyName, "error", err)
@@ -139,7 +140,7 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 				continue
 
 			case (resp.StatusCode >= 400 && resp.StatusCode < 500) || categorizeError(resp.StatusCode, nil) == CatNonRetryable:
-				px.handleNonRetryable(w, ps, idx, resp, start, r.Method, target, bodyBytes, round, pool.Keys()[idx], time.Since(start))
+				px.handleNonRetryable(w, ps, idx, resp, start, r.Method, target, bodyBytes, round)
 				return
 
 			case resp.StatusCode >= 500:
@@ -147,7 +148,7 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 				continue
 
 			default:
-				px.handleSuccess(w, ps, idx, resp, start, r.Method, target, bodyBytes, round, pool.Keys()[idx], time.Since(start))
+				px.handleSuccess(w, ps, idx, resp, start, r.Method, target, bodyBytes, round)
 				return
 			}
 		}
@@ -243,7 +244,7 @@ func (px *ProxyExecutor) handleServerError(ps *ProviderState, idx int, resp *htt
 
 // handleNonRetryable copies a non-retryable 4xx response through to the client
 // without further retry attempts.
-func (px *ProxyExecutor) handleNonRetryable(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, method, target string, bodyBytes []byte, attempt int, key string, ttfb time.Duration) {
+func (px *ProxyExecutor) handleNonRetryable(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, method, target string, bodyBytes []byte, attempt int) {
 	defer func() { _ = resp.Body.Close() }()
 	keyName, _ := ps.Pool.Name(idx)
 	copyHeaders(w.Header(), resp.Header)
@@ -262,7 +263,7 @@ func (px *ProxyExecutor) handleNonRetryable(w http.ResponseWriter, ps *ProviderS
 // handleSuccess processes a successful 2xx/3xx response, including streaming
 // for SSE and chunked responses. For non-streaming responses, it extracts
 // token usage from the response body and records it in the log entry.
-func (px *ProxyExecutor) handleSuccess(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, method, target string, bodyBytes []byte, attempt int, key string, ttfb time.Duration) {
+func (px *ProxyExecutor) handleSuccess(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, method, target string, bodyBytes []byte, attempt int) {
 	pool := ps.Pool
 	keyName, _ := pool.Name(idx)
 	upCB := ps.Proxy.upCB
@@ -346,7 +347,7 @@ func (px *ProxyExecutor) handleSuccess(w http.ResponseWriter, ps *ProviderState,
 		"input_tokens", inputTokens,
 		"output_tokens", outputTokens,
 		"duration_ms", durationMs,
-		"ttfb_ms", ttfb.Milliseconds(),
+		"ttfb_ms", time.Since(start).Milliseconds(),
 		"request_body_size", len(bodyBytes),
 		"response_body_size", respBodySize,
 	)
