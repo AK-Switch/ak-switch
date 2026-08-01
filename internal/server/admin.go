@@ -420,6 +420,15 @@ func (pr *ProviderRouter) statsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pName := r.URL.Query().Get("provider")
+	if pName != "" {
+		pr.mu.RLock()
+		ps, errMsg := pr.resolveProviderByName(pName)
+		pr.mu.RUnlock()
+		if ps == nil {
+			respondJSON(w, http.StatusNotFound, map[string]string{"error": errMsg})
+			return
+		}
+	}
 	pr.mu.RLock()
 	totalActive := 0
 	totalCooling := 0

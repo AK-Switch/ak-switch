@@ -107,21 +107,49 @@ func (p *KeyPool) TimeUntilAvailable() time.Duration {
 	return soonest
 }
 
+// AdvanceCounter increments the internal round-robin counter, advancing the
+// starting position for subsequent AvailableKeys() and Next() calls.
+func (p *KeyPool) AdvanceCounter() {
+	atomic.AddUint64(&p.counter, 1)
+}
+
 // AvailableKeys returns the indices of all keys that are not disabled and not in cooldown.
+// Results are rotated by an internal counter so consecutive calls start from different keys.
 // Does not mark keys as in-use. Caller should Release(idx) after using each key.
 func (p *KeyPool) AvailableKeys() []int {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	var result []int
+	n := len(p.cbs)
+	if n == 0 {
+		return nil
+	}
+	// Collect available indices first
+	var avail []int
 	for i, cb := range p.cbs {
 		if cb.State() == circuitbreaker.Permanent {
 			continue
 		}
 		if cb.Allow() {
-			result = append(result, i)
+			avail = append(avail, i)
 		}
 	}
-	return result
+	// Rotate start position using counter (same pattern as Next())
+	start := int((atomic.LoadUint64(&p.counter) - 1) % uint64(n))
+	// Rotate the available slice so it starts from the counter position
+	offset := 0
+	for i, idx := range avail {
+		if idx >= start {
+			offset = i
+			break
+		}
+	}
+	if offset > 0 {
+		result := make([]int, len(avail))
+		copy(result, avail[offset:])
+		copy(result[len(avail)-offset:], avail[:offset])
+		return result
+	}
+	return avail
 }
 
 // Next returns the next available and unreserved key in round-robin order.
@@ -337,6 +365,18 @@ func (p *KeyPool) ActiveCount() int {
 		}
 	}
 	return n
+}
+
+// AnyActive returns true if at least one key is not permanently disabled.
+func (p *KeyPool) AnyActive() bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	for _, cb := range p.cbs {
+		if cb.State() != circuitbreaker.Permanent {
+			return true
+		}
+	}
+	return false
 }
 
 // DisabledCount returns the number of disabled keys.

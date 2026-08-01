@@ -255,8 +255,8 @@ func TestProxyAllKeysExhausted(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	// With 3 keys and MaxRetries=3, each key gets exactly one attempt,
-	// all keys briefly cooled -> loop ends -> 503.
+	// Round 0: key-a gets 429, key-b gets 200 -> success.
+	// With all-keys-per-round semantics, second key is tried in same round.
 	srv := setupServer(t, upstream, []string{"key-a", "key-b", "key-c"}, 3, 2)
 	defer srv.Close()
 
@@ -472,7 +472,7 @@ func TestProxyMaxRetriesConfig(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	// MaxRetries=2 -> only 2 attempts, then 503
+	// MaxRetries=2 -> 2 rounds over all 3 keys, all return 503 -> 503
 	srv := setupServer(t, upstream, []string{"test-key-a", "test-key-b", "test-key-c"}, 2, 60)
 	defer srv.Close()
 
@@ -496,6 +496,76 @@ func TestProxyMaxRetriesConfig(t *testing.T) {
 	}
 	if body.Error.Code != "EXHAUSTED_RETRIES" {
 		t.Errorf("expected error.code EXHAUSTED_RETRIES, got %q", body.Error.Code)
+	}
+}
+
+// TestProxyOnlyAvailableKeysTried verifies that when only a subset of keys are
+// available (others in cooldown), the retry loop only tries the available ones.
+func TestProxyOnlyAvailableKeysTried(t *testing.T) {
+	upstream := httptest.NewServer(retryHandler(
+		http.StatusTooManyRequests, http.StatusOK, 2, `{"status":"ok"}`,
+	))
+	defer upstream.Close()
+
+	// 5 keys, but key-a and key-b start in a 30s cooldown.
+	// Only key-c, key-d, key-e are available.
+	// The handler returns 429 twice then 200 -> should succeed on 3rd available key.
+	pool := keypool.NewKeyPool([]string{"key-a", "key-b", "key-c", "key-d", "key-e"}, nil)
+	cfg := &config.Config{
+		TargetBase:  upstream.URL,
+		GenaiBase:   upstream.URL,
+		Port:        0,
+		MaxRetries:  5,
+		CooldownSec: 30,
+	}
+	pr := server.NewProviderRouter("")
+	pr.AddProvider("test", cfg, pool)
+	srv := httptest.NewServer(pr.Handler())
+	defer srv.Close()
+
+	// Manually cool key-a and key-b
+	_ = pool.Cooldown(0, 30*time.Second)
+	_ = pool.Cooldown(1, 30*time.Second)
+
+	resp, err := http.Get(srv.URL + "/test/v1/models")
+	if err != nil {
+		t.Fatalf("GET /v1/models: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK (only available keys tried), got %d", resp.StatusCode)
+	}
+}
+
+// TestProxySuccessStopsRound verifies that when a key succeeds mid-round,
+// the proxy returns immediately without trying remaining available keys.
+func TestProxySuccessStopsRound(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth := r.Header.Get("Authorization")
+		switch {
+		case strings.Contains(auth, "test-key-a"):
+			w.WriteHeader(http.StatusServiceUnavailable)
+		case strings.Contains(auth, "test-key-b"):
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"status":"ok"}`))
+		default:
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
+	}))
+	defer upstream.Close()
+
+	srv := setupServer(t, upstream, []string{"test-key-a", "test-key-b", "test-key-c"}, 10, 60)
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/test/v1/models")
+	if err != nil {
+		t.Fatalf("GET /v1/models: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK (stop after first success), got %d", resp.StatusCode)
 	}
 }
 
@@ -1212,11 +1282,11 @@ func TestProxy_AllDisabled_Returns503(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	srv := setupServer(t, upstream, []string{"key-a", "key-b"}, 10, 60)
+	srv := setupServer(t, upstream, []string{"key-a", "key-b", "key-c"}, 10, 60)
 	defer srv.Close()
 
-	// Disable both keys via API
-	for _, idx := range []string{"1", "2"} {
+	// Disable all 3 keys via API (1-based indexing: 1=key-a, 2=key-b, 3=key-c)
+	for _, idx := range []string{"1", "2", "3"} {
 		resp, err := http.Post(srv.URL+"/api/keys/"+idx+"/disable", "application/json", nil)
 		if err != nil {
 			t.Fatalf("POST /api/keys/%s/disable: %v", idx, err)
@@ -2313,6 +2383,143 @@ func TestStatsHandler(t *testing.T) {
 		if _, ok := body[f]; !ok {
 			t.Errorf("missing field %q in response", f)
 		}
+	}
+}
+
+// TestStatsHandlerPerProvider verifies that /api/stats?provider=<name> returns
+// key counts scoped to a single provider, while /api/stats (no param) returns
+// aggregated totals across all providers.
+func TestStatsHandlerPerProvider(t *testing.T) {
+	cfg1 := &config.Config{
+		TargetBase: "http://localhost:19998",
+		GenaiBase:  "http://localhost:19998",
+		Port:       19999,
+		MaxRetries: 3, CooldownSec: 60,
+		Keys: []string{"key-a", "key-b", "key-c"},
+	}
+	cfg2 := &config.Config{
+		TargetBase: "http://localhost:19997",
+		GenaiBase:  "http://localhost:19997",
+		Port:       19998,
+		MaxRetries: 3, CooldownSec: 60,
+		Keys: []string{"key-x", "key-y"},
+	}
+	pool1 := keypool.NewKeyPool(cfg1.Keys, nil)
+	pool2 := keypool.NewKeyPool(cfg2.Keys, nil)
+	pr := server.NewProviderRouter("")
+	pr.AddProvider("alpha", cfg1, pool1)
+	pr.AddProvider("beta", cfg2, pool2)
+	srv := httptest.NewServer(pr.Handler())
+	defer srv.Close()
+
+	// No provider param → aggregated: 3 + 2 = 5 active keys
+	resp, err := http.Get(srv.URL + "/api/stats")
+	if err != nil {
+		t.Fatalf("GET /api/stats: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	var allStats map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&allStats); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if int(allStats["active_keys"].(float64)) != 5 {
+		t.Errorf("expected active_keys=5 (aggregated), got %v", allStats["active_keys"])
+	}
+
+	// Provider=alpha → scoped: 3 active keys
+	resp2, err := http.Get(srv.URL + "/api/stats?provider=alpha")
+	if err != nil {
+		t.Fatalf("GET /api/stats?provider=alpha: %v", err)
+	}
+	defer resp2.Body.Close()
+	if resp2.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp2.StatusCode)
+	}
+	var alphaStats map[string]interface{}
+	if err := json.NewDecoder(resp2.Body).Decode(&alphaStats); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if int(alphaStats["active_keys"].(float64)) != 3 {
+		t.Errorf("expected active_keys=3 for alpha, got %v", alphaStats["active_keys"])
+	}
+
+	// Provider=beta → scoped: 2 active keys
+	resp3, err := http.Get(srv.URL + "/api/stats?provider=beta")
+	if err != nil {
+		t.Fatalf("GET /api/stats?provider=beta: %v", err)
+	}
+	defer resp3.Body.Close()
+	if resp3.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp3.StatusCode)
+	}
+	var betaStats map[string]interface{}
+	if err := json.NewDecoder(resp3.Body).Decode(&betaStats); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if int(betaStats["active_keys"].(float64)) != 2 {
+		t.Errorf("expected active_keys=2 for beta, got %v", betaStats["active_keys"])
+	}
+
+	// Unknown provider → 404
+	resp4, err := http.Get(srv.URL + "/api/stats?provider=nonexistent")
+	if err != nil {
+		t.Fatalf("GET /api/stats?provider=nonexistent: %v", err)
+	}
+	resp4.Body.Close()
+	if resp4.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404 for unknown provider, got %d", resp4.StatusCode)
+	}
+
+	// Verify required fields exist in per-provider response
+	fields := []string{"active_keys", "cooling_keys", "disabled_keys", "uptime_seconds"}
+	for _, f := range fields {
+		if _, ok := alphaStats[f]; !ok {
+			t.Errorf("missing field %q in per-provider stats response", f)
+		}
+	}
+}
+
+// TestStatsHandlerPerProviderAfterDisable verifies that /api/stats?provider=<name>
+// reflects disabled keys correctly.
+func TestStatsHandlerPerProviderAfterDisable(t *testing.T) {
+	cfg := &config.Config{
+		TargetBase: "http://localhost:19999",
+		GenaiBase:  "http://localhost:19999",
+		Port:       19999, MaxRetries: 3, CooldownSec: 60, AdminToken: "",
+		Keys: []string{"key-a", "key-b", "key-c"},
+	}
+	pool := keypool.NewKeyPool(cfg.Keys, nil)
+	pr := server.NewProviderRouter("")
+	pr.AddProvider("test", cfg, pool)
+	srv := httptest.NewServer(pr.Handler())
+	defer srv.Close()
+
+	// Disable key[1] via API
+	req, _ := http.NewRequest("POST", srv.URL+"/api/keys/1/disable", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST /api/keys/1/disable: %v", err)
+	}
+	resp.Body.Close()
+
+	// Per-provider stats should show 2 active, 1 disabled
+	resp2, err := http.Get(srv.URL + "/api/stats?provider=test")
+	if err != nil {
+		t.Fatalf("GET /api/stats?provider=test: %v", err)
+	}
+	defer resp2.Body.Close()
+	var stats map[string]interface{}
+	if err := json.NewDecoder(resp2.Body).Decode(&stats); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if int(stats["active_keys"].(float64)) != 2 {
+		t.Errorf("expected active_keys=2 after disable, got %v", stats["active_keys"])
+	}
+	if int(stats["disabled_keys"].(float64)) != 1 {
+		t.Errorf("expected disabled_keys=1 after disable, got %v", stats["disabled_keys"])
 	}
 }
 

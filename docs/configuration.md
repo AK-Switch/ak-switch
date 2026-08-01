@@ -40,7 +40,7 @@ Provider 名称（TOML 段名，如 `[provider.nvidia]` 中的 `nvidia`）建议
 | `target` | 是 | — | 上游 API 基础 URL |
 | `genai` | 否 | `""` | GenAI 模型基础 URL（`/genai/` 路径路由到此地址） |
 | `cooldown_sec` | 否 | `60` | 429 后 Key 冷却的基础时长（秒） |
-| `max_retries` | 否 | `3` | 每次请求的最大重试次数 |
+| `max_retries` | 否 | `1` | 完整遍历 key pool 的最大轮数。每轮尝试所有可用 key（跳过冷却/禁用），任一 key 成功即返回 |
 | `http_timeout_sec` | 否 | `30` | HTTP 客户端超时（秒） |
 | `disable_thinking` | 否 | `false` | 禁用思考模式 |
 | `genai_model` | 否 | `""` | GenAI 模型名 |

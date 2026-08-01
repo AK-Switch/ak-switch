@@ -72,7 +72,9 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 		slog.Debug("proxy request debug", "provider", ps.Name, "method", r.Method, "path", r.URL.Path, "auth", maskedAuth, "body_size", len(bodyBytes), "body_preview", bodyPreview)
 	}
 
+	pool.AdvanceCounter()
 	for round := 0; round < cfg.MaxRetries; round++ {
+
 		if !upCB.Allow() {
 			slog.Warn("upstream circuit breaker open, backing off", "provider", ps.Name, "round", round, "max", cfg.MaxRetries)
 			time.Sleep(time.Second)
@@ -81,8 +83,13 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 
 		available := pool.AvailableKeys()
 		if len(available) == 0 {
-			px.writeAllKeysExhausted(w, ps, r.Method, start)
-			return
+			if !pool.AnyActive() {
+				px.writeAllKeysExhausted(w, ps, r.Method, start)
+				return
+			}
+			slog.Warn("no available keys this round, all cooling", "provider", ps.Name, "round", round, "max", cfg.MaxRetries)
+			time.Sleep(time.Second)
+			continue
 		}
 
 		for _, idx := range available {
@@ -154,6 +161,7 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 		"method", r.Method,
 		"url", target,
 		"status", 503,
+		"retry", cfg.MaxRetries,
 		"rounds", cfg.MaxRetries,
 		"duration_ms", time.Since(start).Milliseconds(),
 	)
