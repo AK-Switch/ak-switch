@@ -11,7 +11,7 @@ RUN CGO_ENABLED=0 go build -o /akswitch ./cmd/akswitch/
 # =============================================================================
 # Stage 2: Runtime — Alpine with busybox (built-in) for HEALTHCHECK
 # =============================================================================
-FROM alpine:3.21
+FROM alpine:3.24
 
 # Create non-root user for runtime
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
