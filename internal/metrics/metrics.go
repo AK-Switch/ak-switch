@@ -116,7 +116,9 @@ func NewRegistry() (*prometheus.Registry, *Metrics) {
 	}
 
 	// Register Go runtime metrics (go_*, process_*) as well
+	//nolint:staticcheck // NewProcessCollector deprecated in v1.24.1; no direct replacement
 	reg.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
+	//nolint:staticcheck
 	reg.MustRegister(prometheus.NewGoCollector())
 
 	return reg, m

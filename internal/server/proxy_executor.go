@@ -56,12 +56,12 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 	target := buildTargetURL(cfg, r.URL.Path, r.URL.RawQuery)
 
 	if auth := r.Header.Get("Authorization"); auth != "" {
-		maskedAuth := auth
-		if len(auth) > 12 {
-			maskedAuth = auth[:7] + "..." + auth[len(auth)-4:]
-		} else {
-			maskedAuth = "****"
-		}
+		maskedAuth := func() string {
+			if len(auth) > 12 {
+				return auth[:7] + "..." + auth[len(auth)-4:]
+			}
+			return "****"
+		}()
 		bodyPreview := ""
 		if len(bodyBytes) > 0 {
 			preview := string(bodyBytes)
@@ -111,7 +111,7 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 				continue
 			}
 			if remaining > 0 {
-				pool.Cooldown(idx, remaining)
+				_ = pool.Cooldown(idx, remaining)
 			}
 			continue
 		}
@@ -201,7 +201,7 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 // and returns true if all keys are exhausted (caller should abort).
 // When returning true, the error response has already been written to w.
 func (px *ProxyExecutor) handleRateLimited(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, cfg *config.Config, start time.Time, method, target string, bodyBytes []byte) bool {
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	pool := ps.Pool
 	keyName, _ := pool.Name(idx)
 
@@ -216,13 +216,13 @@ func (px *ProxyExecutor) handleRateLimited(w http.ResponseWriter, ps *ProviderSt
 			}
 		}
 	}
-	pool.Cooldown(idx, cooldown)
+	_ = pool.Cooldown(idx, cooldown)
 	slog.Warn("key rate limited", "provider", ps.Name, "key_index", idx, "key_name", keyName, "status", resp.StatusCode, "cb_state", fmt.Sprintf("%d", pool.CB(idx).State()), "cb_retry", pool.CB(idx).Attempt(), "body_preview", MaskSensitiveData(string(body), 1024))
 	px.metrics.UpstreamErrors.WithLabelValues("rate_limited").Inc()
 
 	if pool.CB(idx).State() == circuitbreaker.Permanent {
 		slog.Warn("key quota exhausted, disabling permanently", "provider", ps.Name, "key_index", idx, "key_name", keyName)
-		pool.Disable(idx)
+		_ = pool.Disable(idx)
 		if pool.ActiveCount() == 0 {
 			return px.writeAllKeysExhausted(w, ps, method, start)
 		}
@@ -234,14 +234,14 @@ func (px *ProxyExecutor) handleRateLimited(w http.ResponseWriter, ps *ProviderSt
 // It disables the key permanently and returns true if all keys are exhausted.
 // When returning true, the error response has already been written to w.
 func (px *ProxyExecutor) handleAuthRejected(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, method, target string, bodyBytes []byte) bool {
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	pool := ps.Pool
 	keyName, _ := pool.Name(idx)
 
 	body, _ := io.ReadAll(resp.Body)
 	px.metrics.UpstreamErrors.WithLabelValues("auth_rejected").Inc()
 	if pool.RecordAuthFailure(idx) {
-		pool.Disable(idx)
+		_ = pool.Disable(idx)
 		ps.PersistKeys()
 		slog.Warn("key permanently disabled", "provider", ps.Name, "key_index", idx, "key_name", keyName, "status", resp.StatusCode, "body_preview", MaskSensitiveData(string(body), 1024))
 	} else {
@@ -258,7 +258,7 @@ func (px *ProxyExecutor) handleAuthRejected(w http.ResponseWriter, ps *ProviderS
 // handleServerError processes a 502 Bad Gateway or 503 Service Unavailable (or other 5xx) response.
 // It logs the error, records metrics, and records an upstream circuit breaker failure.
 func (px *ProxyExecutor) handleServerError(ps *ProviderState, idx int, resp *http.Response, attempt int) {
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(resp.Body)
 	pool := ps.Pool
 	keyName, _ := pool.Name(idx)
@@ -270,11 +270,11 @@ func (px *ProxyExecutor) handleServerError(ps *ProviderState, idx int, resp *htt
 // handleNonRetryable copies a non-retryable 4xx response through to the client
 // without further retry attempts.
 func (px *ProxyExecutor) handleNonRetryable(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, method, target string, bodyBytes []byte, attempt int, key string, ttfb time.Duration) {
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	keyName, _ := ps.Pool.Name(idx)
 	copyHeaders(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
+	_, _ = io.Copy(w, resp.Body)
 
 	
 	slog.Warn("non-retryable client error", "provider", ps.Name, "method", method, "url", target, "status", resp.StatusCode, "key_name", keyName)
@@ -307,7 +307,7 @@ func (px *ProxyExecutor) handleSuccess(w http.ResponseWriter, ps *ProviderState,
 		Model string `json:"model"`
 	}
 	if len(bodyBytes) > 0 {
-		json.Unmarshal(bodyBytes, &reqBody)
+		_ = json.Unmarshal(bodyBytes, &reqBody)
 		model = reqBody.Model
 	}
 
@@ -319,7 +319,7 @@ func (px *ProxyExecutor) handleSuccess(w http.ResponseWriter, ps *ProviderState,
 	} else {
 		// Non-streaming: read body to extract token usage, then write to client
 		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if err == nil {
 			inputTokens, outputTokens = tokenestimator.ExtractTokenUsage(body)
 			// Also run tiktoken estimation for calibration comparison
@@ -338,7 +338,7 @@ func (px *ProxyExecutor) handleSuccess(w http.ResponseWriter, ps *ProviderState,
 			if outputTokens == 0 && outputEstimate > 0 {
 				outputTokens = outputEstimate
 			}
-			w.Write(body)
+			_, _ = w.Write(body)
 			respBodySize = int64(len(body))
 		}
 	}
@@ -398,29 +398,6 @@ func (px *ProxyExecutor) writeAllKeysExhausted(w http.ResponseWriter, ps *Provid
 
 // ── Streaming Helpers ──────────────────────────────────
 
-// streamResponse copies the response body to the client writer, flushing after
-// each chunk for SSE compatibility. It always closes resp.Body.
-func streamResponse(w http.ResponseWriter, resp *http.Response) {
-	defer resp.Body.Close()
-	if f, ok := w.(http.Flusher); ok {
-		buf := make([]byte, 4096)
-		for {
-			n, rerr := resp.Body.Read(buf)
-			if n > 0 {
-				if _, werr := w.Write(buf[:n]); werr != nil {
-					break
-				}
-				f.Flush()
-			}
-			if rerr != nil {
-				break
-			}
-		}
-	} else {
-		io.Copy(w, resp.Body)
-	}
-}
-
 // streamSSEAndEstimateTokens streams SSE events to the client while accumulating
 // text for token estimation. Supports multiple SSE formats:
 //   - Anthropic: content_block_delta (delta.text), content_block_start (content_block.text),
@@ -429,7 +406,7 @@ func streamResponse(w http.ResponseWriter, resp *http.Response) {
 // After the stream ends, it uses the API's output_tokens from message_delta
 // when available, otherwise falls back to tiktoken estimation.
 func streamSSEAndEstimateTokens(w http.ResponseWriter, resp *http.Response, bodyBytes []byte, model string) (int, int, int64) {
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var outputBuf strings.Builder
 	var respBodySize int64

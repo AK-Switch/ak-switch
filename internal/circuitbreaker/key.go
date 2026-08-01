@@ -213,7 +213,7 @@ func (k *KeyCircuitBreaker) CooldownRemaining() time.Duration {
 		return 0
 	}
 
-	remaining := k.cooldownUntil.Sub(time.Now())
+	remaining := time.Until(k.cooldownUntil)
 	if remaining < 0 {
 		return 0
 	}

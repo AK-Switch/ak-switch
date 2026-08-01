@@ -23,13 +23,13 @@ func main() {
 
 		if flaky && count%3 == 0 {
 			w.WriteHeader(http.StatusTooManyRequests)
-			fmt.Fprintln(w, `{"error":"rate limit"}`)
+			_, _ = fmt.Fprintln(w, `{"error":"rate limit"}`)
 			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintln(w, `{"id":"chatcmpl-mock","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"Mock response"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":3,"total_tokens":13}}`)
+		_, _ = fmt.Fprintln(w, `{"id":"chatcmpl-mock","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"Mock response"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":3,"total_tokens":13}}`)
 	})
 
 	addr := ":" + port

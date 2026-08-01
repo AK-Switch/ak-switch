@@ -38,7 +38,7 @@ Examples:
 			if err != nil {
 				return fmt.Errorf("server not reachable at %s:%d: %w", host, port, err)
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 
 			body, _ := io.ReadAll(resp.Body)
 			var result struct {
@@ -63,7 +63,7 @@ Examples:
 		if err != nil {
 			return fmt.Errorf("server not reachable at %s:%d: %w", host, port, err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		body, _ := io.ReadAll(resp.Body)
 		var result struct {
