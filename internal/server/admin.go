@@ -183,7 +183,7 @@ func (pr *ProviderRouter) healthHandler(w http.ResponseWriter, r *http.Request) 
 	pr.mu.RLock()
 	defer pr.mu.RUnlock()
 
-	// Aggregate health info across all providers
+	pName := r.URL.Query().Get("provider")
 	type providerHealth struct {
 		Status            string `json:"status"`
 		Keys              int    `json:"keys"`
