@@ -30,6 +30,12 @@ func TestUsageCmd_HasProviderFlag(t *testing.T) {
 	}
 }
 
+func TestUsageCmd_HasCredentialsDirFlag(t *testing.T) {
+	if usageCmd.Flags().Lookup("credentials-dir") == nil {
+		t.Fatal("expected --credentials-dir flag on usage command")
+	}
+}
+
 func TestUsageCmd_KeyRequired(t *testing.T) {
 	origDefault := config.DefaultProviderName
 	config.DefaultProviderName = "sensenova"

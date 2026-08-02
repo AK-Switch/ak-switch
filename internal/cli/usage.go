@@ -34,7 +34,7 @@ func init() {
 }
 
 var usageCmd = &cobra.Command{
-	Use:   "usage --key <api_key>",
+	Use:   "usage",
 	Short: "Query API key remaining usage quota",
 	Long: `Query the remaining usage quota for an API key by looking up its
 associated account credentials, authenticating, and calling the provider's
@@ -158,7 +158,10 @@ var sensenovaLoginWithURL = func(account, password, baseURL string) (string, err
 		"account":  account,
 		"password": password,
 	}
-	body, _ := json.Marshal(payload)
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("marshal login payload: %w", err)
+	}
 
 	req, err := http.NewRequest(http.MethodPost, baseURL, bytes.NewReader(body))
 	if err != nil {
@@ -172,7 +175,10 @@ var sensenovaLoginWithURL = func(account, password, baseURL string) (string, err
 	}
 	defer resp.Body.Close()
 
-	respBody, _ := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read login response: %w", err)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("login HTTP %d: %s", resp.StatusCode, truncate(string(respBody), 200))
 	}
@@ -206,7 +212,10 @@ var sensenovaQueryUsageWithURL = func(token, tenantID, baseURL string) (map[stri
 	}
 	defer resp.Body.Close()
 
-	respBody, _ := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read usage response: %w", err)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("usage HTTP %d: %s", resp.StatusCode, truncate(string(respBody), 200))
 	}
