@@ -174,6 +174,7 @@ Token 估算基于 tiktoken，在 `internal/tokenestimator/` 中实现。
 | 新增/修改配置字段 | `docs/configuration.md` | 同一 PR |
 | 新增/修改 API 端点 | `docs/api.md` | 同一 PR |
 | 新增功能影响架构 | `docs/architecture.md` | 同一 PR |
+| Release notes | GitHub Releases | 发版后 |
 
 **核心原则：** 文档和代码在同一次合并中到达 main。先合并代码后补文档 = 文档永远补不上。
 
