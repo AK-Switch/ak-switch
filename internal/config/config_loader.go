@@ -21,7 +21,7 @@ var deprecatedKeys = map[string]string{
 func warnDeprecatedKeys(data []byte) {
 	for lineNum, line := range strings.Split(string(data), "\n") {
 		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "[") {
 			continue
 		}
 		for key, hint := range deprecatedKeys {

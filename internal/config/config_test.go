@@ -770,6 +770,27 @@ genai="https://ai.example.com"
 			t.Errorf("expected deprecation warning for genai=..., got: %s", buf.String())
 		}
 	})
+	t.Run("section_header_not_matched", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		tomlPath := filepath.Join(tmpDir, "section_header.toml")
+		content := `[provider.genai]
+target = "https://api.example.com"
+`
+		if err := os.WriteFile(tomlPath, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+		var buf bytes.Buffer
+		handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})
+		slog.SetDefault(slog.New(handler))
+		t.Cleanup(func() { slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil))) })
+		_, err := LoadAllTomlProviders(tomlPath)
+		if err != nil {
+			t.Fatalf("LoadAllTomlProviders() unexpected error: %v", err)
+		}
+		if strings.Contains(buf.String(), "deprecated field") {
+			t.Errorf("[provider.genai] section header should not trigger deprecation warning, got: %s", buf.String())
+		}
+	})
 }
 
 func TestLoadToml_MultiProvider(t *testing.T) {
