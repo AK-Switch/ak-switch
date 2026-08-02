@@ -179,7 +179,6 @@ func TestCLI_ConfigView(t *testing.T) {
 		"Configuration source:",
 		"Port:",
 		"Target base URL:",
-		"GenAI base URL:",
 	})
 }
 

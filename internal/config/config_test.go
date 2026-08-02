@@ -3,6 +3,9 @@
 package config
 
 import (
+	"bytes"
+	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -316,7 +319,7 @@ func TestLoadAllTomlProviders_ExistingFile(t *testing.T) {
 
 [provider.default]
 target = "https://api.example.com"
-genai = "https://ai.example.com"
+
 cooldown_sec = 45
 max_retries = 7
 `
@@ -444,7 +447,6 @@ func TestTomlProviderConfig_AllFields(t *testing.T) {
 
 [provider.default]
 	target = "https://api.example.com"
-	genai = "https://ai.example.com"
 	cooldown_sec = 45
 	max_retries = 7
 	disable_thinking = true
@@ -531,7 +533,6 @@ func TestTomlProviderConfig_AllFields(t *testing.T) {
 func TestTomlProviderConfig_DefaultValues(t *testing.T) {
 	content := `[provider.default]
 	target = "https://api.example.com"
-	genai = "https://ai.example.com"
 `
 	path := writeTempToml(t, content)
 	providers, err := LoadAllTomlProviders(path)
@@ -699,12 +700,11 @@ func TestXDGConfigPath(t *testing.T) {
 	}
 }
 
-func TestLoadToml_WithGenai(t *testing.T) {
+func TestLoadToml_BasicTarget(t *testing.T) {
 	tmpDir := t.TempDir()
-	tomlPath := filepath.Join(tmpDir, "genai.toml")
+	tomlPath := filepath.Join(tmpDir, "basic.toml")
 	content := `[provider.default]
 target = "https://api.example.com"
-genai = "https://genai.example.com"
 `
 	if err := os.WriteFile(tomlPath, []byte(content), 0644); err != nil {
 		t.Fatal(err)
@@ -722,6 +722,32 @@ genai = "https://genai.example.com"
 	}
 }
 
+func TestLoadAllTomlProviders_DeprecatedFieldWarns(t *testing.T) {
+	tmpDir := t.TempDir()
+	tomlPath := filepath.Join(tmpDir, "deprecated.toml")
+	content := `[provider.default]
+target = "https://api.example.com"
+genai = "https://ai.example.com"
+`
+	if err := os.WriteFile(tomlPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})
+	slog.SetDefault(slog.New(handler))
+	_, err := LoadAllTomlProviders(tomlPath)
+	if err != nil {
+		t.Fatalf("LoadAllTomlProviders() unexpected error: %v", err)
+	}
+	if !strings.Contains(buf.String(), "deprecated field") {
+		t.Errorf("expected deprecation warning in log output, got: %s", buf.String())
+	}
+	if !strings.Contains(buf.String(), "genai") {
+		t.Errorf("expected warning to mention 'genai' field, got: %s", buf.String())
+	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
+}
+
 func TestLoadToml_MultiProvider(t *testing.T) {
 	tmpDir := t.TempDir()
 	tomlPath := filepath.Join(tmpDir, "multi.toml")
@@ -729,11 +755,9 @@ func TestLoadToml_MultiProvider(t *testing.T) {
 
 [provider.primary]
 target = "https://primary.example.com"
-genai = "https://ai.primary.example.com"
 
 [provider.secondary]
 target = "https://secondary.example.com"
-genai = "https://ai.secondary.example.com"
 `
 	if err := os.WriteFile(tomlPath, []byte(content), 0644); err != nil {
 		t.Fatal(err)
@@ -774,11 +798,9 @@ func TestLoadAllTomlProviders_MultiProvider(t *testing.T) {
 
 [provider.sensenova]
 target = "https://api.sensenova.com"
-genai = "https://ai.sensenova.com"
 
 [provider.nvidia]
 target = "https://integrate.api.nvidia.com/v1"
-genai = "https://ai.api.nvidia.com"
 `
 	path := writeTempToml(t, content)
 	providers, err := LoadAllTomlProviders(path)
@@ -833,7 +855,7 @@ func TestLoadAllTomlProviders_MissingFile(t *testing.T) {
 func TestLoadAllTomlProviders_Defaults(t *testing.T) {
 	content := `[provider.test]
 target = "https://api.example.com"
-genai = "https://ai.example.com"
+
 `
 	path := writeTempToml(t, content)
 	providers, err := LoadAllTomlProviders(path)
@@ -861,7 +883,7 @@ genai = "https://ai.example.com"
 // ── FindServerPort ───────────────────────────────
 
 func TestFindServerPort_WithPort(t *testing.T) {
-	content := "port = 8080\n\n[provider.test]\ntarget = \"https://api.example.com\"\ngenai = \"https://ai.example.com\"\n"
+	content := "port = 8080\n\n[provider.test]\ntarget = \"https://api.example.com\"\n\n"
 	path := writeTempToml(t, content)
 	port := FindServerPort(path)
 	if port != 8080 {
@@ -870,7 +892,7 @@ func TestFindServerPort_WithPort(t *testing.T) {
 }
 
 func TestFindServerPort_NoPort(t *testing.T) {
-	content := "port = 0\n\n[provider.test]\ntarget = \"https://api.example.com\"\ngenai = \"https://ai.example.com\"\n"
+	content := "port = 0\n\n[provider.test]\ntarget = \"https://api.example.com\"\n\n"
 	path := writeTempToml(t, content)
 	port := FindServerPort(path)
 	if port != 8080 {
@@ -886,7 +908,7 @@ func TestFindServerPort_MissingFile(t *testing.T) {
 }
 
 func TestFindServerPort_FirstProviderPicked(t *testing.T) {
-	content := "port = 9999\n\n[provider.first]\ntarget = \"https://first.example.com\"\ngenai = \"https://ai.first.example.com\"\n\n[provider.second]\ntarget = \"https://second.example.com\"\ngenai = \"https://ai.second.example.com\"\n"
+	content := "port = 9999\n\n[provider.first]\ntarget = \"https://first.example.com\"\n\n\n[provider.second]\ntarget = \"https://second.example.com\"\n\n"
 	path := writeTempToml(t, content)
 	port := FindServerPort(path)
 	if port != 9999 {

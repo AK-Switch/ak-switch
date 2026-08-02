@@ -129,7 +129,7 @@ main 分支受保护，禁止直接推送。遵循 GitHub Flow + 原子 commit�
 
 **提交规范**：`类型: 描述`（`feat`/`fix`/`refactor`/`chore`/`docs`）。
 
-**发版**：PR 合并后 `git commit` 更新 CHANGELOG → `make release VERSION=v0.x.x`，或从 GitHub Actions 触发 `Build & Release` workflow。新功能 `v0.x.0`，bug 修复 `v0.x.1`。
+**发版**：PR 合并后 `make release VERSION=v0.x.x`，或从 GitHub Actions 触发 `Build & Release` workflow。新功能 `v0.x.0`，bug 修复 `v0.x.1`。
 
 ## Common Pitfalls
 
@@ -173,7 +173,6 @@ Token 估算基于 tiktoken，在 `internal/tokenestimator/` 中实现。
 | 新增/修改 CLI 命令或标志 | `docs/cli-reference.md` | 同一 PR |
 | 新增/修改配置字段 | `docs/configuration.md` | 同一 PR |
 | 新增/修改 API 端点 | `docs/api.md` | 同一 PR |
-| 发版 / 里程碑完成 | `CHANGELOG.md` | 发版前 |
 | 新增功能影响架构 | `docs/architecture.md` | 同一 PR |
 
 **核心原则：** 文档和代码在同一次合并中到达 main。先合并代码后补文档 = 文档永远补不上。

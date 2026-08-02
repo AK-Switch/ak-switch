@@ -2830,7 +2830,6 @@ func TestReloadHandler(t *testing.T) {
 	}
 	tomlContent := `[provider.test]
 target = "http://localhost:19999/v1"
-genai = "http://localhost:19999"
 port = 19999
 max_retries = 3
 cooldown_sec = 60
