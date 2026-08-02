@@ -25,9 +25,12 @@ func warnDeprecatedKeys(data []byte) {
 			continue
 		}
 		for key, hint := range deprecatedKeys {
-			if strings.HasPrefix(trimmed, key+" ") || strings.HasPrefix(trimmed, key+"\t") {
-				slog.Warn("config.toml contains deprecated field",
-					"field", key, "line", lineNum+1, "hint", hint)
+			if strings.HasPrefix(trimmed, key) {
+				rest := trimmed[len(key):]
+				if rest == "" || rest[0] == '=' || rest[0] == ' ' || rest[0] == '	' {
+					slog.Warn("config.toml contains deprecated field",
+						"field", key, "line", lineNum+1, "hint", hint)
+				}
 			}
 		}
 	}

@@ -34,6 +34,8 @@ Provider 名称（TOML 段名，如 `[provider.nvidia]` 中的 `nvidia`）建议
 
 ### Provider 字段
 
+> **迁移说明**：`genai` 字段已在 v0.3.0 中移除。如果 `config.toml` 中仍有 `genai = "..."`，启动时会输出 warning 日志，但配置仍会正常加载（所有请求路由到 `target`）。请将 `genai` 删除或替换为 `target`。
+
 | 字段 | 必填 | 默认值 | 说明 |
 |------|------|--------|------|
 | `target` | 是 | — | 上游 API 基础 URL |
