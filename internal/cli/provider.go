@@ -574,7 +574,7 @@ Example:
 		fmt.Printf("    Target:  %s\n", sanitized.TargetBase)
 		fmt.Printf("    Port:    %d\n", sanitized.Port)
 		if sanitized.GenaiBase != "" {
-			fmt.Printf("    GenAI:  %s\n", sanitized.GenaiBase)
+			fmt.Printf("    GenAI:   %s\n", sanitized.GenaiBase)
 		}
 		if sanitized.AdminToken != "" {
 			fmt.Println("    Admin token: (set)")
