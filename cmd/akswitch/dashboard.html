@@ -383,11 +383,6 @@
                         <input type="text" id="targetBase" name="targetBase" placeholder="https://integrate.api.nvidia.com/v1">
                     </div>
                     <div class="form-group">
-                        <label for="genaiBase">GenAI Base URL</label>
-                        <input type="text" id="genaiBase" name="genaiBase" placeholder="https://ai.api.nvidia.com">
-                    </div>
-
-                    <div class="form-group">
                         <label>API Keys Pool</label>
                         <div id="keyInputsContainer">
                             <!-- Dynamic key inputs will be injected here -->
@@ -518,7 +513,6 @@
                 .then(function(res) { return res.json(); })
                 .then(function(data) {
                     document.getElementById('targetBase').value = data.targetBase;
-                    document.getElementById('genaiBase').value = data.genaiBase;
 
                     const container = document.getElementById('keyInputsContainer');
                     container.innerHTML = '';
@@ -538,7 +532,6 @@
             const keys = formData.getAll('apiKeys[]');
             const config = {
                 targetBase: formData.get('targetBase'),
-                genaiBase: formData.get('genaiBase'),
                 keys: keys.filter(function(k) { return k.trim() !== ''; })
             };
 

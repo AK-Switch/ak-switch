@@ -2066,7 +2066,7 @@ func TestConfigPost(t *testing.T) {
 	defer os.Chdir(origDir)
 
 	// 写入初始 .env 供 reloadConfig 使用
-	envContent := "PORT=19999\nTARGET_BASE_URL=http://localhost:19999\nGENAI_BASE_URL=http://localhost:19999\nAPI_KEYS=key-a,key-b\nCOOLDOWN_SEC=60\nMAX_RETRIES=3\n"
+	envContent := "PORT=19999\nTARGET_BASE_URL=http://localhost:19999\nAPI_KEYS=key-a,key-b\nCOOLDOWN_SEC=60\nMAX_RETRIES=3\n"
 	if err := os.WriteFile(filepath.Join(tmpDir, ".env"), []byte(envContent), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -3396,7 +3396,7 @@ func TestConfigHandlerPost_Unauthenticated(t *testing.T) {
 	defer os.Chdir(origDir)
 
 	// Write initial .env for ReloadConfig
-	envContent := "PORT=19999\nTARGET_BASE_URL=http://localhost:19999\nGENAI_BASE_URL=http://localhost:19999\nAPI_KEYS=key-a,key-b\nCOOLDOWN_SEC=60\nMAX_RETRIES=3\n"
+	envContent := "PORT=19999\nTARGET_BASE_URL=http://localhost:19999\nAPI_KEYS=key-a,key-b\nCOOLDOWN_SEC=60\nMAX_RETRIES=3\n"
 	if err := os.WriteFile(filepath.Join(tmpDir, ".env"), []byte(envContent), 0600); err != nil {
 		t.Fatal(err)
 	}

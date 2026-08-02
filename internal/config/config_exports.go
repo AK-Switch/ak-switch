@@ -6,7 +6,7 @@ import "os"
 // Used by tests in this package and by cmd integration tests to prevent env var leakage.
 func ResetConfigEnv() {
 	for _, k := range []string{
-		"PORT", "TARGET_BASE_URL", "GENAI_BASE_URL", "ADMIN_TOKEN",
+		"PORT", "TARGET_BASE_URL", "ADMIN_TOKEN",
 		"DISABLE_THINKING", "GENAI_MODEL", "MAX_RETRIES", "LOG_LEVEL",
 		"COOLDOWN_SEC", "API_KEYS", "KEY", "KEY1", "KEY2", "KEY3",
 		"KEY4", "KEY5", "KEYA", "KEYB",
