@@ -157,3 +157,8 @@ func TestAllKeyIndexCommands_HaveByNameFlag(t *testing.T) {
 		})
 	}
 }
+func TestProviderUsageCmd_Exists(t *testing.T) {
+	if usageCmd == nil {
+		t.Fatal("expected usageCmd to be defined")
+	}
+}
