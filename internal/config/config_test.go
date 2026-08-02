@@ -30,7 +30,6 @@ func TestValidate_InvalidPort(t *testing.T) {
 			cfg := DefaultConfig()
 			cfg.Port = tt.port
 			cfg.TargetBase = "https://example.com"
-			cfg.GenaiBase = "https://ai.example.com"
 			cfg.Keys = []string{"nvapi-key1"}
 			if err := cfg.Validate(); err == nil {
 				t.Errorf("Validate() expected error for port %d, got nil", tt.port)
@@ -52,7 +51,6 @@ func TestValidate_RequiredFields(t *testing.T) {
 			cfg := DefaultConfig()
 			cfg.Port = 8080
 			cfg.TargetBase = "https://example.com"
-			cfg.GenaiBase = "https://ai.example.com"
 			cfg.Keys = []string{"nvapi-key1"}
 			tt.modify(cfg)
 			if err := cfg.Validate(); err == nil {
@@ -77,7 +75,6 @@ func TestValidate_CircuitBreakerFields(t *testing.T) {
 			cfg := DefaultConfig()
 			cfg.Port = 8080
 			cfg.TargetBase = "https://example.com"
-			cfg.GenaiBase = "https://ai.example.com"
 			cfg.Keys = []string{"nvapi-key1"}
 			tt.modify(cfg)
 			if err := cfg.Validate(); err == nil {
@@ -150,7 +147,6 @@ func TestConfig_HealthCheckIntervalTooSmall(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Port = 8080
 	cfg.TargetBase = "https://example.com"
-	cfg.GenaiBase = "https://ai.example.com"
 	cfg.Keys = []string{"nvapi-key1"}
 	cfg.HealthCheckIntervalSec = 4
 	if err := cfg.Validate(); err == nil {
@@ -169,7 +165,6 @@ func TestConfig_HTTPTimeoutSec_TooSmall(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Port = 8080
 	cfg.TargetBase = "https://example.com"
-	cfg.GenaiBase = "https://ai.example.com"
 	cfg.Keys = []string{"nvapi-key1"}
 	cfg.HTTPTimeoutSec = 0
 	if err := cfg.Validate(); err == nil {
@@ -181,7 +176,6 @@ func TestConfig_HTTPTimeoutSec_Valid(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Port = 8080
 	cfg.TargetBase = "https://example.com"
-	cfg.GenaiBase = "https://ai.example.com"
 	cfg.Keys = []string{"nvapi-key1"}
 	cfg.HTTPTimeoutSec = 15
 	if err := cfg.Validate(); err != nil {
@@ -193,7 +187,6 @@ func TestConfig_HealthCheckTimeoutTooSmall(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Port = 8080
 	cfg.TargetBase = "https://example.com"
-	cfg.GenaiBase = "https://ai.example.com"
 	cfg.Keys = []string{"nvapi-key1"}
 	cfg.HealthCheckTimeoutSec = 0
 	if err := cfg.Validate(); err == nil {
@@ -299,7 +292,6 @@ func TestMergeDefaults_PreservesSetValues(t *testing.T) {
 func TestMergeDefaults_SkipsFieldsWithoutDefaultTag(t *testing.T) {
 	cfg := &Config{
 		TargetBase: "https://api.example.com",
-		GenaiBase:  "https://ai.example.com",
 		AdminToken: "my-token",
 	}
 	mergeDefaults(cfg)
@@ -307,9 +299,6 @@ func TestMergeDefaults_SkipsFieldsWithoutDefaultTag(t *testing.T) {
 	// Fields without default tag should be preserved
 	if cfg.TargetBase != "https://api.example.com" {
 		t.Errorf("TargetBase should be preserved, got %q", cfg.TargetBase)
-	}
-	if cfg.GenaiBase != "https://ai.example.com" {
-		t.Errorf("GenaiBase should be preserved, got %q", cfg.GenaiBase)
 	}
 	if cfg.AdminToken != "my-token" {
 		t.Errorf("AdminToken should be preserved, got %q", cfg.AdminToken)
@@ -345,9 +334,6 @@ max_retries = 7
 	if cfg.TargetBase != "https://api.example.com" {
 		t.Errorf("TargetBase = %q, want %q", cfg.TargetBase, "https://api.example.com")
 	}
-	if cfg.GenaiBase != "https://ai.example.com" {
-		t.Errorf("GenaiBase = %q, want %q", cfg.GenaiBase, "https://ai.example.com")
-	}
 	if cfg.Port != 9090 {
 		t.Errorf("Port = %d, want %d", cfg.Port, 9090)
 	}
@@ -381,7 +367,6 @@ func TestLoadToml_Malformed(t *testing.T) {
 func TestSaveToml_LoadToml_Roundtrip(t *testing.T) {
 	orig := DefaultConfig()
 	orig.TargetBase = "https://api.example.com"
-	orig.GenaiBase = "https://ai.example.com"
 	orig.Port = 7070
 	orig.CooldownSec = 30
 	orig.MaxRetries = 5
@@ -403,9 +388,6 @@ func TestSaveToml_LoadToml_Roundtrip(t *testing.T) {
 
 	if loaded.TargetBase != orig.TargetBase {
 		t.Errorf("TargetBase = %q, want %q", loaded.TargetBase, orig.TargetBase)
-	}
-	if loaded.GenaiBase != orig.GenaiBase {
-		t.Errorf("GenaiBase = %q, want %q", loaded.GenaiBase, orig.GenaiBase)
 	}
 	if loaded.Port != orig.Port {
 		t.Errorf("Port = %d, want %d", loaded.Port, orig.Port)
@@ -438,10 +420,6 @@ target = "https://api.example.com"
 	// TargetBase should be set from TOML
 	if cfg.TargetBase != "https://api.example.com" {
 		t.Errorf("TargetBase = %q, want %q", cfg.TargetBase, "https://api.example.com")
-	}
-	// GenaiBase should be empty (not set in TOML)
-	if cfg.GenaiBase != "" {
-		t.Errorf("GenaiBase = %q, want empty", cfg.GenaiBase)
 	}
 	// Port should use default from DefaultConfig
 	if cfg.Port != 8080 {
@@ -496,9 +474,6 @@ func TestTomlProviderConfig_AllFields(t *testing.T) {
 
 	if cfg.TargetBase != "https://api.example.com" {
 		t.Errorf("TargetBase = %q, want %q", cfg.TargetBase, "https://api.example.com")
-	}
-	if cfg.GenaiBase != "https://ai.example.com" {
-		t.Errorf("GenaiBase = %q, want %q", cfg.GenaiBase, "https://ai.example.com")
 	}
 	if cfg.Port != 7070 {
 		t.Errorf("Port = %d, want %d", cfg.Port, 7070)
@@ -572,9 +547,6 @@ func TestTomlProviderConfig_DefaultValues(t *testing.T) {
 	if cfg.TargetBase != "https://api.example.com" {
 		t.Errorf("TargetBase = %q, want %q", cfg.TargetBase, "https://api.example.com")
 	}
-	if cfg.GenaiBase != "https://ai.example.com" {
-		t.Errorf("GenaiBase = %q, want %q", cfg.GenaiBase, "https://ai.example.com")
-	}
 
 	// All optional fields should fall through to DefaultConfig
 	if cfg.Port != 8080 {
@@ -630,7 +602,6 @@ func TestTomlProviderConfig_DefaultValues(t *testing.T) {
 func TestTomlProviderConfig_Roundtrip(t *testing.T) {
 	orig := DefaultConfig()
 	orig.TargetBase = "https://api.example.com"
-	orig.GenaiBase = "https://ai.example.com"
 	orig.Port = 7070
 	orig.CooldownSec = 45
 	orig.MaxRetries = 7
@@ -666,9 +637,6 @@ func TestTomlProviderConfig_Roundtrip(t *testing.T) {
 
 	if loaded.TargetBase != orig.TargetBase {
 		t.Errorf("TargetBase = %q, want %q", loaded.TargetBase, orig.TargetBase)
-	}
-	if loaded.GenaiBase != orig.GenaiBase {
-		t.Errorf("GenaiBase = %q, want %q", loaded.GenaiBase, orig.GenaiBase)
 	}
 	if loaded.Port != orig.Port {
 		t.Errorf("Port = %d, want %d", loaded.Port, orig.Port)
@@ -749,9 +717,6 @@ genai = "https://genai.example.com"
 	if !ok {
 		t.Fatal("provider default not found in map")
 	}
-	if cfg.GenaiBase != "https://genai.example.com" {
-		t.Errorf("GenaiBase = %q, want %q", cfg.GenaiBase, "https://genai.example.com")
-	}
 	if cfg.TargetBase != "https://api.example.com" {
 		t.Errorf("TargetBase = %q, want %q", cfg.TargetBase, "https://api.example.com")
 	}
@@ -784,9 +749,6 @@ genai = "https://ai.secondary.example.com"
 	// Should use first provider (primary) as the main config
 	if cfg.TargetBase != "https://primary.example.com" {
 		t.Errorf("TargetBase = %q, want %q (first provider)", cfg.TargetBase, "https://primary.example.com")
-	}
-	if cfg.GenaiBase != "https://ai.primary.example.com" {
-		t.Errorf("GenaiBase = %q, want %q (first provider)", cfg.GenaiBase, "https://ai.primary.example.com")
 	}
 	if cfg.Port != 9090 {
 		t.Errorf("Port = %d, want %d (first provider)", cfg.Port, 9090)
@@ -884,9 +846,6 @@ genai = "https://ai.example.com"
 	}
 	if cfg.TargetBase != "https://api.example.com" {
 		t.Errorf("TargetBase = %q, want %q", cfg.TargetBase, "https://api.example.com")
-	}
-	if cfg.GenaiBase != "https://ai.example.com" {
-		t.Errorf("GenaiBase = %q, want %q", cfg.GenaiBase, "https://ai.example.com")
 	}
 	if cfg.Port != 8080 {
 		t.Errorf("Port = %d, want default 8080", cfg.Port)

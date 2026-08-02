@@ -50,16 +50,8 @@ func readRequestBody(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 	return bodyBytes, nil
 }
 
-// buildTargetURL constructs the upstream URL based on path routing rules.
-// Routes /genai/ paths to GenaiBase, everything else to TargetBase.
+// buildTargetURL constructs the upstream URL.
 func buildTargetURL(cfg *config.Config, path, rawQuery string) string {
-	if strings.Contains(path, "/genai/") {
-		target := cfg.GenaiBase + path
-		if rawQuery != "" {
-			target += "?" + rawQuery
-		}
-		return target
-	}
 	if strings.HasSuffix(cfg.TargetBase, "/v1") && strings.HasPrefix(path, "/v1") {
 		path = path[3:]
 	}

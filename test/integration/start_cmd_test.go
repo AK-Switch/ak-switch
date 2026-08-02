@@ -37,7 +37,6 @@ func TestStartCmd_TOMLMode(t *testing.T) {
 
 	cli.RunCommand(t, "akswitch", "provider", "add", "testp",
 		"--target", "http://localhost:18999/v1",
-		"--genai", "http://localhost:18999",
 		"--port", "19301",
 	)
 	cli.RunCommand(t, "akswitch", "key", "add", "testp", "sk-test-key-12345")
@@ -94,7 +93,6 @@ func TestStartCmd_NoKeys(t *testing.T) {
 
 	cli.RunCommand(t, "akswitch", "provider", "add", "nokey",
 		"--target", "http://localhost:18999/v1",
-		"--genai", "http://localhost:18999",
 		"--port", "19302",
 	)
 	// 故意不加 Key
@@ -137,14 +135,12 @@ func TestStartCmd_ProviderFilter(t *testing.T) {
 
 	cli.RunCommand(t, "akswitch", "provider", "add", "test-a",
 		"--target", "http://localhost:18999/v1",
-		"--genai", "http://localhost:18999",
 		"--port", "19305",
 	)
 	cli.RunCommand(t, "akswitch", "key", "add", "test-a", "sk-test-key-aaa")
 
 	cli.RunCommand(t, "akswitch", "provider", "add", "test-b",
 		"--target", "http://localhost:18999/v1",
-		"--genai", "http://localhost:18999",
 		"--port", "19306",
 	)
 	cli.RunCommand(t, "akswitch", "key", "add", "test-b", "sk-test-key-bbb")
@@ -203,14 +199,12 @@ func TestStartCmd_AllFlag(t *testing.T) {
 
 	cli.RunCommand(t, "akswitch", "provider", "add", "test-a",
 		"--target", "http://localhost:18999/v1",
-		"--genai", "http://localhost:18999",
 		"--port", sharedPort,
 	)
 	cli.RunCommand(t, "akswitch", "key", "add", "test-a", "sk-test-key-aaa")
 
 	cli.RunCommand(t, "akswitch", "provider", "add", "test-b",
 		"--target", "http://localhost:18999/v1",
-		"--genai", "http://localhost:18999",
 		"--port", sharedPort,
 	)
 	cli.RunCommand(t, "akswitch", "key", "add", "test-b", "sk-test-key-bbb")
@@ -284,14 +278,12 @@ func TestStartCmd_DefaultProvider(t *testing.T) {
 
 	cli.RunCommand(t, "akswitch", "provider", "add", "default-a",
 		"--target", "http://localhost:18999/v1",
-		"--genai", "http://localhost:18999",
 		"--port", sharedPort,
 	)
 	cli.RunCommand(t, "akswitch", "key", "add", "default-a", "sk-test-key-aaa")
 
 	cli.RunCommand(t, "akswitch", "provider", "add", "other-b",
 		"--target", "http://localhost:18999/v1",
-		"--genai", "http://localhost:18999",
 		"--port", sharedPort,
 	)
 	cli.RunCommand(t, "akswitch", "key", "add", "other-b", "sk-test-key-bbb")

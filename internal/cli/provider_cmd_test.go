@@ -21,7 +21,7 @@ func TestKeyAddCmd_Flags(t *testing.T) {
 }
 
 func TestProviderAddCmd_Flags(t *testing.T) {
-	flags := []string{"target", "port", "genai", "cooldown-sec", "max-retries", "default"}
+	flags := []string{"target", "port", "cooldown-sec", "max-retries", "default"}
 	for _, f := range flags {
 		t.Run(f, func(t *testing.T) {
 			if providerAddCmd.Flags().Lookup(f) == nil {
@@ -122,7 +122,7 @@ func TestProviderUpdateCmd_Exists(t *testing.T) {
 }
 
 func TestProviderUpdateCmd_Flags(t *testing.T) {
-	flags := []string{"target", "genai", "cooldown-sec", "max-retries",
+	flags := []string{"target", "cooldown-sec", "max-retries",
 		"backoff-cap-sec", "backoff-multiplier", "cb-reset-sec",
 		"upstream-cb-threshold", "http-timeout-sec", "health-check-interval-sec",
 		"admin-token", "disable-thinking", "genai-model", "keys-file", "default"}

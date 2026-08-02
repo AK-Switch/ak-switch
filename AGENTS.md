@@ -79,6 +79,15 @@ docs/
 - **测试分层** — 每个测试文件必须加 `//go:build unit` / `integration` / `e2e` 标签
 - **CLI 测试模式** — 新增命令加 `TestXxxCmd_Exists`，新增标志加 `TestXxxCmd_HasYyyFlag`
 
+## CLI Design Rules
+
+- **verb-first** — 所有命令以动词开头（`status`、`config list`、`key add`），而非名词（`switch status`）
+- **provider 参数统一位置** — provider 名称始终作为第一个位置参数（`<provider>` 必填或 `[provider]` 可选）。例外：`config get` 和 `config set` 以 key 为主、provider 为上下文，provider 放在最后
+- **必填用尖括号，可选用方括号** — `<name>` 表示必填，`[provider]` 表示可选
+- **flag 语义一致** — 同含义的 flag 在不同命令中使用相同的名称和类型（如 `--target`、`--cooldown-sec`）
+- **无使用场景的字段不保留** — 不添加不使用的配置字段、flag 或路由逻辑
+- **CLI 测试覆盖** — 新增命令加 `TestXxxCmd_Exists`，新增标志加 `TestXxxCmd_HasYyyFlag`，参数变化加输出断言测试
+
 ## Testing
 
 四个设计原则：

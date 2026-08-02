@@ -63,7 +63,6 @@ func TestFullE2E_RealUserSimulation(t *testing.T) {
 	t.Log("1. akswitch provider add")
 	mustRun(t, bin, "provider", "add", "e2e-test",
 		"--target", upstream.URL+"/v1",
-		"--genai", upstream.URL,
 		"--port", "19901",
 	)
 
