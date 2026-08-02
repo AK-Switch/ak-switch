@@ -179,7 +179,6 @@ func TestCLI_ConfigView(t *testing.T) {
 		"Configuration source:",
 		"Port:",
 		"Target base URL:",
-		"GenAI base URL:",
 	})
 }
 
@@ -990,7 +989,6 @@ func TestProviderAdd_CreatesProviderEntry(t *testing.T) {
 	addArgs := []string{"akswitch", "provider", "add", "test-provider",
 		"--target", "https://test.api.com/v1",
 		"--port", "9999",
-		"--genai", "https://test.api.com",
 		"--cooldown-sec", "30",
 		"--max-retries", "5",
 	}
@@ -1010,9 +1008,6 @@ func TestProviderAdd_CreatesProviderEntry(t *testing.T) {
 	}
 	if tc.Port != 9999 {
 		t.Errorf("Port = %d, want 9999", tc.Port)
-	}
-	if p.GenaiBase != "https://test.api.com" {
-		t.Errorf("Genai = %q, want %q", p.GenaiBase, "https://test.api.com")
 	}
 	if p.CooldownSec != 30 {
 		t.Errorf("CooldownSec = %d, want 30", p.CooldownSec)
@@ -1264,7 +1259,6 @@ func TestCLI_ProviderInfo_Format(t *testing.T) {
 		Provider: map[string]*config.Config{
 			"alpha": {
 				TargetBase:          "https://alpha.test/v1",
-				GenaiBase:           "https://alpha.test",
 				CooldownSec:         60,
 				MaxRetries:          3,
 				BackoffCapSec:       120,
@@ -1485,7 +1479,6 @@ func TestProviderUpdate_MultipleFlags(t *testing.T) {
 	}
 	runAkswitch(t, "akswitch", "provider", "add", "multi-flags",
 		"--target", "https://old.test/v1",
-		"--genai", "https://old-genai.test",
 		"--cooldown-sec", "10",
 		"--max-retries", "1",
 		"--port", "9603",
@@ -1519,9 +1512,6 @@ func TestProviderUpdate_MultipleFlags(t *testing.T) {
 		t.Errorf("BackoffCapSec = %d, want 200", p.BackoffCapSec)
 	}
 	// Fields not in the update command should be unchanged
-	if p.GenaiBase != "https://old-genai.test" {
-		t.Errorf("GenaiBase should be unchanged, got: %q", p.GenaiBase)
-	}
 }
 
 // TestProviderUpdate_DefaultFlag 验证 --default flag 设置默认 provider。

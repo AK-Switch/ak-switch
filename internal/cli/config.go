@@ -71,7 +71,6 @@ var configInitCmd = &cobra.Command{
 			Provider: map[string]*config.Config{
 				"example-a": {
 					TargetBase:  "https://api.example-a.com/v1",
-					GenaiBase:   "https://api.example-a.com",
 					CooldownSec: 60,
 					MaxRetries:  3,
 				},
@@ -122,7 +121,6 @@ var configViewCmd = &cobra.Command{
 			fmt.Printf("\n--- Provider: %s ---\n", name)
 			fmt.Printf("  Port: %d\n", sanitized.Port)
 			fmt.Printf("  Target base URL: %s\n", sanitized.TargetBase)
-			fmt.Printf("  GenAI base URL: %s\n", sanitized.GenaiBase)
 			if sanitized.AdminToken != "" {
 				fmt.Println("  Admin token: (set)")
 			}
@@ -199,7 +197,7 @@ var configListCmd = &cobra.Command{
 			return fmt.Errorf("API error (HTTP %d): %s", resp.StatusCode, string(body))
 		}
 
-		// Server returns {"providers": {"name": {TargetBase, GenaiBase, Keys}}} for all providers
+		// Server returns {"providers": {"name": {TargetBase, Keys}}} for all providers
 		var raw map[string]json.RawMessage
 		if err := json.Unmarshal(body, &raw); err == nil {
 			if providersJSON, ok := raw["providers"]; ok {
@@ -229,7 +227,7 @@ var configListCmd = &cobra.Command{
 			}
 		}
 
-		// Server returns {"TargetBase": "...", "GenaiBase": "...", "Keys": [...]} for single provider
+		// Server returns {"TargetBase": "...", "Keys": [...]} for single provider
 		var cp config.ConfigPayload
 		if err := json.Unmarshal(body, &cp); err == nil && cp.TargetBase != "" {
 			name := ""
@@ -426,7 +424,6 @@ func printProviderParams(provider string, cp config.ConfigPayload) {
 
 	fields := []struct{ label, value string }{
 		{"TargetBase:", cp.TargetBase},
-		{"GenaiBase:", cp.GenaiBase},
 		{"Keys:", fmt.Sprintf("%v", cp.Keys)},
 	}
 	for _, f := range fields {

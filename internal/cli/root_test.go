@@ -34,7 +34,6 @@ func TestDetectServerPort_FromConfigFile(t *testing.T) {
 [provider]
 [provider.test]
 target = "http://example.com"
-genai = "http://example.com"
 `
 	if err := os.WriteFile(tomlPath, []byte(content), 0644); err != nil {
 		t.Fatalf("failed to write config.toml: %v", err)

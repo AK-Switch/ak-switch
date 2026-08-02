@@ -36,6 +36,7 @@ func LoadTomlConfig(path string) (*TomlConfig, error) {
 	if err := toml.Unmarshal(data, &tc); err != nil {
 		return nil, err
 	}
+	warnDeprecatedKeys(data)
 	if tc.Provider == nil {
 		tc.Provider = make(map[string]*Config)
 	}

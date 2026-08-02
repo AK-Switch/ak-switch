@@ -10,6 +10,32 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
+// deprecatedKeys maps removed TOML field names to their human-readable descriptions.
+var deprecatedKeys = map[string]string{
+	"genai": "use `target` instead (GenaiBase was removed)",
+}
+
+// warnDeprecatedKeys scans raw TOML text for keys that no longer exist in the
+// Config struct and logs a warning with a migration hint. Uses a line-by-line
+// scan to avoid false positives in values or comments.
+func warnDeprecatedKeys(data []byte) {
+	for lineNum, line := range strings.Split(string(data), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "[") {
+			continue
+		}
+		for key, hint := range deprecatedKeys {
+			if strings.HasPrefix(trimmed, key) {
+				rest := trimmed[len(key):]
+				if rest == "" || rest[0] == '=' || rest[0] == ' ' || rest[0] == '	' {
+					slog.Warn("config.toml contains deprecated field",
+						"field", key, "line", lineNum+1, "hint", hint)
+				}
+			}
+		}
+	}
+}
+
 // XDGConfigPath 返回 ~/.akswitch/config.toml 配置路径。
 // 可通过 ConfigDir 变量（Go 层面）或 AKSWITCH_CONFIG_DIR 环境变量覆盖。
 var ConfigDir string
@@ -46,6 +72,7 @@ func LoadAllTomlProviders(path string) (map[string]*Config, error) {
 			Message:  fmt.Sprintf("配置错误: TOML 解析失败: %v", err),
 		}
 	}
+	warnDeprecatedKeys(data)
 	DefaultProviderName = tc.DefaultProvider
 	if len(tc.Provider) == 0 {
 		return nil, &ConfigError{

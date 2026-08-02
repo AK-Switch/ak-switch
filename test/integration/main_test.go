@@ -19,7 +19,7 @@ import (
 // resetAllEnv unsets all config env vars to prevent interference between tests.
 func resetAllEnv() {
 	for _, k := range []string{
-		"PORT", "TARGET_BASE_URL", "GENAI_BASE_URL", "ADMIN_TOKEN",
+		"PORT", "TARGET_BASE_URL", "ADMIN_TOKEN",
 		"DISABLE_THINKING", "GENAI_MODEL", "MAX_RETRIES", "LOG_LEVEL",
 		"COOLDOWN_SEC", "API_KEYS", "KEY", "KEY1", "KEY2", "KEY3",
 		"KEY4", "KEY5", "KEYA", "KEYB",
@@ -37,7 +37,6 @@ func setupServer(tb testing.TB, upstream *httptest.Server, poolKeys []string, ma
 	tb.Helper()
 	cfg := &config.Config{
 		TargetBase:  upstream.URL,
-		GenaiBase:   upstream.URL,
 		Port:        0,
 		MaxRetries:  maxRetries,
 		CooldownSec: cooldownSec,
@@ -52,7 +51,6 @@ func setupServer(tb testing.TB, upstream *httptest.Server, poolKeys []string, ma
 func newTestServer(keys []string) *httptest.Server {
 	cfg := &config.Config{
 		TargetBase:  "http://localhost:19999",
-		GenaiBase:   "http://localhost:19999",
 		Port:        19999,
 		MaxRetries:  3,
 		CooldownSec: 60,

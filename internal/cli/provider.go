@@ -29,13 +29,11 @@ func init() {
 
 	providerAddCmd.Flags().StringP("target", "t", "", "Upstream target URL (required)")
 	providerAddCmd.Flags().IntP("port", "p", 0, "HTTP listen port (required for first provider)")
-	providerAddCmd.Flags().StringP("genai", "g", "", "GenAI base URL (optional)")
 	providerAddCmd.Flags().IntP("cooldown-sec", "c", 60, "Cooldown seconds after rate-limit")
 	providerAddCmd.Flags().IntP("max-retries", "r", 3, "Max retry attempts for upstream")
 	providerAddCmd.Flags().Bool("default", false, "Set this provider as the default")
 
 	providerUpdateCmd.Flags().StringP("target", "t", "", "Upstream target URL")
-	providerUpdateCmd.Flags().String("genai", "", "GenAI base URL")
 	providerUpdateCmd.Flags().IntP("cooldown-sec", "c", -1, "Cooldown seconds after rate-limit (-1 to skip)")
 	providerUpdateCmd.Flags().IntP("max-retries", "r", -1, "Max retry attempts for upstream (-1 to skip)")
 	providerUpdateCmd.Flags().Int("backoff-cap-sec", -1, "Backoff cap seconds (-1 to skip)")
@@ -74,7 +72,6 @@ Example:
 
 		target, _ := cmd.Flags().GetString("target")
 		port, _ := cmd.Flags().GetInt("port")
-		genai, _ := cmd.Flags().GetString("genai")
 		cooldown, _ := cmd.Flags().GetInt("cooldown-sec")
 		maxRetries, _ := cmd.Flags().GetInt("max-retries")
 
@@ -119,7 +116,6 @@ Example:
 		// Add new provider
 		tc.Provider[name] = &config.Config{
 			TargetBase: target,
-			GenaiBase:  genai,
 			CooldownSec: cooldown,
 			MaxRetries:  maxRetries,
 		}
@@ -307,8 +303,7 @@ current values. If no flags are provided, an error is returned.
 
 Example:
   akswitch provider update nvidia --target https://new-url.example.com/v1
-  akswitch provider update sensenova --cooldown-sec 30 --max-retries 5
-  akswitch provider update nvidia --genai https://new-genai.example.com/v1 --default`,
+  akswitch provider update sensenova --cooldown-sec 30 --max-retries 5`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
@@ -345,10 +340,6 @@ Example:
 			changes++
 		}
 
-		if hasCLIFlag("genai") {
-			prov.GenaiBase = getCLIFlagValue("genai")
-			changes++
-		}
 		if hasCLIFlag("cooldown-sec") {
 			v, _ := cmd.Flags().GetInt("cooldown-sec")
 			if v < -1 {
@@ -573,9 +564,6 @@ Example:
 		fmt.Println("\n  Config:")
 		fmt.Printf("    Target:  %s\n", sanitized.TargetBase)
 		fmt.Printf("    Port:    %d\n", sanitized.Port)
-		if sanitized.GenaiBase != "" {
-			fmt.Printf("    GenAI:   %s\n", sanitized.GenaiBase)
-		}
 		if sanitized.AdminToken != "" {
 			fmt.Println("    Admin token: (set)")
 		}

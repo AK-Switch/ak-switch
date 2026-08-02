@@ -409,7 +409,6 @@ func TestProxyWithKeyManagement(t *testing.T) {
 	// Create AK Switch with 1 initial key (must have at least 1 to avoid panic in Next())
 	cfg := &config.Config{
 		TargetBase:  upstream.URL,
-		GenaiBase:   upstream.URL,
 		Port:        8080,
 		MaxRetries:  10,
 		CooldownSec: 60,
@@ -513,7 +512,6 @@ func TestProxyOnlyAvailableKeysTried(t *testing.T) {
 	pool := keypool.NewKeyPool([]string{"key-a", "key-b", "key-c", "key-d", "key-e"}, nil)
 	cfg := &config.Config{
 		TargetBase:  upstream.URL,
-		GenaiBase:   upstream.URL,
 		Port:        0,
 		MaxRetries:  5,
 		CooldownSec: 30,
@@ -979,7 +977,6 @@ func TestProxyError_UpstreamError(t *testing.T) {
 	// An invalid scheme causes http.NewRequestWithContext to return an error.
 	cfg := &config.Config{
 		TargetBase:  "://invalid",
-		GenaiBase:   "://invalid",
 		Port:        0,
 		MaxRetries:  3,
 		CooldownSec: 60,
@@ -1045,7 +1042,6 @@ func TestCB_RateLimitRecovery(t *testing.T) {
 	// 3 keys, CooldownSec=2 so each key gets short pool cooldown
 	cfg := &config.Config{
 		TargetBase:          upstream.URL,
-		GenaiBase:           upstream.URL,
 		Port:                0,
 		MaxRetries:          10,
 		CooldownSec:         2,
@@ -1089,7 +1085,6 @@ func TestCB_QuotaExhausted(t *testing.T) {
 	// 1 key with low BackoffCapSec and small MaxRetries for fast test
 	cfg := &config.Config{
 		TargetBase:          upstream.URL,
-		GenaiBase:           upstream.URL,
 		Port:                0,
 		MaxRetries:          3,
 		CooldownSec:         1,
@@ -1144,7 +1139,6 @@ func TestCB_UpstreamErrorNoKeyPenalty(t *testing.T) {
 	// MaxRetries=3, UpstreamCBThreshold high so upstream CB does not open
 	cfg := &config.Config{
 		TargetBase:          upstream.URL,
-		GenaiBase:           upstream.URL,
 		Port:                0,
 		MaxRetries:          3,
 		CooldownSec:         1,
@@ -1230,7 +1224,6 @@ func TestCB_UpstreamCircuitBreakerOpens(t *testing.T) {
 
 	cfg := &config.Config{
 		TargetBase:          upstream.URL,
-		GenaiBase:           upstream.URL,
 		Port:                0,
 		MaxRetries:          10,
 		CooldownSec:         1,
@@ -1460,7 +1453,6 @@ func TestKeyPersistence_AddKeyRestart(t *testing.T) {
 
 	cfg := &config.Config{
 		TargetBase:  upstream.URL,
-		GenaiBase:   upstream.URL,
 		Port:        0,
 		MaxRetries:  3,
 		CooldownSec: 60,
@@ -1513,7 +1505,6 @@ func TestKeyPersistence_AddKeyRestart(t *testing.T) {
 	restoredPool := keypool.NewKeyPool(fileKeys, fileNames)
 	newCfg := &config.Config{
 		TargetBase:  upstream.URL,
-		GenaiBase:   upstream.URL,
 		Port:        0,
 		MaxRetries:  3,
 		CooldownSec: 60,
@@ -1557,7 +1548,6 @@ func TestKeyPersistence_DeleteKeyRestart(t *testing.T) {
 
 	cfg := &config.Config{
 		TargetBase:  upstream.URL,
-		GenaiBase:   upstream.URL,
 		Port:        0,
 		MaxRetries:  3,
 		CooldownSec: 60,
@@ -1620,7 +1610,6 @@ func TestKeyPersistence_DisableKeyAndPersist(t *testing.T) {
 
 	cfg := &config.Config{
 		TargetBase:  upstream.URL,
-		GenaiBase:   upstream.URL,
 		Port:        0,
 		MaxRetries:  3,
 		CooldownSec: 60,
@@ -1671,7 +1660,6 @@ func TestKeyEncryption_NoEncryption_BackwardCompatible(t *testing.T) {
 
 	cfg := &config.Config{
 		TargetBase:  upstream.URL,
-		GenaiBase:   upstream.URL,
 		Port:        0,
 		MaxRetries:  3,
 		CooldownSec: 60,
@@ -1733,7 +1721,6 @@ func TestLogEntry_HasNewFields(t *testing.T) {
 	logFile := filepath.Join(t.TempDir(), "test.log")
 	cfg := &config.Config{
 		TargetBase:  upstream.URL,
-		GenaiBase:   upstream.URL,
 		Port:        0,
 		MaxRetries:  10,
 		CooldownSec: 60,
@@ -1797,7 +1784,6 @@ func TestLogEntry_ExhaustionHas503(t *testing.T) {
 	logFile := filepath.Join(t.TempDir(), "test.log")
 	cfg := &config.Config{
 		TargetBase:  upstream.URL,
-		GenaiBase:   upstream.URL,
 		Port:        0,
 		MaxRetries:  2,
 		CooldownSec: 2,
@@ -1868,7 +1854,6 @@ func TestLogEntry_CLIFormat(t *testing.T) {
 	logFile := filepath.Join(t.TempDir(), "test.log")
 	cfg := &config.Config{
 		TargetBase:  upstream.URL,
-		GenaiBase:   upstream.URL,
 		Port:        0,
 		MaxRetries:  10,
 		CooldownSec: 60,
@@ -1960,13 +1945,11 @@ func TestHealthHandler(t *testing.T) {
 func TestHealthHandlerProviderFilter(t *testing.T) {
 	cfg1 := &config.Config{
 		TargetBase: "http://localhost:19998",
-		GenaiBase:  "http://localhost:19998",
 		Port:       19999, MaxRetries: 3, CooldownSec: 60,
 		Keys: []string{"key-a", "key-b", "key-c"},
 	}
 	cfg2 := &config.Config{
 		TargetBase: "http://localhost:19997",
-		GenaiBase:  "http://localhost:19997",
 		Port:       19998, MaxRetries: 3, CooldownSec: 60,
 		Keys: []string{"key-x", "key-y"},
 	}
@@ -2040,9 +2023,6 @@ func TestConfigGet(t *testing.T) {
 	if body["targetBase"] != "http://localhost:19999" {
 		t.Errorf(`expected targetBase="http://localhost:19999", got %v`, body["targetBase"])
 	}
-	if body["genaiBase"] != "http://localhost:19999" {
-		t.Errorf(`expected genaiBase="http://localhost:19999", got %v`, body["genaiBase"])
-	}
 
 	keys, ok := body["keys"].([]interface{})
 	if !ok {
@@ -2086,14 +2066,13 @@ func TestConfigPost(t *testing.T) {
 	defer os.Chdir(origDir)
 
 	// 写入初始 .env 供 reloadConfig 使用
-	envContent := "PORT=19999\nTARGET_BASE_URL=http://localhost:19999\nGENAI_BASE_URL=http://localhost:19999\nAPI_KEYS=key-a,key-b\nCOOLDOWN_SEC=60\nMAX_RETRIES=3\n"
+	envContent := "PORT=19999\nTARGET_BASE_URL=http://localhost:19999\nAPI_KEYS=key-a,key-b\nCOOLDOWN_SEC=60\nMAX_RETRIES=3\n"
 	if err := os.WriteFile(filepath.Join(tmpDir, ".env"), []byte(envContent), 0600); err != nil {
 		t.Fatal(err)
 	}
 
 	cfg := &config.Config{
 		TargetBase:  "http://localhost:19999",
-		GenaiBase:   "http://localhost:19999",
 		Port:        19999,
 		MaxRetries:  3,
 		CooldownSec: 60,
@@ -2107,7 +2086,7 @@ func TestConfigPost(t *testing.T) {
 	defer srv.Close()
 
 	// POST /api/config is no longer supported in ProviderRouter architecture
-	reqBody := `{"targetBase":"https://new.example.com/v1","genaiBase":"https://genai.example.com","keys":["new-key-1","new-key-2"]}`
+	reqBody := `{"targetBase":"https://new.example.com/v1","keys":["new-key-1","new-key-2"]}`
 	resp, err := http.Post(srv.URL+"/api/config", "application/json", strings.NewReader(reqBody))
 	if err != nil {
 		t.Fatalf("POST /api/config: %v", err)
@@ -2302,7 +2281,6 @@ func TestClearHandler(t *testing.T) {
 func TestHealthHandlerAuth(t *testing.T) {
 	cfg := &config.Config{
 		TargetBase:  "http://localhost:19999",
-		GenaiBase:   "http://localhost:19999",
 		Port:        19999,
 		MaxRetries:  3,
 		CooldownSec: 60,
@@ -2362,7 +2340,6 @@ func TestHealthHandlerAuth(t *testing.T) {
 func TestClearHandlerAuth(t *testing.T) {
 	cfg := &config.Config{
 		TargetBase:  "http://localhost:19999",
-		GenaiBase:   "http://localhost:19999",
 		Port:        19999,
 		MaxRetries:  3,
 		CooldownSec: 60,
@@ -2454,14 +2431,12 @@ func TestStatsHandler(t *testing.T) {
 func TestStatsHandlerPerProvider(t *testing.T) {
 	cfg1 := &config.Config{
 		TargetBase: "http://localhost:19998",
-		GenaiBase:  "http://localhost:19998",
 		Port:       19999,
 		MaxRetries: 3, CooldownSec: 60,
 		Keys: []string{"key-a", "key-b", "key-c"},
 	}
 	cfg2 := &config.Config{
 		TargetBase: "http://localhost:19997",
-		GenaiBase:  "http://localhost:19997",
 		Port:       19998,
 		MaxRetries: 3, CooldownSec: 60,
 		Keys: []string{"key-x", "key-y"},
@@ -2549,7 +2524,6 @@ func TestStatsHandlerPerProvider(t *testing.T) {
 func TestStatsHandlerPerProviderAfterDisable(t *testing.T) {
 	cfg := &config.Config{
 		TargetBase: "http://localhost:19999",
-		GenaiBase:  "http://localhost:19999",
 		Port:       19999, MaxRetries: 3, CooldownSec: 60, AdminToken: "",
 		Keys: []string{"key-a", "key-b", "key-c"},
 	}
@@ -2645,7 +2619,6 @@ func TestDisableKeyHandler(t *testing.T) {
 func TestDisableKeyHandlerAuth(t *testing.T) {
 	cfg := &config.Config{
 		TargetBase:  "http://localhost:19999",
-		GenaiBase:   "http://localhost:19999",
 		Port:        19999,
 		MaxRetries:  3,
 		CooldownSec: 60,
@@ -2796,7 +2769,6 @@ func TestDeleteKeyByIndexHandler(t *testing.T) {
 func TestDeleteKeyByIndexHandlerAuth(t *testing.T) {
 	cfg := &config.Config{
 		TargetBase:  "http://localhost:19999",
-		GenaiBase:   "http://localhost:19999",
 		Port:        19999,
 		MaxRetries:  3,
 		CooldownSec: 60,
@@ -2858,7 +2830,6 @@ func TestReloadHandler(t *testing.T) {
 	}
 	tomlContent := `[provider.test]
 target = "http://localhost:19999/v1"
-genai = "http://localhost:19999"
 port = 19999
 max_retries = 3
 cooldown_sec = 60
@@ -2869,7 +2840,6 @@ cooldown_sec = 60
 
 	cfg := &config.Config{
 		TargetBase:  "http://localhost:19999",
-		GenaiBase:   "http://localhost:19999",
 		Port:        19999,
 		MaxRetries:  3,
 		CooldownSec: 60,
@@ -2969,7 +2939,6 @@ func TestLogLevelHandler_GetLevel(t *testing.T) {
 func TestLogLevelHandler_Unauthorized(t *testing.T) {
 	cfg := &config.Config{
 		TargetBase:  "http://localhost:19999",
-		GenaiBase:   "http://localhost:19999",
 		Port:        19999,
 		MaxRetries:  3,
 		CooldownSec: 60,
@@ -3219,7 +3188,6 @@ func TestRuntimeConfigHandler_SetInvalidLogLevel(t *testing.T) {
 func TestRuntimeConfigHandler_Unauthorized(t *testing.T) {
 	cfg := &config.Config{
 		TargetBase:  "http://localhost:19999",
-		GenaiBase:   "http://localhost:19999",
 		Port:        19999,
 		MaxRetries:  3,
 		CooldownSec: 60,
@@ -3374,7 +3342,6 @@ func TestKeysHandlerDelete_IndexTooLargeReturns400(t *testing.T) {
 func TestKeysHandlerDelete_Unauthenticated(t *testing.T) {
 	cfg := &config.Config{
 		TargetBase:  "http://localhost:19999",
-		GenaiBase:   "http://localhost:19999",
 		Port:        19999,
 		MaxRetries:  3,
 		CooldownSec: 60,
@@ -3428,14 +3395,13 @@ func TestConfigHandlerPost_Unauthenticated(t *testing.T) {
 	defer os.Chdir(origDir)
 
 	// Write initial .env for ReloadConfig
-	envContent := "PORT=19999\nTARGET_BASE_URL=http://localhost:19999\nGENAI_BASE_URL=http://localhost:19999\nAPI_KEYS=key-a,key-b\nCOOLDOWN_SEC=60\nMAX_RETRIES=3\n"
+	envContent := "PORT=19999\nTARGET_BASE_URL=http://localhost:19999\nAPI_KEYS=key-a,key-b\nCOOLDOWN_SEC=60\nMAX_RETRIES=3\n"
 	if err := os.WriteFile(filepath.Join(tmpDir, ".env"), []byte(envContent), 0600); err != nil {
 		t.Fatal(err)
 	}
 
 	cfg := &config.Config{
 		TargetBase:  "http://localhost:19999",
-		GenaiBase:   "http://localhost:19999",
 		Port:        19999,
 		MaxRetries:  3,
 		CooldownSec: 60,
@@ -3449,7 +3415,7 @@ func TestConfigHandlerPost_Unauthenticated(t *testing.T) {
 	defer srv.Close()
 
 	// POST /api/config is no longer supported — both no token and with token return 405
-	reqBody := `{"targetBase":"http://example.com","genaiBase":"http://genai.example.com","keys":["new-key"]}`
+	reqBody := `{"targetBase":"http://example.com","keys":["new-key"]}`
 	resp, err := http.Post(srv.URL+"/api/config", "application/json", strings.NewReader(reqBody))
 	if err != nil {
 		t.Fatalf("POST /api/config (no auth): %v", err)
@@ -3534,7 +3500,6 @@ func TestActiveHealthCheck_ProbeSuccess(t *testing.T) {
 
 	cfg := &config.Config{
 		TargetBase:             upstream.URL,
-		GenaiBase:              upstream.URL,
 		Port:                   0,
 		MaxRetries:             1,
 		CooldownSec:            60,
@@ -3587,7 +3552,6 @@ func TestActiveHealthCheck_ProbeFailure(t *testing.T) {
 
 	cfg := &config.Config{
 		TargetBase:             upstream.URL,
-		GenaiBase:              upstream.URL,
 		Port:                   0,
 		MaxRetries:             1, // each proxied request = 1 upstream call
 		CooldownSec:            60,
@@ -3650,7 +3614,6 @@ func TestActiveHealthCheck_Recovery(t *testing.T) {
 	// Short CB reset timeout for testing; bypasses Validate() in tests
 	cfg := &config.Config{
 		TargetBase:             upstream.URL,
-		GenaiBase:              upstream.URL,
 		Port:                   0,
 		MaxRetries:             1,
 		CooldownSec:            60,
@@ -3729,7 +3692,6 @@ func TestActiveHealthCheck_ProbeTimeout(t *testing.T) {
 
 	cfg := &config.Config{
 		TargetBase:             upstream.URL,
-		GenaiBase:              upstream.URL,
 		Port:                   0,
 		MaxRetries:             1,
 		CooldownSec:            60,
@@ -3793,7 +3755,6 @@ func TestActiveHealthCheck_ConfigDriven(t *testing.T) {
 
 	cfg := &config.Config{
 		TargetBase:             upstream.URL,
-		GenaiBase:              upstream.URL,
 		Port:                   8080,
 		MaxRetries:             3,
 		CooldownSec:            60,
@@ -3971,7 +3932,6 @@ func TestTokenUsageMetrics(t *testing.T) {
 
 	cfg := &config.Config{
 		TargetBase:             upstream.URL,
-		GenaiBase:              upstream.URL,
 		Port:                   0,
 		MaxRetries:             1,
 		CooldownSec:            60,
@@ -4032,7 +3992,6 @@ func TestMetricsEndpointAccessible(t *testing.T) {
 
 	cfg := &config.Config{
 		TargetBase:             upstream.URL,
-		GenaiBase:              upstream.URL,
 		Port:                   0,
 		MaxRetries:             1,
 		CooldownSec:            60,
@@ -4089,7 +4048,6 @@ func TestRetryMetrics(t *testing.T) {
 
 	cfg := &config.Config{
 		TargetBase:             upstream.URL,
-		GenaiBase:              upstream.URL,
 		Port:                   0,
 		MaxRetries:             3,
 		CooldownSec:            30,
@@ -4139,7 +4097,6 @@ func TestUptimeMetrics(t *testing.T) {
 
 	cfg := &config.Config{
 		TargetBase:             upstream.URL,
-		GenaiBase:              upstream.URL,
 		Port:                   0,
 		MaxRetries:             1,
 		CooldownSec:            60,
@@ -4453,7 +4410,6 @@ func TestMetricsVerification_KeyPoolDisabled(t *testing.T) {
 	// Create server via ProviderRouter so we have access to state.Metrics() via ProviderState
 	cfg := &config.Config{
 		TargetBase:  upstream.URL,
-		GenaiBase:   upstream.URL,
 		Port:        0,
 		MaxRetries:  3,
 		CooldownSec: 2,

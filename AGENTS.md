@@ -79,6 +79,15 @@ docs/
 - **测试分层** — 每个测试文件必须加 `//go:build unit` / `integration` / `e2e` 标签
 - **CLI 测试模式** — 新增命令加 `TestXxxCmd_Exists`，新增标志加 `TestXxxCmd_HasYyyFlag`
 
+## CLI Design Rules
+
+- **verb-first** — 所有命令以动词开头（`status`、`config list`、`key add`），而非名词（`switch status`）
+- **provider 参数统一位置** — provider 名称始终作为第一个位置参数（`<provider>` 必填或 `[provider]` 可选）。例外：`config get` 和 `config set` 以 key 为主、provider 为上下文，provider 放在最后
+- **必填用尖括号，可选用方括号** — `<name>` 表示必填，`[provider]` 表示可选
+- **flag 语义一致** — 同含义的 flag 在不同命令中使用相同的名称和类型（如 `--target`、`--cooldown-sec`）
+- **无使用场景的字段不保留** — 不添加不使用的配置字段、flag 或路由逻辑
+- **CLI 测试覆盖** — 新增命令加 `TestXxxCmd_Exists`，新增标志加 `TestXxxCmd_HasYyyFlag`，参数变化加输出断言测试
+
 ## Testing
 
 四个设计原则：
@@ -120,7 +129,7 @@ main 分支受保护，禁止直接推送。遵循 GitHub Flow + 原子 commit�
 
 **提交规范**：`类型: 描述`（`feat`/`fix`/`refactor`/`chore`/`docs`）。
 
-**发版**：PR 合并后 `git commit` 更新 CHANGELOG → `make release VERSION=v0.x.x`，或从 GitHub Actions 触发 `Build & Release` workflow。新功能 `v0.x.0`，bug 修复 `v0.x.1`。
+**发版**：PR 合并后 `make release VERSION=v0.x.x`，或从 GitHub Actions 触发 `Build & Release` workflow。新功能 `v0.x.0`，bug 修复 `v0.x.1`。
 
 ## Common Pitfalls
 
@@ -164,8 +173,8 @@ Token 估算基于 tiktoken，在 `internal/tokenestimator/` 中实现。
 | 新增/修改 CLI 命令或标志 | `docs/cli-reference.md` | 同一 PR |
 | 新增/修改配置字段 | `docs/configuration.md` | 同一 PR |
 | 新增/修改 API 端点 | `docs/api.md` | 同一 PR |
-| 发版 / 里程碑完成 | `CHANGELOG.md` | 发版前 |
 | 新增功能影响架构 | `docs/architecture.md` | 同一 PR |
+| Release notes | GitHub Releases | 发版后 |
 
 **核心原则：** 文档和代码在同一次合并中到达 main。先合并代码后补文档 = 文档永远补不上。
 

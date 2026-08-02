@@ -196,7 +196,6 @@ function New-TestFixture {
     $envLines = @(
         "PORT=$Port",
         "TARGET_BASE_URL=https://test.api.example.com/v1",
-        "GENAI_BASE_URL=https://genai.test.example.com",
         "API_KEYS=test-key-a,test-key-b,test-key-c",
         "COOLDOWN_SEC=5"
     )
@@ -290,7 +289,6 @@ function Test-SingleInstanceMode {
         # 修改配置
         $newConfig = @{
             targetBase = "https://new-api.example.com/v1"
-            genaiBase  = "https://new-genai.example.com"
             keys       = @("new-key-1", "new-key-2")
         } | ConvertTo-Json
 

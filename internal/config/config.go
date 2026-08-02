@@ -25,7 +25,6 @@ type Config struct {
 	Port                 int      `toml:"port" default:"8080"`
 	Host                 string   `toml:"host,omitempty" default:"127.0.0.1"`
 	TargetBase           string   `toml:"target"`                    // Upstream target base URL (required)
-	GenaiBase            string   `toml:"genai,omitempty"`           // Generative AI base URL (required)
 	AdminToken           string   `toml:"admin_token,omitempty"`     // Optional admin authentication token
 	DisableThinking      bool     `toml:"disable_thinking,omitempty"` // Disable thinking mode
 	GenaiModel           string   `toml:"genai_model,omitempty"`     // Generative AI model name
@@ -56,7 +55,6 @@ type Config struct {
 // ConfigPayload is the JSON structure for config API responses.
 type ConfigPayload struct {
 	TargetBase string   `json:"targetBase"`
-	GenaiBase  string   `json:"genaiBase"`
 	Keys       []string `json:"keys"`
 }
 

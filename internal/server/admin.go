@@ -68,7 +68,6 @@ func (pr *ProviderRouter) configHandler(w http.ResponseWriter, r *http.Request) 
 				}
 				result[name] = config.ConfigPayload{
 					TargetBase: p.Config.TargetBase,
-					GenaiBase:  p.Config.GenaiBase,
 					Keys:       maskedKeys,
 				}
 			}
@@ -84,7 +83,6 @@ func (pr *ProviderRouter) configHandler(w http.ResponseWriter, r *http.Request) 
 		}
 		respondJSON(w, http.StatusOK, config.ConfigPayload{
 			TargetBase: ps.Config.TargetBase,
-			GenaiBase:  ps.Config.GenaiBase,
 			Keys:       maskedKeys,
 		})
 		return

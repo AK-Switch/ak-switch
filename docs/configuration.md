@@ -9,7 +9,6 @@ port = 3001
 
 [provider.nvidia]
 target = "https://integrate.api.nvidia.com/v1"
-genai = "https://api.nvidia.com"
 cooldown_sec = 60
 max_retries = 3
 
@@ -35,10 +34,11 @@ Provider 名称（TOML 段名，如 `[provider.nvidia]` 中的 `nvidia`）建议
 
 ### Provider 字段
 
+> **迁移说明**：`genai` 字段已在 v0.3.0 中移除。如果 `config.toml` 中仍有 `genai = "..."`，启动时会输出 warning 日志，但配置仍会正常加载（所有请求路由到 `target`）。请将 `genai` 删除或替换为 `target`。
+
 | 字段 | 必填 | 默认值 | 说明 |
 |------|------|--------|------|
 | `target` | 是 | — | 上游 API 基础 URL |
-| `genai` | 否 | `""` | GenAI 模型基础 URL（`/genai/` 路径路由到此地址） |
 | `cooldown_sec` | 否 | `60` | 429 后 Key 冷却的基础时长（秒） |
 | `max_retries` | 否 | `1` | 完整遍历 key pool 的最大轮数。每轮尝试所有可用 key（跳过冷却/禁用），任一 key 成功即返回 |
 | `http_timeout_sec` | 否 | `30` | HTTP 客户端超时（秒） |

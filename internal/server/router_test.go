@@ -21,13 +21,11 @@ func TestProviderRouter_MultiProvider(t *testing.T) {
 	cfg1 := config.DefaultConfig()
 	cfg1.Port = 19101
 	cfg1.TargetBase = "http://localhost:18999"
-	cfg1.GenaiBase = "http://localhost:18999"
 	cfg1.Keys = []string{"sk-test-key-provider-1"}
 
 	cfg2 := config.DefaultConfig()
 	cfg2.Port = 19101 // same port — single port architecture
 	cfg2.TargetBase = "http://localhost:18999"
-	cfg2.GenaiBase = "http://localhost:18999"
 	cfg2.Keys = []string{"sk-test-key-provider-2"}
 
 	pr := NewProviderRouter("")
@@ -72,7 +70,6 @@ func TestProviderRouter_GracefulShutdown(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Port = 19103
 	cfg.TargetBase = "http://localhost:18999"
-	cfg.GenaiBase = "http://localhost:18999"
 	cfg.Keys = []string{"sk-test-shutdown"}
 
 	pr := NewProviderRouter("")
@@ -146,7 +143,6 @@ func TestProviderRouter_StartWithListener(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Port = 19107
 	cfg.TargetBase = "http://localhost:18999"
-	cfg.GenaiBase = "http://localhost:18999"
 	cfg.Keys = []string{"sk-test-listener"}
 
 	pr := NewProviderRouter("")
@@ -193,13 +189,11 @@ func TestProviderRouter_PathRouting(t *testing.T) {
 	cfg1 := config.DefaultConfig()
 	cfg1.Port = 19106
 	cfg1.TargetBase = "http://localhost:18999"
-	cfg1.GenaiBase = "http://localhost:18999"
 	cfg1.Keys = []string{"sk-test-key-1"}
 
 	cfg2 := config.DefaultConfig()
 	cfg2.Port = 19106
 	cfg2.TargetBase = "http://localhost:18999"
-	cfg2.GenaiBase = "http://localhost:18999"
 	cfg2.Keys = []string{"sk-test-key-2"}
 
 	pr := NewProviderRouter("")
