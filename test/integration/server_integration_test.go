@@ -1954,6 +1954,68 @@ func TestHealthHandler(t *testing.T) {
 	}
 }
 
+// TestHealthHandlerProviderFilter verifies that /health?provider=<name> returns
+// only that provider's data, /health?provider=<unknown> returns 404, and
+// /health (no param) returns all providers.
+func TestHealthHandlerProviderFilter(t *testing.T) {
+	cfg1 := &config.Config{
+		TargetBase: "http://localhost:19998",
+		GenaiBase:  "http://localhost:19998",
+		Port:       19999, MaxRetries: 3, CooldownSec: 60,
+		Keys: []string{"key-a", "key-b", "key-c"},
+	}
+	cfg2 := &config.Config{
+		TargetBase: "http://localhost:19997",
+		GenaiBase:  "http://localhost:19997",
+		Port:       19998, MaxRetries: 3, CooldownSec: 60,
+		Keys: []string{"key-x", "key-y"},
+	}
+	pool1 := keypool.NewKeyPool(cfg1.Keys, nil)
+	pool2 := keypool.NewKeyPool(cfg2.Keys, nil)
+	pr := server.NewProviderRouter("")
+	pr.AddProvider("alpha", cfg1, pool1)
+	pr.AddProvider("beta", cfg2, pool2)
+	srv := httptest.NewServer(pr.Handler())
+	defer srv.Close()
+
+	// Scoped: only "alpha"
+	resp, err := http.Get(srv.URL + "/health?provider=alpha")
+	if err != nil {
+		t.Fatalf("GET /health?provider=alpha: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	var body map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	details, ok := body["details"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected details field")
+	}
+	if _, hasAlpha := details["alpha"]; !hasAlpha {
+		t.Error("expected 'alpha' provider in filtered response")
+	}
+	if _, hasBeta := details["beta"]; hasBeta {
+		t.Error("did not expect 'beta' in alpha-filtered response")
+	}
+	if len(details) != 1 {
+		t.Errorf("expected 1 provider in filtered response, got %d", len(details))
+	}
+
+	// Unknown provider → 404
+	resp2, err := http.Get(srv.URL + "/health?provider=nonexistent")
+	if err != nil {
+		t.Fatalf("GET /health?provider=nonexistent: %v", err)
+	}
+	resp2.Body.Close()
+	if resp2.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404 for unknown provider, got %d", resp2.StatusCode)
+	}
+}
+
 // ── Config GET ─────────────────────────────────────
 
 func TestConfigGet(t *testing.T) {
