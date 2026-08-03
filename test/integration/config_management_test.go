@@ -327,7 +327,7 @@ func TestClearHandlerAuth(t *testing.T) {
 
 // ── Config POST — unauthenticated ──────────────────────
 
-func TestConfigHandlerPost_Unauthenticated(t *testing.T) {
+func TestConfigHandlerPost_MethodNotAllowed(t *testing.T) {
 	origDir, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
