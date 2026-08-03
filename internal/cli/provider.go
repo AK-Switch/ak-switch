@@ -114,12 +114,12 @@ Example:
 		// we don't override tc.Port (first provider's port wins).
 
 		// Add new provider
-		tc.Provider[name] = &config.Config{
-			TargetBase: target,
+		pcfg := &config.ProviderConfig{
+			TargetBase:  target,
 			CooldownSec: cooldown,
 			MaxRetries:  maxRetries,
 		}
-
+		tc.Provider[name] = &config.Config{ProviderConfig: *pcfg}
 		// Ensure directory exists
 		dir := filepath.Dir(source)
 		if err := os.MkdirAll(dir, 0755); err != nil {

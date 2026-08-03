@@ -70,14 +70,18 @@ var configInitCmd = &cobra.Command{
 			Port: 8080,
 			Provider: map[string]*config.Config{
 				"example-a": {
-					TargetBase:  "https://api.example-a.com/v1",
-					CooldownSec: 60,
-					MaxRetries:  3,
+					ProviderConfig: config.ProviderConfig{
+						TargetBase:  "https://api.example-a.com/v1",
+						CooldownSec: 60,
+						MaxRetries:  3,
+					},
 				},
 				"example-b": {
-					TargetBase:  "https://api.example-b.com/v1",
-					CooldownSec: 30,
-					MaxRetries:  5,
+					ProviderConfig: config.ProviderConfig{
+						TargetBase:  "https://api.example-b.com/v1",
+						CooldownSec: 30,
+						MaxRetries:  5,
+					},
 				},
 			},
 		}
