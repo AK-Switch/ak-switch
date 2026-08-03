@@ -154,7 +154,10 @@ func (pc *ProviderConfig) Validate() error {
 ```go
 func (rc *RuntimeConfig) Validate() error {
     if rc.HTTPTimeoutSec < 1 {
-        return &ConfigError{Category: "config", Message: fmt.Sprintf("...")}
+        return &ConfigError{Category: "config", Message: fmt.Sprintf("配置错误: HTTP_TIMEOUT_SEC=%d 不能小于 1 秒", rc.HTTPTimeoutSec)}
+    }
+    if rc.HealthCheckTimeoutSec < 1 {
+        return &ConfigError{Category: "config", Message: fmt.Sprintf("配置错误: HEALTH_CHECK_TIMEOUT_SEC=%d 不能小于 1", rc.HealthCheckTimeoutSec)}
     }
     return nil
 }
@@ -317,6 +320,21 @@ func TestRuntimeConfig_Validate_HTTPTimeoutSec(t *testing.T) {
         err := rc.Validate()
         if (err != nil) != tt.wantErr {
             t.Errorf("HTTPTimeoutSec=%d: wantErr=%v, got err=%v", tt.sec, tt.wantErr, err)
+        }
+    }
+}
+```
+
+```go
+func TestRuntimeConfig_Validate_HealthCheckTimeoutSec(t *testing.T) {
+    tests := []struct{ sec int; wantErr bool }{
+        {0, true}, {-1, true}, {1, false}, {5, false},
+    }
+    for _, tt := range tests {
+        rc := &RuntimeConfig{HealthCheckTimeoutSec: tt.sec}
+        err := rc.Validate()
+        if (err != nil) != tt.wantErr {
+            t.Errorf("HealthCheckTimeoutSec=%d: wantErr=%v, got err=%v", tt.sec, tt.wantErr, err)
         }
     }
 }
