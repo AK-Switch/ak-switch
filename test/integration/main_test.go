@@ -7,11 +7,12 @@ import (
 	"strings"
 	"testing"
 
+	"net/http/httptest"
+
 	"akswitch/internal/cli"
 	"akswitch/internal/config"
 	"akswitch/internal/keypool"
 	"akswitch/internal/server"
-	"net/http/httptest"
 )
 
 // ── Shared helpers ─────────────────────────────────

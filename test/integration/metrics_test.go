@@ -232,17 +232,11 @@ func TestMetricsEndpointAccessible(t *testing.T) {
 		t.Errorf("expected Content-Type text/plain, got %q", ct)
 	}
 
-	body, _ := io.ReadAll(resp.Body)
-	metricsBody := string(body)
-
 	// Send a proxy request to trigger metric registration
 	resp2, err2 := http.Get(srv.URL + "/test/v1/models")
 	if err2 == nil {
 		resp2.Body.Close()
 	}
-
-	// Debug: log the metrics body
-	t.Logf("Metrics body for debugging: %s", metricsBody)
 
 }
 

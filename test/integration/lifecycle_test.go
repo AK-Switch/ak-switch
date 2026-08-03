@@ -103,11 +103,13 @@ func TestGracefulShutdown_BackgroundGoroutinesStop(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		<-stop
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		<-stop
 	}()
 
 	// Give them a moment to start
