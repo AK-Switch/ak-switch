@@ -958,3 +958,83 @@ func TestFindServerPort_FirstProviderPicked(t *testing.T) {
 		t.Errorf("FindServerPort() = %d, want 9999", port)
 	}
 }
+
+// ============================================================
+// ProviderConfig, RuntimeConfig, backward compatibility tests
+// ============================================================
+
+func TestDefaultProviderConfig(t *testing.T) {
+	pc := DefaultProviderConfig()
+	if pc.Port != 8080 { t.Errorf("Port = %d, want 8080", pc.Port) }
+	if pc.Host != "127.0.0.1" { t.Errorf("Host = %q, want %q", pc.Host, "127.0.0.1") }
+	if pc.TargetBase != "" { t.Errorf("TargetBase should be empty, got %q", pc.TargetBase) }
+	if pc.MaxRetries != 1 { t.Errorf("MaxRetries = %d, want 1", pc.MaxRetries) }
+	if pc.CooldownSec != 15 { t.Errorf("CooldownSec = %d, want 15", pc.CooldownSec) }
+	if pc.HealthCheckPath != "/health" { t.Errorf("HealthCheckPath = %q, want %q", pc.HealthCheckPath, "/health") }
+	if pc.CalibrationIntervalSec != 3600 { t.Errorf("CalibrationIntervalSec = %d, want 3600", pc.CalibrationIntervalSec) }
+}
+
+func TestDefaultRuntimeConfig(t *testing.T) {
+	rc := DefaultRuntimeConfig()
+	if rc.HTTPTimeoutSec != 30 { t.Errorf("HTTPTimeoutSec = %d, want 30", rc.HTTPTimeoutSec) }
+	if rc.MaxRetries != 1 { t.Errorf("MaxRetries = %d, want 1", rc.MaxRetries) }
+	if rc.CooldownSec != 15 { t.Errorf("CooldownSec = %d, want 15", rc.CooldownSec) }
+	if rc.LogLevel != "info" { t.Errorf("LogLevel = %q, want %q", rc.LogLevel, "info") }
+}
+
+func TestProviderConfig_Validate_PortRange(t *testing.T) {
+	pc := DefaultProviderConfig()
+	pc.TargetBase = "https://example.com"
+	pc.Keys = []string{"key1"}
+	tests := []struct{ port int; wantErr bool }{
+		{0, true}, {-1, true}, {65536, true}, {8080, false},
+	}
+	for _, tt := range tests {
+		pc.Port = tt.port
+		err := pc.Validate()
+		if (err != nil) != tt.wantErr {
+			t.Errorf("Port=%d: wantErr=%v, got err=%v", tt.port, tt.wantErr, err)
+		}
+	}
+}
+
+func TestRuntimeConfig_Validate_HTTPTimeoutSec(t *testing.T) {
+	tests := []struct{ sec int; wantErr bool }{
+		{0, true}, {-1, true}, {1, false}, {30, false},
+	}
+	for _, tt := range tests {
+		rc := &RuntimeConfig{HTTPTimeoutSec: tt.sec}
+		err := rc.Validate()
+		if (err != nil) != tt.wantErr {
+			t.Errorf("HTTPTimeoutSec=%d: wantErr=%v, got err=%v", tt.sec, tt.wantErr, err)
+		}
+	}
+}
+
+func TestProviderConfig_Validate_HealthCheckTimeoutSec(t *testing.T) {
+	tests := []struct{ sec int; wantErr bool }{
+		{0, true}, {-1, true}, {1, false}, {5, false},
+	}
+	for _, tt := range tests {
+		pc := DefaultProviderConfig()
+		pc.TargetBase = "https://example.com"
+		pc.Keys = []string{"key1"}
+		pc.HealthCheckTimeoutSec = tt.sec
+		err := pc.Validate()
+		if (err != nil) != tt.wantErr {
+			t.Errorf("HealthCheckTimeoutSec=%d: wantErr=%v, got err=%v", tt.sec, tt.wantErr, err)
+		}
+	}
+}
+
+func TestConfig_BackwardCompatibility(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.Port != 8080 { t.Errorf("Port = %d, want 8080", cfg.Port) }
+	if cfg.HTTPTimeoutSec != 30 { t.Errorf("HTTPTimeoutSec = %d, want 30", cfg.HTTPTimeoutSec) }
+	if cfg.MaxRetries != 1 { t.Errorf("MaxRetries = %d, want 1", cfg.MaxRetries) }
+
+	cfg.Port = 9090
+	cfg.HTTPTimeoutSec = 60
+	if cfg.Port != 9090 { t.Error("field mutation broken") }
+	if cfg.HTTPTimeoutSec != 60 { t.Error("field mutation broken") }
+}

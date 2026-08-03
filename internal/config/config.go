@@ -157,6 +157,9 @@ func (pc *ProviderConfig) Validate() error {
 	if pc.HealthCheckIntervalSec < 5 {
 		return &ConfigError{Category: "config", Message: fmt.Sprintf("配置错误: HEALTH_CHECK_INTERVAL_SEC=%d 不能小于 5", pc.HealthCheckIntervalSec)}
 	}
+	if pc.HealthCheckTimeoutSec < 1 {
+		return &ConfigError{Category: "config", Message: fmt.Sprintf("配置错误: HEALTH_CHECK_TIMEOUT_SEC=%d 不能小于 1", pc.HealthCheckTimeoutSec)}
+	}
 	return nil
 }
 
