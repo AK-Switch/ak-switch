@@ -401,6 +401,30 @@ func TestSaveToml_LoadToml_Roundtrip(t *testing.T) {
 	}
 }
 
+func TestSaveToml_NoRuntimeConfigSection(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.TargetBase = "https://api.example.com"
+	cfg.Port = 7070
+	cfg.Keys = []string{"test-key"}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate() error: %v", err)
+	}
+
+	tmpDir := t.TempDir()
+	tomlPath := filepath.Join(tmpDir, "validate_save.toml")
+	if err := SaveTomlConfig(&TomlConfig{Port: cfg.Port, Provider: map[string]*Config{"default": cfg}}, tomlPath); err != nil {
+		t.Fatalf("SaveTomlConfig() error: %v", err)
+	}
+
+	data, err := os.ReadFile(tomlPath)
+	if err != nil {
+		t.Fatalf("ReadFile error: %v", err)
+	}
+	if strings.Contains(string(data), "RuntimeConfig") {
+		t.Errorf("TOML should not contain 'RuntimeConfig' section, got:\n%s", string(data))
+	}
+}
+
 func TestLoadToml_MissingFieldsUseDefaults(t *testing.T) {
 	tmpDir := t.TempDir()
 	tomlPath := filepath.Join(tmpDir, "minimal.toml")

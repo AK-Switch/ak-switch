@@ -56,7 +56,7 @@ type ProviderConfig struct {
 // if they are at their zero value after TOML parsing.
 type Config struct {
 	ProviderConfig
-	RuntimeConfig RuntimeConfig
+	RuntimeConfig RuntimeConfig `toml:"-"`
 }
 
 // RuntimeConfig holds runtime-only fields that overlap with ProviderConfig
@@ -172,8 +172,8 @@ func (rc *RuntimeConfig) Validate() error {
 }
 
 // Validate checks that all required fields are present and valid.
-// Delegates to ProviderConfig.Validate() for provider-level fields and
-// RuntimeConfig.Validate() for runtime-level fields.
+// Also syncs overlapping fields from ProviderConfig into RuntimeConfig
+// so RuntimeConfig is ready for the runtime-config endpoint.
 // Returns a descriptive error for the first problem found.
 func (c *Config) Validate() error {
 	c.RuntimeConfig.HTTPTimeoutSec = c.HTTPTimeoutSec
