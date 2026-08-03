@@ -12,16 +12,9 @@ import (
 	"akswitch/internal/logentry"
 )
 
-// Config holds all application configuration.
-// Use LoadAllTomlProviders() to create Config slices from TOML, then Validate()
-// to ensure required fields are present.
-//
-// Fields with a `default` struct tag are automatically filled by mergeDefaults()
-// if they are at their zero value after TOML parsing. To add a new optional field:
-//  1. Add the field with a `default:"..."` tag
-//  2. Add it to DefaultConfig() for direct callers
-//  3. mergeDefaults() handles the rest automatically
-type Config struct {
+// ProviderConfig holds all provider-level configuration fields with TOML tags.
+// Embedded in Config so all existing callers can continue using cfg.FieldName.
+type ProviderConfig struct {
 	Port                 int      `toml:"port" default:"8080"`
 	Host                 string   `toml:"host,omitempty" default:"127.0.0.1"`
 	TargetBase           string   `toml:"target"`                    // Upstream target base URL (required)
@@ -52,6 +45,36 @@ type Config struct {
 	CalibrationIntervalSec int `toml:"calibration_interval_sec" default:"3600"` // Token 校准间隔（秒，默认 1 小时）
 }
 
+// Config holds all provider-level configuration via embedded ProviderConfig.
+// Use LoadAllTomlProviders() to create Config slices from TOML, then Validate()
+// to ensure required fields are present.
+//
+// All existing callers access fields via cfg.FieldName — this continues to work
+// because Go promotes embedded fields.
+//
+// Fields with a `default` struct tag are automatically filled by mergeDefaults()
+// if they are at their zero value after TOML parsing.
+type Config struct {
+	ProviderConfig
+	RuntimeConfig RuntimeConfig
+}
+
+// RuntimeConfig holds runtime-only fields that overlap with ProviderConfig
+// but are validated independently. Not embedded in Config — accessed via
+// cfg.RuntimeConfig.FieldName. HealthCheckTimeoutSec stays in ProviderConfig
+// (where tests access it as cfg.HealthCheckTimeoutSec) and is validated
+// directly in Config.Validate().
+type RuntimeConfig struct {
+	HTTPTimeoutSec      int     `toml:"-"`
+	MaxRetries          int     `toml:"-"`
+	CooldownSec         int     `toml:"-"`
+	BackoffCapSec       int     `toml:"-"`
+	BackoffMultiplier   float64 `toml:"-"`
+	CBResetSec          int     `toml:"-"`
+	UpstreamCBThreshold int     `toml:"-"`
+	LogLevel            string  `toml:"-"`
+}
+
 // ConfigPayload is the JSON structure for config API responses.
 type ConfigPayload struct {
 	TargetBase string   `json:"targetBase"`
@@ -66,63 +89,112 @@ type ConfigError struct {
 
 func (e *ConfigError) Error() string { return e.Message }
 
-// DefaultConfig returns a Config with all optional fields set to their defaults.
-func DefaultConfig() *Config {
-	return &Config{
-		Port:                8080,
-		Host:                "127.0.0.1",
-		MaxRetries:          1,
-		LogLevel:            "info",
-		CooldownSec:         15,
-		HTTPTimeoutSec:      30,
-		BackoffCapSec:       120,
-		BackoffMultiplier:   2,
-		CBResetSec:          30,
-		UpstreamCBThreshold: 5,
+// DefaultProviderConfig returns a ProviderConfig with all optional fields set to their defaults.
+func DefaultProviderConfig() *ProviderConfig {
+	return &ProviderConfig{
+		Port:                 8080,
+		Host:                 "127.0.0.1",
+		MaxRetries:           1,
+		LogLevel:             "info",
+		CooldownSec:          15,
+		HTTPTimeoutSec:       30,
+		BackoffCapSec:        120,
+		BackoffMultiplier:    2,
+		CBResetSec:           30,
+		UpstreamCBThreshold:  5,
 		HealthCheckIntervalSec: 30,
 		HealthCheckPath:       "/health",
-		HealthCheckTimeoutSec:  5,
-		KeysFile:            "keys.json",
-		LogMaxSize:          100,
-		LogMaxAge:           7,
+		HealthCheckTimeoutSec: 5,
+		KeysFile:             "keys.json",
+		LogMaxSize:           100,
+		LogMaxAge:            7,
 		CalibrationIntervalSec: 3600,
 	}
 }
 
-// Validate checks that all required fields are present and valid.
-// Returns a descriptive error for the first problem found.
-func (c *Config) Validate() error {
-	if c.Port < 1 || c.Port > 65535 {
-		return &ConfigError{Category: "config", Message: fmt.Sprintf("配置错误: PORT=%d 不在有效范围(1-65535)内", c.Port)}
+// DefaultRuntimeConfig returns a RuntimeConfig with all fields set to their defaults.
+func DefaultRuntimeConfig() *RuntimeConfig {
+	return &RuntimeConfig{
+		HTTPTimeoutSec:      30,
+		MaxRetries:          1,
+		CooldownSec:         15,
+		BackoffCapSec:       120,
+		BackoffMultiplier:   2,
+		CBResetSec:          30,
+		UpstreamCBThreshold: 5,
+		LogLevel:            "info",
 	}
-	if c.TargetBase == "" {
+}
+
+// DefaultConfig returns a Config with all optional fields set to their defaults.
+func DefaultConfig() *Config {
+	pc := DefaultProviderConfig()
+	return &Config{ProviderConfig: *pc}
+}
+
+// Validate checks that all provider-level required fields are present and valid.
+// Returns a descriptive error for the first problem found.
+func (pc *ProviderConfig) Validate() error {
+	if pc.Port < 1 || pc.Port > 65535 {
+		return &ConfigError{Category: "config", Message: fmt.Sprintf("配置错误: PORT=%d 不在有效范围(1-65535)内", pc.Port)}
+	}
+	if pc.TargetBase == "" {
 		return &ConfigError{Category: "config", Message: "配置错误: TARGET_BASE_URL 为必填字段，请设置上游 API 基础地址"}
 	}
-	if len(c.Keys) == 0 {
+	if len(pc.Keys) == 0 {
 		return &ConfigError{Category: "config", Message: "配置错误: 至少需要一个 API Key（请通过 akswitch key add 添加）"}
 	}
-	if c.BackoffCapSec < 30 {
-		return &ConfigError{Category: "config", Message: fmt.Sprintf("配置错误: BACKOFF_CAP_SEC=%d 不能小于 30 秒", c.BackoffCapSec)}
+	if pc.BackoffCapSec < 30 {
+		return &ConfigError{Category: "config", Message: fmt.Sprintf("配置错误: BACKOFF_CAP_SEC=%d 不能小于 30 秒", pc.BackoffCapSec)}
 	}
-	if c.BackoffMultiplier < 1 {
-		return &ConfigError{Category: "config", Message: fmt.Sprintf("配置错误: BACKOFF_MULTIPLIER=%.1f 不能小于 1.0", c.BackoffMultiplier)}
+	if pc.BackoffMultiplier < 1 {
+		return &ConfigError{Category: "config", Message: fmt.Sprintf("配置错误: BACKOFF_MULTIPLIER=%.1f 不能小于 1.0", pc.BackoffMultiplier)}
 	}
-	if c.CBResetSec < 5 {
-		return &ConfigError{Category: "config", Message: fmt.Sprintf("配置错误: CB_RESET_SEC=%d 不能小于 5 秒", c.CBResetSec)}
+	if pc.CBResetSec < 5 {
+		return &ConfigError{Category: "config", Message: fmt.Sprintf("配置错误: CB_RESET_SEC=%d 不能小于 5 秒", pc.CBResetSec)}
 	}
-	if c.UpstreamCBThreshold < 2 {
-		return &ConfigError{Category: "config", Message: fmt.Sprintf("配置错误: UPSTREAM_CB_THRESHOLD=%d 不能小于 2", c.UpstreamCBThreshold)}
+	if pc.UpstreamCBThreshold < 2 {
+		return &ConfigError{Category: "config", Message: fmt.Sprintf("配置错误: UPSTREAM_CB_THRESHOLD=%d 不能小于 2", pc.UpstreamCBThreshold)}
 	}
-	if c.HealthCheckIntervalSec < 5 {
-		return &ConfigError{Category: "config", Message: fmt.Sprintf("配置错误: HEALTH_CHECK_INTERVAL_SEC=%d 不能小于 5", c.HealthCheckIntervalSec)}
+	if pc.HealthCheckIntervalSec < 5 {
+		return &ConfigError{Category: "config", Message: fmt.Sprintf("配置错误: HEALTH_CHECK_INTERVAL_SEC=%d 不能小于 5", pc.HealthCheckIntervalSec)}
 	}
-	if c.HTTPTimeoutSec < 1 {
-		return &ConfigError{Category: "config", Message: fmt.Sprintf("配置错误: HTTP_TIMEOUT_SEC=%d 不能小于 1 秒", c.HTTPTimeoutSec)}
+	return nil
+}
+
+// Validate checks runtime-level fields. Returns a descriptive error for the first problem found.
+func (rc *RuntimeConfig) Validate() error {
+	if rc.HTTPTimeoutSec < 1 {
+		return &ConfigError{Category: "config", Message: fmt.Sprintf("配置错误: HTTP_TIMEOUT_SEC=%d 不能小于 1 秒", rc.HTTPTimeoutSec)}
 	}
+	return nil
+}
+
+// Validate checks that all required fields are present and valid.
+// Delegates to ProviderConfig.Validate() for provider-level fields and
+// RuntimeConfig.Validate() for runtime-level fields. HealthCheckTimeoutSec
+// is validated here directly (field lives in ProviderConfig).
+// Overlapping fields (HTTPTimeoutSec, MaxRetries, CooldownSec) are synced
+// from ProviderConfig into RuntimeConfig before runtime validation so that
+// callers who set values on the Config struct (via promoted fields) see
+// those values reflected in both validators.
+// Returns a descriptive error for the first problem found.
+func (c *Config) Validate() error {
+	c.RuntimeConfig.HTTPTimeoutSec = c.ProviderConfig.HTTPTimeoutSec
+	c.RuntimeConfig.MaxRetries = c.ProviderConfig.MaxRetries
+	c.RuntimeConfig.CooldownSec = c.ProviderConfig.CooldownSec
+	c.RuntimeConfig.BackoffCapSec = c.ProviderConfig.BackoffCapSec
+	c.RuntimeConfig.BackoffMultiplier = c.ProviderConfig.BackoffMultiplier
+	c.RuntimeConfig.CBResetSec = c.ProviderConfig.CBResetSec
+	c.RuntimeConfig.UpstreamCBThreshold = c.ProviderConfig.UpstreamCBThreshold
+	c.RuntimeConfig.LogLevel = c.ProviderConfig.LogLevel
 	if c.HealthCheckTimeoutSec < 1 {
 		return &ConfigError{Category: "config", Message: fmt.Sprintf("配置错误: HEALTH_CHECK_TIMEOUT_SEC=%d 不能小于 1", c.HealthCheckTimeoutSec)}
 	}
-	return nil
+	if err := c.ProviderConfig.Validate(); err != nil {
+		return err
+	}
+	return c.RuntimeConfig.Validate()
 }
 
 // Sanitized returns a copy of the Config with sensitive fields masked.
@@ -145,9 +217,9 @@ func (c *Config) Sanitized() *Config {
 // for each field.
 //
 // Adding a new optional field: just add a `default:"..."` tag to the struct field
-// and include it in DefaultConfig(). mergeDefaults handles the rest automatically.
-func mergeDefaults(cfg *Config) {
-	v := reflect.ValueOf(cfg).Elem()
+// and include it in DefaultProviderConfig(). mergeDefaults handles the rest automatically.
+func (pc *ProviderConfig) mergeDefaults() {
+	v := reflect.ValueOf(pc).Elem()
 	t := v.Type()
 
 	for i := 0; i < t.NumField(); i++ {
@@ -199,5 +271,5 @@ func mergeDefaults(cfg *Config) {
 // Deprecated: mergeConfig is kept for backward compatibility. mergeDefaults replaces this.
 //nolint:gocritic
 func mergeConfig(cfg *Config) {
-	mergeDefaults(cfg)
+	cfg.ProviderConfig.mergeDefaults()
 }

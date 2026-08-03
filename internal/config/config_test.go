@@ -88,13 +88,11 @@ func TestValidate_CircuitBreakerFields(t *testing.T) {
 }
 
 func TestSanitized(t *testing.T) {
-	cfg := &Config{
-		Keys: []string{
-			"nvapi-xiKMDpevXK60t6gLsGW1",
-			"short",
-			"nvapi-KXZ6a_5Mwcew7Ekd32DD85OaLVZu3Q",
-		},
-	}
+	cfg := &Config{ProviderConfig: ProviderConfig{Keys: []string{
+		"nvapi-xiKMDpevXK60t6gLsGW1",
+		"short",
+		"nvapi-KXZ6a_5Mwcew7Ekd32DD85OaLVZu3Q",
+	}}}
 	s := cfg.Sanitized()
 
 	// Original must be unchanged
@@ -125,7 +123,7 @@ func TestSanitized(t *testing.T) {
 
 func TestSanitized_UsesUtilsMaskKey(t *testing.T) {
 	key := "sk-abcdefghijklmn"
-	cfg := &Config{Keys: []string{key}}
+	cfg := &Config{ProviderConfig: ProviderConfig{Keys: []string{key}}}
 	s := cfg.Sanitized()
 	expected := logentry.MaskKey(key)
 	if s.Keys[0] != expected {
@@ -204,7 +202,7 @@ func TestConfig_HealthCheckTimeoutTooSmall(t *testing.T) {
 
 func TestMergeDefaults_EmptyConfig(t *testing.T) {
 	cfg := &Config{}
-	mergeDefaults(cfg)
+	cfg.mergeDefaults()
 	def := DefaultConfig()
 
 	if cfg.Port != def.Port {
@@ -258,15 +256,15 @@ func TestMergeDefaults_EmptyConfig(t *testing.T) {
 }
 
 func TestMergeDefaults_PreservesSetValues(t *testing.T) {
-	cfg := &Config{
+	cfg := &Config{ProviderConfig: ProviderConfig{
 		Port:            9090,
 		Host:            "0.0.0.0",
 		CooldownSec:     45,
 		MaxRetries:      7,
 		BackoffCapSec:   300,
 		BackoffMultiplier: 3.5,
-	}
-	mergeDefaults(cfg)
+	}}
+	cfg.mergeDefaults()
 
 	if cfg.Port != 9090 {
 		t.Errorf("Port should be preserved, got %d", cfg.Port)
@@ -293,11 +291,11 @@ func TestMergeDefaults_PreservesSetValues(t *testing.T) {
 }
 
 func TestMergeDefaults_SkipsFieldsWithoutDefaultTag(t *testing.T) {
-	cfg := &Config{
+	cfg := &Config{ProviderConfig: ProviderConfig{
 		TargetBase: "https://api.example.com",
 		AdminToken: "my-token",
-	}
-	mergeDefaults(cfg)
+	}}
+	cfg.mergeDefaults()
 
 	// Fields without default tag should be preserved
 	if cfg.TargetBase != "https://api.example.com" {
