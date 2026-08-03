@@ -83,17 +83,17 @@ func LoadAllTomlProviders(path string) (map[string]*Config, error) {
 	result := make(map[string]*Config, len(tc.Provider))
 	port := tc.Port
 	if port == 0 {
-		port = DefaultConfig().Port
+		port = DefaultProviderConfig().Port
 	}
 	host := tc.Host
 	if host == "" {
-		host = DefaultConfig().Host
+		host = DefaultProviderConfig().Host
 	}
 	for name, p := range tc.Provider {
 		if p == nil {
-			p = DefaultConfig()
+			p = &Config{ProviderConfig: *DefaultProviderConfig()}
 		} else {
-			mergeConfig(p)
+			p.ProviderConfig.mergeDefaults()
 			p.Port = port
 		}
 		// Top-level host used as fallback when provider-level host is empty
