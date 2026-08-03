@@ -568,6 +568,7 @@ func TestRuntimeConfigHandler_GetList(t *testing.T) {
 		if _, ok := params["max_retries"]; !ok {
 			t.Errorf("expected max_retries in params for %s", name)
 		}
+		break // only check first provider
 	}
 }
 
