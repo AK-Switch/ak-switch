@@ -136,6 +136,11 @@ func TestStatsHandler(t *testing.T) {
 	for _, f := range fields {
 		if _, ok := body[f]; !ok {
 			t.Errorf("missing field %q in response", f)
+			continue
+		}
+		val, _ := body[f].(float64)
+		if val < 0 {
+			t.Errorf("%s=%f: negative value", f, val)
 		}
 	}
 }
@@ -563,7 +568,6 @@ func TestRuntimeConfigHandler_GetList(t *testing.T) {
 		if _, ok := params["max_retries"]; !ok {
 			t.Errorf("expected max_retries in params for %s", name)
 		}
-		break // only check first provider
 	}
 }
 
