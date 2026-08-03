@@ -61,18 +61,16 @@ type Config struct {
 
 // RuntimeConfig holds runtime-only fields that overlap with ProviderConfig
 // but are validated independently. Not embedded in Config — accessed via
-// cfg.RuntimeConfig.FieldName. HealthCheckTimeoutSec stays in ProviderConfig
-// (where tests access it as cfg.HealthCheckTimeoutSec) and is validated
-// directly in Config.Validate().
+// cfg.RuntimeConfig.FieldName.
 type RuntimeConfig struct {
-	HTTPTimeoutSec      int     `toml:"-"`
-	MaxRetries          int     `toml:"-"`
-	CooldownSec         int     `toml:"-"`
-	BackoffCapSec       int     `toml:"-"`
-	BackoffMultiplier   float64 `toml:"-"`
-	CBResetSec          int     `toml:"-"`
-	UpstreamCBThreshold int     `toml:"-"`
-	LogLevel            string  `toml:"-"`
+	HTTPTimeoutSec      int     `toml:"http_timeout_sec"`
+	MaxRetries          int     `toml:"max_retries"`
+	CooldownSec         int     `toml:"cooldown_sec"`
+	BackoffCapSec       int     `toml:"backoff_cap_sec"`
+	BackoffMultiplier   float64 `toml:"backoff_multiplier"`
+	CBResetSec          int     `toml:"cb_reset_sec"`
+	UpstreamCBThreshold int     `toml:"upstream_cb_threshold"`
+	LogLevel            string  `toml:"log_level,omitempty"`
 }
 
 // ConfigPayload is the JSON structure for config API responses.
@@ -172,22 +170,17 @@ func (rc *RuntimeConfig) Validate() error {
 
 // Validate checks that all required fields are present and valid.
 // Delegates to ProviderConfig.Validate() for provider-level fields and
-// RuntimeConfig.Validate() for runtime-level fields. HealthCheckTimeoutSec
-// is validated here directly (field lives in ProviderConfig).
-// Overlapping fields (HTTPTimeoutSec, MaxRetries, CooldownSec) are synced
-// from ProviderConfig into RuntimeConfig before runtime validation so that
-// callers who set values on the Config struct (via promoted fields) see
-// those values reflected in both validators.
+// RuntimeConfig.Validate() for runtime-level fields.
 // Returns a descriptive error for the first problem found.
 func (c *Config) Validate() error {
-	c.RuntimeConfig.HTTPTimeoutSec = c.ProviderConfig.HTTPTimeoutSec
-	c.RuntimeConfig.MaxRetries = c.ProviderConfig.MaxRetries
-	c.RuntimeConfig.CooldownSec = c.ProviderConfig.CooldownSec
-	c.RuntimeConfig.BackoffCapSec = c.ProviderConfig.BackoffCapSec
-	c.RuntimeConfig.BackoffMultiplier = c.ProviderConfig.BackoffMultiplier
-	c.RuntimeConfig.CBResetSec = c.ProviderConfig.CBResetSec
-	c.RuntimeConfig.UpstreamCBThreshold = c.ProviderConfig.UpstreamCBThreshold
-	c.RuntimeConfig.LogLevel = c.ProviderConfig.LogLevel
+	c.RuntimeConfig.HTTPTimeoutSec = c.HTTPTimeoutSec
+	c.RuntimeConfig.MaxRetries = c.MaxRetries
+	c.RuntimeConfig.CooldownSec = c.CooldownSec
+	c.RuntimeConfig.BackoffCapSec = c.BackoffCapSec
+	c.RuntimeConfig.BackoffMultiplier = c.BackoffMultiplier
+	c.RuntimeConfig.CBResetSec = c.CBResetSec
+	c.RuntimeConfig.UpstreamCBThreshold = c.UpstreamCBThreshold
+	c.RuntimeConfig.LogLevel = c.LogLevel
 	if c.HealthCheckTimeoutSec < 1 {
 		return &ConfigError{Category: "config", Message: fmt.Sprintf("配置错误: HEALTH_CHECK_TIMEOUT_SEC=%d 不能小于 1", c.HealthCheckTimeoutSec)}
 	}
