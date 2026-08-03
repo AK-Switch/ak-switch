@@ -2,13 +2,13 @@
 
 ## Goal
 
-将 `Config` 结构体拆分为 `ProviderConfig`（TOML 可配置字段）和 `RuntimeConfig`（运行时可变参数），`Config` 作为聚合类型保持向后兼容，让字段归属一目了然。
+将 `Config` 结构体拆分为 `ProviderConfig`（TOML 可配置字段）和 `RuntimeConfig`（运行时可变参数分组类型），`Config` 嵌入 `ProviderConfig` 保持向后兼容，让字段归属一目了然。
 
 ## Architecture
 
-- **ProviderConfig** — 仅包含从 TOML 加载的字段（带 `toml` 标签），以及程序化设置的字段（`toml:"-"`）。加载后不再修改。
-- **RuntimeConfig** — runtime-config 端点支持的 8 个字段，运行时可变，无 `toml` 标签。
-- **Config** — 嵌入两者（Go 嵌入结构体自动扁平化），所有现有代码 `cfg.FieldName` 访问方式不变。
+- **ProviderConfig** — 所有从 TOML 加载或程序化设置的字段（带 `toml` 标签或 `toml:"-"`）。加载后不再修改。
+- **RuntimeConfig** — 独立类型，仅用于 runtime-config 端点的参数分组展示，不嵌入 Config。有 `toml` 标签（支持 persist/reload），无 `default` 标签。
+- **Config** — 嵌入 `ProviderConfig`，Go 反射扁平化，所有现有代码 `cfg.FieldName` 访问方式不变。
 
 ## Current State
 
@@ -23,11 +23,10 @@
 ### Struct Layout
 
 ```go
-// Config 嵌入 ProviderConfig 和 RuntimeConfig。
+// Config 嵌入 ProviderConfig。
 // Go 反射会将嵌入字段扁平化，现有 TOML 解析、字段访问均无需改动。
 type Config struct {
     ProviderConfig
-    RuntimeConfig
 }
 
 // ProviderConfig 包含所有从 TOML 加载或程序化设置的字段。
@@ -59,17 +58,18 @@ type ProviderConfig struct {
     CalibrationIntervalSec int `toml:"calibration_interval_sec" default:"3600"`
 }
 
-// RuntimeConfig 包含运行时可变参数。
-// 通过 /api/runtime-config 端点动态修改，无 TOML 标签。
+// RuntimeConfig 是独立类型，仅用于 runtime-config 端点的参数分组展示。
+// 有 toml 标签（支持 persist/reload），无 default 标签。
+// 语义上"不由用户在 TOML 中手动编辑"，但支持程序化写入和 reload 读取。
 type RuntimeConfig struct {
-    HTTPTimeoutSec      int
-    MaxRetries          int
-    CooldownSec         int
-    BackoffCapSec       int
-    BackoffMultiplier   float64
-    CBResetSec          int
-    UpstreamCBThreshold int
-    LogLevel            string
+    HTTPTimeoutSec      int     `toml:"http_timeout_sec"`
+    MaxRetries          int     `toml:"max_retries"`
+    CooldownSec         int     `toml:"cooldown_sec"`
+    BackoffCapSec       int     `toml:"backoff_cap_sec"`
+    BackoffMultiplier   float64 `toml:"backoff_multiplier"`
+    CBResetSec          int     `toml:"cb_reset_sec"`
+    UpstreamCBThreshold int     `toml:"upstream_cb_threshold"`
+    LogLevel            string  `toml:"log_level,omitempty"`
 }
 ```
 
@@ -102,7 +102,7 @@ func DefaultRuntimeConfig() *RuntimeConfig {
 
 ### mergeDefaults
 
-`mergeDefaults` 留在 `ProviderConfig` 上，因为只有它携带 `default` 标签。`RuntimeConfig` 无 `toml`/`default` 标签，不需要默认填充。
+`mergeDefaults` 改为 `ProviderConfig` 的方法。`RuntimeConfig` 不嵌入 Config，不影响反射范围。
 
 `config_loader.go` 中调用 `mergeConfig(p)` → 迁移为 `mergeDefaults(p)`（直接调用，不经过已废弃的 `mergeConfig` 包装）。
 
@@ -128,9 +128,11 @@ func DefaultRuntimeConfig() *RuntimeConfig {
 3. `mergeConfig(p)` → `mergeDefaults(p)`（直接调用）
 4. 顶层 port/host/log 覆盖 provider 值 —— 字段访问方式不变
 
-### persistRuntimeConfigField
+### persistRuntimeConfigField / getRuntimeParams
 
-`admin.go` 中的 `persistRuntimeConfigField` 操作 `providerCfg` 的运行时字段（如 `HTTPTimeoutSec`）。由于 RuntimeConfig 是嵌入字段，`providerCfg.HTTPTimeoutSec` 直接可写，无需改动。但 `LoadTomlConfig` 返回的 `TomlConfig` 中 `Provider` map 的 value 是 `*Config`，而 `SaveTomlConfig` 序列化时 `toml` 包会忽略无 `toml` 标签的 RuntimeConfig 字段，所以 persist 行为不变。
+`admin.go` 中的 `persistRuntimeConfigField` 操作 `providerCfg` 的运行时字段（如 `HTTPTimeoutSec`）。由于 RuntimeConfig 不再嵌入 Config，`providerCfg.HTTPTimeoutSec` 直接可写（字段在 ProviderConfig 上），无需改动。
+
+`getRuntimeParams` 构建 `map[string]interface{}` 从 `ps.Config` 字段读取，也无需改动。RuntimeConfig 类型仅用于分组展示，不参与字段读写。
 
 ### 关键不变项
 
@@ -143,21 +145,18 @@ func DefaultRuntimeConfig() *RuntimeConfig {
 
 ## Implementation Decisions
 
-### 嵌入 vs 组合
+### 嵌入 vs 独立类型
 
-选择 **嵌入（embedding）** 而非组合（`ProviderConfig *ProviderConfig`），因为：
+`ProviderConfig` 嵌入 `Config`，`RuntimeConfig` 作为独立类型不嵌入，因为：
 
-- Go 嵌入使字段扁平化，`toml.Unmarshal(data, &cfg)` 直接匹配标签，无需自定义 UnmarshalTOML
+- ProviderConfig 嵌入使字段扁平化，`toml.Unmarshal(data, &cfg)` 直接匹配标签，无需自定义 UnmarshalTOML
 - 所有现有代码 `cfg.Port`、`cfg.HTTPTimeoutSec` 不变
-- `reflect.TypeOf(cfg).NumField()` 会包含嵌入字段，`mergeDefaults` 的反射逻辑需要适配
+- RuntimeConfig 有 8 个字段与 ProviderConfig 重叠，嵌入会导致同名 `toml` 标签冲突
+- RuntimeConfig 作为独立类型，用于 `getRuntimeParams` 返回值的类型注解和未来可能的类型化 API
 
-### mergeDefaults 适配
+### mergeDefaults 方法归属
 
-当前 `mergeDefaults` 遍历 `Config` 结构体的所有字段（包括嵌入的 ProviderConfig 字段）。拆分后：
-
-- `mergeDefaults` 改为 `ProviderConfig` 的方法
-- 反射范围从 `Config` 缩小到 `ProviderConfig`，但效果相同（所有带 `default` 标签的字段都在 ProviderConfig 上）
-- 不需要遍历 RuntimeConfig 的字段（没有 `default` 标签，遍历会跳过）
+`mergeDefaults` 改为 `ProviderConfig` 的方法（`func (pc *ProviderConfig) mergeDefaults()`），反射范围缩小到 ProviderConfig 字段。效果与原来相同（所有带 `default` 标签的字段都在 ProviderConfig 上）。
 
 ### LogFile / LogMaxSize / LogMaxAge 归属
 
@@ -184,6 +183,6 @@ func DefaultRuntimeConfig() *RuntimeConfig {
 
 | 文件 | 改动 |
 |------|------|
-| `internal/config/config.go` | 拆分 struct、DefaultConfig、Validate、Sanitized |
+| `internal/config/config.go` | 拆分 struct、DefaultConfig、Validate、Sanitized、mergeDefaults |
 | `internal/config/config_loader.go` | mergeConfig → mergeDefaults 直接调用，nil provider fallback → DefaultProviderConfig() |
-| `internal/server/admin.go` | persistRuntimeConfigField 中 providerCfg 类型不变，无需改动 |
+| `internal/server/admin.go` | persistRuntimeConfigField 无需改动 |
