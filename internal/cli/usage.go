@@ -173,7 +173,7 @@ var sensenovaLoginWithURL = func(account, password, baseURL string) (string, err
 	if err != nil {
 		return "", fmt.Errorf("login request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -210,7 +210,7 @@ var sensenovaQueryUsageWithURL = func(token, tenantID, baseURL string) (map[stri
 	if err != nil {
 		return nil, fmt.Errorf("usage request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
