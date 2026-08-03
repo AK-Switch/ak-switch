@@ -1,6 +1,7 @@
 //go:build integration
 
 package integration
+
 import (
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"akswitch/internal/keypool"
 	"akswitch/internal/server"
 )
+
 // Metrics Helpers
 
 func readMetricValue(body, name, labelFilter string) float64 {
@@ -190,7 +192,6 @@ func TestTokenUsageMetrics(t *testing.T) {
 	}
 }
 
-
 // TestMetricsEndpointAccessible verifies the /metrics endpoint is accessible
 // and returns valid Prometheus text format.
 func TestMetricsEndpointAccessible(t *testing.T) {
@@ -242,7 +243,6 @@ func TestMetricsEndpointAccessible(t *testing.T) {
 
 	// Debug: log the metrics body
 	t.Logf("Metrics body for debugging: %s", metricsBody)
-
 
 }
 
@@ -406,8 +406,8 @@ func TestMetricsVerification_RequestDuration(t *testing.T) {
 			resp.Body.Close()
 			// Small delay to let async metrics recording catch up
 			time.Sleep(5 * time.Millisecond)
-			},
-		)
+		},
+	)
 	if sumDelta <= 0 {
 		// Edge case: when the request is faster than time.Now() resolution,
 		// time.Since(start) returns 0.0 and the histogram sum doesn't increase.

@@ -1425,10 +1425,3 @@ func TestProxy_NonRetryable_DoesNotPenalizeKey(t *testing.T) {
 		t.Errorf("expected 200 on second request, got %d", resp2.StatusCode)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Key persistence tests
-// ---------------------------------------------------------------------------
-
-// TestKeyPersistence_AddKeyRestart verifies that adding a key via API
-// persists it to the keyring and survives a restart.

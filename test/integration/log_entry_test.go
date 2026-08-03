@@ -202,4 +202,3 @@ func TestLogEntry_CLIFormat(t *testing.T) {
 	t.Logf("CLI-ready log entry: provider=%v duration_ms=%v retry=%v key_name=%v",
 		entry["provider"], entry["duration_ms"], entry["retry"], entry["key_name"])
 }
-

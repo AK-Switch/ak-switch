@@ -10,8 +10,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-
 )
 
 func TestGracefulShutdown_ActiveRequestCompletes(t *testing.T) {
@@ -131,4 +129,3 @@ func TestGracefulShutdown_BackgroundGoroutinesStop(t *testing.T) {
 		t.Fatal("background goroutines did not stop within 3s")
 	}
 }
-

@@ -4,7 +4,6 @@ package integration
 
 import (
 	"encoding/json"
-
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,7 +11,6 @@ import (
 	"strings"
 
 	"testing"
-
 
 	"akswitch/internal/config"
 	"akswitch/internal/keypool"
@@ -1559,5 +1557,3 @@ func TestConfigHandlerPost_Unauthenticated(t *testing.T) {
 		t.Errorf("expected 405 with token, got %d", resp.StatusCode)
 	}
 }
-
-

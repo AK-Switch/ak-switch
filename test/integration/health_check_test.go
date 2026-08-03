@@ -13,6 +13,7 @@ import (
 
 	"akswitch/internal/config"
 )
+
 // Health Check Helpers
 
 type healthResponse struct {
@@ -34,6 +35,7 @@ type providerHealthResponse struct {
 	LastHealthCheck   string `json:"last_health_check,omitempty"`
 	LastHealthCheckOK *bool  `json:"last_health_check_ok,omitempty"`
 }
+
 func getHealth(tb testing.TB, url string) healthResponse {
 	tb.Helper()
 	resp, err := http.Get(url + "/health")
@@ -381,4 +383,3 @@ func TestActiveHealthCheck_ConfigDriven(t *testing.T) {
 	t.Logf("Config: interval=%ds path=%q timeout=%ds",
 		cfg.HealthCheckIntervalSec, cfg.HealthCheckPath, cfg.HealthCheckTimeoutSec)
 }
-
