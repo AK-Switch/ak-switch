@@ -193,7 +193,7 @@ func TestTokenUsageMetrics(t *testing.T) {
 }
 
 // TestMetricsEndpointAccessible verifies the /metrics endpoint is accessible
-// and returns valid Prometheus text format.
+// and returns valid Prometheus text format with expected metrics.
 func TestMetricsEndpointAccessible(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -217,6 +217,7 @@ func TestMetricsEndpointAccessible(t *testing.T) {
 	srv := httptest.NewServer(pr.Handler())
 	defer srv.Close()
 
+	// Verify /metrics endpoint is accessible
 	resp, err := http.Get(srv.URL + "/metrics")
 	if err != nil {
 		t.Fatalf("GET /metrics: %v", err)
@@ -233,11 +234,37 @@ func TestMetricsEndpointAccessible(t *testing.T) {
 	}
 
 	// Send a proxy request to trigger metric registration
-	resp2, err2 := http.Get(srv.URL + "/test/v1/models")
-	if err2 == nil {
-		resp2.Body.Close()
+	resp2, err := http.Get(srv.URL + "/test/v1/models")
+	if err != nil {
+		t.Fatalf("proxy request: %v", err)
+	}
+	resp2.Body.Close()
+
+	// Read /metrics after proxy request (with retry for async recording)
+	var metricsBody string
+	for i := 0; i < 20; i++ {
+		mr, err := http.Get(srv.URL + "/metrics")
+		if err != nil {
+			t.Fatalf("GET /metrics (retry): %v", err)
+		}
+		b, _ := io.ReadAll(mr.Body)
+		mr.Body.Close()
+		metricsBody = string(b)
+		if strings.Contains(metricsBody, "akswitch_requests_total") {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 
+	if !strings.Contains(metricsBody, "akswitch_requests_total") {
+		t.Error("expected akswitch_requests_total metric in /metrics output")
+	}
+	if !strings.Contains(metricsBody, "akswitch_request_duration_seconds") {
+		t.Error("expected akswitch_request_duration_seconds metric in /metrics output")
+	}
+	if !strings.Contains(metricsBody, `key_index="0"`) {
+		t.Error("expected key_index label in metrics output")
+	}
 }
 
 // TestRetryMetrics verifies that retry counters are exposed via /metrics
