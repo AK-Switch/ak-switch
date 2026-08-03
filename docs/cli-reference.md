@@ -57,6 +57,20 @@ Provider: agnes
     [0] sk-s...0l8U  (active)  name: Google
 ```
 
+### provider usage 输出示例
+
+```
+akswitch usage --key sk-xxxxxxxxxxxxxxxx --provider sensenova
+Found account: d1-1 (tenant: t-abc123)
+
+Remaining quota:
+  deepseek-v4-flash               27.8% [||||||    ]
+  sensenova-6.7-flash-lite       100.0% [||||||||||]
+  sensenova-u1-fast               100.0% [||||||||||]
+```
+
+通过 `--credentials-dir` 指定凭证目录（默认从 `config.toml` 读取 `credentials_dir` 字段）。
+
 ### Key 存储
 
 - Key 存储在系统 keyring 中，回退到 JSON 文件

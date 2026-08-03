@@ -8,17 +8,16 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
-// ---- TOML 配置支持 ----
-
 // TomlConfig 对应整个 config.toml 文件结构。
 type TomlConfig struct {
-	Port            int                  `toml:"port"`
-	Host            string               `toml:"host,omitempty"`
-	DefaultProvider string               `toml:"default_provider,omitempty"`
-	LogFile         string               `toml:"log_file,omitempty"`
-	LogMaxSize      int                  `toml:"log_max_size"`
-	LogMaxAge       int                  `toml:"log_max_age"`
-	Provider        map[string]*Config `toml:"provider"`
+	Port              int                  `toml:"port"`
+	Host              string               `toml:"host,omitempty"`
+	DefaultProvider   string               `toml:"default_provider,omitempty"`
+	CredentialsDir    string               `toml:"credentials_dir,omitempty"` // Directory containing provider credential files (JSONL)
+	LogFile           string               `toml:"log_file,omitempty"`
+	LogMaxSize        int                  `toml:"log_max_size"`
+	LogMaxAge         int                  `toml:"log_max_age"`
+	Provider          map[string]*Config   `toml:"provider"`
 }
 
 // DefaultProviderName 保存从 TOML 配置中读取的默认 provider 名称。
