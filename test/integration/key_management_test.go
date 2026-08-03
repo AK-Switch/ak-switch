@@ -46,6 +46,8 @@ func TestKeysGet(t *testing.T) {
 		}
 		if key, ok := k["key"].(string); !ok || key == "" {
 			t.Errorf("keys[%d] key=%v, want non-empty masked string", i, k["key"])
+		} else if key != "****" {
+			t.Errorf("keys[%d] key=%q, want fully masked (key source ≤12 chars)", i, key)
 		}
 		if status, ok := k["status"].(string); !ok || status == "" {
 			t.Errorf("keys[%d] status=%v, want non-empty string", i, k["status"])
@@ -263,6 +265,17 @@ func TestDisableKeyHandlerAuth(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Errorf("expected 401 without token, got %d", resp.StatusCode)
+	}
+
+	req, _ = http.NewRequest("POST", srv.URL+"/api/keys/1/disable", nil)
+	req.Header.Set("X-Admin-Token", "wrong-token")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST /api/keys/1/disable (wrong token): %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("expected 401 with wrong token, got %d", resp.StatusCode)
 	}
 
 	req, _ = http.NewRequest("POST", srv.URL+"/api/keys/1/disable", nil)

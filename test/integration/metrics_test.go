@@ -99,11 +99,11 @@ func readMetricsDeltaWithCount(baseURL, metricName, labelFilter, countMetric str
 
 	action()
 
-	// After — retry up to 20 times (200ms) to handle async metrics recording.
+	// After — retry up to 30 times (300ms) to handle async metrics recording.
 	// The proxy records metrics AFTER writing the HTTP response, so there's
 	// a small window where the metrics endpoint hasn't been updated yet.
 	var after float64
-	for i := 0; i < 20; i++ {
+	for i := 0; i < 30; i++ {
 		resp, err = http.Get(baseURL + "/metrics")
 		if err != nil {
 			return -2
@@ -242,7 +242,7 @@ func TestMetricsEndpointAccessible(t *testing.T) {
 
 	// Read /metrics after proxy request (with retry for async recording)
 	var metricsBody string
-	for i := 0; i < 20; i++ {
+	for i := 0; i < 30; i++ {
 		mr, err := http.Get(srv.URL + "/metrics")
 		if err != nil {
 			t.Fatalf("GET /metrics (retry): %v", err)
@@ -262,6 +262,8 @@ func TestMetricsEndpointAccessible(t *testing.T) {
 	if !strings.Contains(metricsBody, "akswitch_request_duration_seconds") {
 		t.Error("expected akswitch_request_duration_seconds metric in /metrics output")
 	}
+	// key_index uses 0-based array indexing (first key → index 0) to match
+	// the Go slice positions used internally when selecting the active key.
 	if !strings.Contains(metricsBody, `key_index="0"`) {
 		t.Error("expected key_index label in metrics output")
 	}

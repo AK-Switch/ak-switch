@@ -136,6 +136,11 @@ func TestStatsHandler(t *testing.T) {
 	for _, f := range fields {
 		if _, ok := body[f]; !ok {
 			t.Errorf("missing field %q in response", f)
+			continue
+		}
+		val, _ := body[f].(float64)
+		if val < 0 {
+			t.Errorf("%s=%f: negative value", f, val)
 		}
 	}
 }
@@ -327,7 +332,7 @@ func TestClearHandlerAuth(t *testing.T) {
 
 // ── Config POST — unauthenticated ──────────────────────
 
-func TestConfigHandlerPost_Unauthenticated(t *testing.T) {
+func TestConfigHandlerPost_MethodNotAllowed(t *testing.T) {
 	origDir, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
