@@ -137,3 +137,16 @@ func TestExtractResponseText_AnthropicNoTextBlock(t *testing.T) {
 		t.Errorf("ExtractResponseText = %q, want empty for tool_use only", text)
 	}
 }
+
+// ── ParseSSEEvent ──────────────────────────
+
+func TestParseSSEEvent_ContentBlockDelta(t *testing.T) {
+	raw := []byte(`{"type":"content_block_delta","delta":{"text":"hello","partial_json":"{\"key\""}}`)
+	tokens, delta := ParseSSEEvent(raw)
+	if tokens != 0 {
+		t.Errorf("expected 0 tokens, got %d", tokens)
+	}
+	if delta != "hello{\"key\"" {
+		t.Errorf("expected `hello{\"key\"`, got %q", delta)
+	}
+}
