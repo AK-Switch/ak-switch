@@ -17,10 +17,8 @@ func (pr *ProviderRouter) proxyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pr.mu.RLock()
-	ps, ok := pr.providers[providerName]
-	pr.mu.RUnlock()
-	if !ok {
+	ps := pr.pm.LookupProvider(providerName)
+	if ps == nil {
 		respondJSON(w, http.StatusNotFound, map[string]string{"error": "provider not found: " + providerName})
 		return
 	}
