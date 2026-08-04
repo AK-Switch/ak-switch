@@ -13,9 +13,9 @@ import (
 
 	"akswitch/internal/config"
 	"akswitch/internal/keypool"
-	
-	"akswitch/internal/tracker"
+
 	akswitchmetrics "akswitch/internal/metrics"
+	"akswitch/internal/tracker"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -88,11 +88,11 @@ func (ps *ProviderState) PersistKeys() {
 
 // ProviderRouter manages a single-port HTTP server with path-based provider routing.
 type ProviderRouter struct {
-	mu              sync.RWMutex
-	proxy           *http.Server
-	listener        net.Listener
-	providers       map[string]*ProviderState
-	
+	mu        sync.RWMutex
+	proxy     *http.Server
+	listener  net.Listener
+	providers map[string]*ProviderState
+
 	startTime       time.Time
 	metrics         *akswitchmetrics.Metrics
 	metricsRegistry *prometheus.Registry
@@ -104,6 +104,7 @@ type ProviderRouter struct {
 	calibrator      *tracker.Calibrator // per-model token estimation calibration
 	logManager      *LogManager
 	proxyExecutor   *ProxyExecutor
+	api             *AdminAPI
 
 	// Key operation handlers (initialized via keyOperationHandler factory)
 	disableKeyHandler  http.HandlerFunc
@@ -142,6 +143,10 @@ func NewProviderRouter(dashboardHTML string) *ProviderRouter {
 	pr.deleteKeyHandler = pr.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
 		return pool.RemoveKey(idx)
 	})
+
+	// Initialize AdminAPI — pass self as ProviderLookup
+	pr.api = NewAdminAPI(pr, pr.logManager, dashboardHTML, pr.startTime)
+
 	return pr
 }
 
@@ -280,6 +285,32 @@ func (pr *ProviderRouter) ProviderNames() []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// LookupProvider returns the ProviderState with the given name.
+func (pr *ProviderRouter) LookupProvider(name string) *ProviderState {
+	pr.mu.RLock()
+	defer pr.mu.RUnlock()
+	return pr.providers[name]
+}
+
+// FirstProvider returns the first (alphabetically) provider.
+func (pr *ProviderRouter) FirstProvider() *ProviderState {
+	pr.mu.RLock()
+	defer pr.mu.RUnlock()
+	for _, ps := range pr.providers {
+		return ps
+	}
+	return nil
+}
+
+// ForEach iterates over all providers.
+func (pr *ProviderRouter) ForEach(fn func(name string, ps *ProviderState)) {
+	pr.mu.RLock()
+	defer pr.mu.RUnlock()
+	for name, ps := range pr.providers {
+		fn(name, ps)
+	}
 }
 
 // Provider returns the ProviderState with the given name, or nil if not found.
