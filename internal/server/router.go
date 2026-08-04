@@ -130,17 +130,17 @@ func NewProviderRouter(dashboardHTML string) *ProviderRouter {
 	// Initialize proxy executor with shared dependencies
 	pr.proxyExecutor = NewProxyExecutor(m, pr.calibrator)
 
-	// Initialize key operation handlers via factory function
-	pr.disableKeyHandler = pr.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
+	// Initialize key operation handlers via AdminAPI
+	pr.disableKeyHandler = pr.api.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
 		return pool.Disable(idx)
 	})
-	pr.enableKeyHandler = pr.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
+	pr.enableKeyHandler = pr.api.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
 		return pool.Enable(idx)
 	})
-	pr.cooldownKeyHandler = pr.keyOperationHandler(func(pool *keypool.KeyPool, cfg *config.Config, idx int) error {
+	pr.cooldownKeyHandler = pr.api.keyOperationHandler(func(pool *keypool.KeyPool, cfg *config.Config, idx int) error {
 		return pool.Cooldown(idx, time.Duration(cfg.CooldownSec)*time.Second)
 	})
-	pr.deleteKeyHandler = pr.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
+	pr.deleteKeyHandler = pr.api.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
 		return pool.RemoveKey(idx)
 	})
 
@@ -219,24 +219,9 @@ func (pr *ProviderRouter) StartWithListener(listener net.Listener) error {
 
 // registerRoutes builds the combined mux with all routes.
 func (pr *ProviderRouter) registerRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("/health", pr.healthHandler)
-	mux.HandleFunc("/logs", pr.logsHandler)
-	mux.HandleFunc("/dashboard", pr.dashboardHandler)
-	mux.HandleFunc("/clear", pr.clearHandler)
-	mux.HandleFunc("/api/config", pr.configHandler)
-	mux.HandleFunc("/api/keys", pr.keysHandler)
-	mux.HandleFunc("POST /api/keys/{index}/disable", pr.disableKeyHandler)
-	mux.HandleFunc("POST /api/keys/{index}/enable", pr.enableKeyHandler)
-	mux.HandleFunc("PUT /api/keys/{index}/cooldown", pr.cooldownKeyHandler)
-	mux.HandleFunc("DELETE /api/keys/{index}", pr.deleteKeyHandler)
-	mux.HandleFunc("GET /api/stats", pr.statsHandler)
-	mux.HandleFunc("POST /api/stats/reset-upstream-cb", pr.upstreamCBResetHandler)
-	mux.HandleFunc("POST /api/reload", pr.reloadHandler)
-	mux.HandleFunc("/api/log-level", pr.logLevelHandler)
-	mux.HandleFunc("/api/runtime-config", pr.runtimeConfigHandler)
-	mux.Handle("GET /metrics", promhttp.HandlerFor(pr.metricsRegistry, promhttp.HandlerOpts{}))
-	mux.HandleFunc("/sw.js", pr.swHandler)
+	pr.api.RegisterRoutes(mux)
 	mux.HandleFunc("/", pr.proxyHandler)
+	mux.Handle("GET /metrics", promhttp.HandlerFor(pr.metricsRegistry, promhttp.HandlerOpts{}))
 }
 
 // Handler returns the HTTP handler (mux) for use by http.Server, httptest, or Start().

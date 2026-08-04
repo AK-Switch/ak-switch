@@ -492,6 +492,13 @@ func (api *AdminAPI) statsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pName := r.URL.Query().Get("provider")
+	if pName != "" {
+		ps, errMsg := api.resolveProviderByName(pName)
+		if ps == nil {
+			respondJSON(w, http.StatusNotFound, map[string]string{"error": errMsg})
+			return
+		}
+	}
 
 	var totalActive, totalCooling, totalDisabled int
 	api.pm.ForEach(func(name string, ps *ProviderState) {
