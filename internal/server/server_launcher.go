@@ -26,10 +26,6 @@ import (
 // does not import the cli package (avoiding a circular dependency).
 // The cli package provides the production implementation; nil means
 // self-restart is disabled.
-// RestartController abstracts self-restart behavior so the server package
-// does not import the cli package (avoiding a circular dependency).
-// The cli package provides the production implementation; nil means
-// self-restart is disabled.
 type RestartController interface {
 	// Setup starts the binary-watch goroutine. Called before server start.
 	Setup(exePath string, sigCh chan os.Signal)
@@ -87,7 +83,7 @@ func (sl *ServerLauncher) Launch() error {
 	defer CrashRecover("Launch")
 
 	// PID pre-check
-	if running, pid := sl.checkPidFile(sl.pidFilePath(sl.devMode)); running {
+	if running, pid := sl.checkPidFile(sl.PidFilePath(sl.devMode)); running {
 		slog.Error("akswitch is already running", "pid", pid)
 		return nil
 	}
@@ -281,7 +277,7 @@ func (sl *ServerLauncher) initProviders(router *ProviderRouter, providers map[st
 
 // writePIDFile writes the PID file and returns the path for deferred cleanup.
 func (sl *ServerLauncher) writePIDFile() (string, error) {
-	pidPath := sl.pidFilePath(sl.devMode)
+	pidPath := sl.PidFilePath(sl.devMode)
 	if err := os.MkdirAll(filepath.Dir(pidPath), 0755); err != nil {
 		slog.Warn("failed to create PID file directory", "error", err)
 	}
@@ -354,7 +350,7 @@ func (sl *ServerLauncher) loadKeysForProvider(name string, cfg *config.Config) (
 }
 
 // pidFilePath returns the path to the PID file, located in the config directory.
-func (sl *ServerLauncher) pidFilePath(devMode bool) string {
+func (sl *ServerLauncher) PidFilePath(devMode bool) string {
 	xdgPath, err := config.XDGConfigPath()
 	if err != nil {
 		if devMode {
