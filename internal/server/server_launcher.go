@@ -26,9 +26,16 @@ import (
 // does not import the cli package (avoiding a circular dependency).
 // The cli package provides the production implementation; nil means
 // self-restart is disabled.
+// RestartController abstracts self-restart behavior so the server package
+// does not import the cli package (avoiding a circular dependency).
+// The cli package provides the production implementation; nil means
+// self-restart is disabled.
 type RestartController interface {
 	// Setup starts the binary-watch goroutine. Called before server start.
 	Setup(exePath string, sigCh chan os.Signal)
+	// ShouldRestart reports whether a restart is warranted (e.g., binary
+	// was updated). Queried after graceful shutdown, before Execute.
+	ShouldRestart() bool
 	// Execute performs the actual restart after graceful shutdown.
 	Execute()
 }
@@ -314,7 +321,7 @@ func (sl *ServerLauncher) waitForShutdown(router *ProviderRouter) error {
 	slog.Info("server stopped gracefully")
 
 	// Self-monitoring restart (only when binary was updated)
-	if sl.restartCtrl != nil {
+	if sl.restartCtrl != nil && sl.restartCtrl.ShouldRestart() {
 		sl.restartCtrl.Execute()
 	}
 
