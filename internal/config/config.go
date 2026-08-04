@@ -182,9 +182,6 @@ func (c *Config) Validate() error {
 	if err := c.ProviderConfig.Validate(); err != nil {
 		return err
 	}
-	if err := c.RuntimeConfig.Validate(); err != nil {
-		return err
-	}
 	c.RuntimeConfig.HTTPTimeoutSec = c.HTTPTimeoutSec
 	c.RuntimeConfig.MaxRetries = c.MaxRetries
 	c.RuntimeConfig.CooldownSec = c.CooldownSec
@@ -193,7 +190,7 @@ func (c *Config) Validate() error {
 	c.RuntimeConfig.CBResetSec = c.CBResetSec
 	c.RuntimeConfig.UpstreamCBThreshold = c.UpstreamCBThreshold
 	c.RuntimeConfig.LogLevel = c.LogLevel
-	return nil
+	return c.RuntimeConfig.Validate()
 }
 
 // Sanitized returns a copy of the Config with sensitive fields masked.
