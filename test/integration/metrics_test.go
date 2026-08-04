@@ -142,15 +142,17 @@ func TestTokenUsageMetrics(t *testing.T) {
 	defer upstream.Close()
 
 	cfg := &config.Config{
-		TargetBase:             upstream.URL,
-		Port:                   0,
-		MaxRetries:             1,
-		CooldownSec:            60,
-		UpstreamCBThreshold:    5,
-		CBResetSec:             30,
-		HealthCheckIntervalSec: 30,
-		HealthCheckPath:        "/health",
-		HealthCheckTimeoutSec:  5,
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:             upstream.URL,
+			Port:                   0,
+			MaxRetries:             1,
+			CooldownSec:            60,
+			UpstreamCBThreshold:    5,
+			CBResetSec:             30,
+			HealthCheckIntervalSec: 30,
+			HealthCheckPath:        "/health",
+			HealthCheckTimeoutSec:  5,
+		},
 	}
 	pool := keypool.NewKeyPool([]string{"test-key-1234567890"}, nil)
 	pr := server.NewProviderRouter("")
@@ -201,15 +203,17 @@ func TestMetricsEndpointAccessible(t *testing.T) {
 	defer upstream.Close()
 
 	cfg := &config.Config{
-		TargetBase:             upstream.URL,
-		Port:                   0,
-		MaxRetries:             1,
-		CooldownSec:            60,
-		UpstreamCBThreshold:    5,
-		CBResetSec:             30,
-		HealthCheckIntervalSec: 30,
-		HealthCheckPath:        "/health",
-		HealthCheckTimeoutSec:  5,
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:             upstream.URL,
+			Port:                   0,
+			MaxRetries:             1,
+			CooldownSec:            60,
+			UpstreamCBThreshold:    5,
+			CBResetSec:             30,
+			HealthCheckIntervalSec: 30,
+			HealthCheckPath:        "/health",
+			HealthCheckTimeoutSec:  5,
+		},
 	}
 	pool := keypool.NewKeyPool([]string{"test-key-1234567890"}, nil)
 	pr := server.NewProviderRouter("")
@@ -279,15 +283,17 @@ func TestRetryMetrics(t *testing.T) {
 	defer upstream.Close()
 
 	cfg := &config.Config{
-		TargetBase:             upstream.URL,
-		Port:                   0,
-		MaxRetries:             3,
-		CooldownSec:            30,
-		UpstreamCBThreshold:    10,
-		CBResetSec:             60,
-		HealthCheckIntervalSec: 30,
-		HealthCheckPath:        "/health",
-		HealthCheckTimeoutSec:  5,
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:             upstream.URL,
+			Port:                   0,
+			MaxRetries:             3,
+			CooldownSec:            30,
+			UpstreamCBThreshold:    10,
+			CBResetSec:             60,
+			HealthCheckIntervalSec: 30,
+			HealthCheckPath:        "/health",
+			HealthCheckTimeoutSec:  5,
+		},
 	}
 	pool := keypool.NewKeyPool([]string{"test-key-1234567890"}, nil)
 	pr := server.NewProviderRouter("")
@@ -328,15 +334,17 @@ func TestUptimeMetrics(t *testing.T) {
 	defer upstream.Close()
 
 	cfg := &config.Config{
-		TargetBase:             upstream.URL,
-		Port:                   0,
-		MaxRetries:             1,
-		CooldownSec:            60,
-		UpstreamCBThreshold:    5,
-		CBResetSec:             30,
-		HealthCheckIntervalSec: 30,
-		HealthCheckPath:        "/health",
-		HealthCheckTimeoutSec:  5,
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:             upstream.URL,
+			Port:                   0,
+			MaxRetries:             1,
+			CooldownSec:            60,
+			UpstreamCBThreshold:    5,
+			CBResetSec:             30,
+			HealthCheckIntervalSec: 30,
+			HealthCheckPath:        "/health",
+			HealthCheckTimeoutSec:  5,
+		},
 	}
 	pool := keypool.NewKeyPool([]string{"test-key-1234567890"}, nil)
 	pr := server.NewProviderRouter("")
@@ -530,10 +538,12 @@ func TestMetricsVerification_KeyPoolDisabled(t *testing.T) {
 
 	// Create server via ProviderRouter so we have access to state.Metrics() via ProviderState
 	cfg := &config.Config{
-		TargetBase:  upstream.URL,
-		Port:        0,
-		MaxRetries:  3,
-		CooldownSec: 2,
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:  upstream.URL,
+			Port:        0,
+			MaxRetries:  3,
+			CooldownSec: 2,
+		},
 	}
 	pool := keypool.NewKeyPool([]string{"key-a", "key-b"}, nil)
 	pr := server.NewProviderRouter("")

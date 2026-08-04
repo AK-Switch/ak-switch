@@ -244,12 +244,14 @@ func TestDisableKeyHandler(t *testing.T) {
 
 func TestDisableKeyHandlerAuth(t *testing.T) {
 	cfg := &config.Config{
-		TargetBase:  "http://localhost:19999",
-		Port:        19999,
-		MaxRetries:  3,
-		CooldownSec: 60,
-		AdminToken:  "my-token",
-		Keys:        []string{"key-a", "key-b", "key-c"},
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:  "http://localhost:19999",
+			Port:        19999,
+			MaxRetries:  3,
+			CooldownSec: 60,
+			AdminToken:  "my-token",
+			Keys:        []string{"key-a", "key-b", "key-c"},
+		},
 	}
 	pool := keypool.NewKeyPool([]string{"key-a", "key-b", "key-c"}, nil)
 	pr := server.NewProviderRouter("")
@@ -386,12 +388,14 @@ func TestDeleteKeyByIndexHandler(t *testing.T) {
 
 func TestDeleteKeyByIndexHandlerAuth(t *testing.T) {
 	cfg := &config.Config{
-		TargetBase:  "http://localhost:19999",
-		Port:        19999,
-		MaxRetries:  3,
-		CooldownSec: 60,
-		AdminToken:  "my-token",
-		Keys:        []string{"key-a", "key-b", "key-c"},
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:  "http://localhost:19999",
+			Port:        19999,
+			MaxRetries:  3,
+			CooldownSec: 60,
+			AdminToken:  "my-token",
+			Keys:        []string{"key-a", "key-b", "key-c"},
+		},
 	}
 	pool := keypool.NewKeyPool([]string{"key-a", "key-b", "key-c"}, nil)
 	pr := server.NewProviderRouter("")
@@ -433,12 +437,14 @@ func TestDeleteKeyByIndexHandlerAuth(t *testing.T) {
 
 func TestKeysHandlerDelete_Unauthenticated(t *testing.T) {
 	cfg := &config.Config{
-		TargetBase:  "http://localhost:19999",
-		Port:        19999,
-		MaxRetries:  3,
-		CooldownSec: 60,
-		AdminToken:  "my-token",
-		Keys:        []string{"key-a", "key-b", "key-c"},
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:  "http://localhost:19999",
+			Port:        19999,
+			MaxRetries:  3,
+			CooldownSec: 60,
+			AdminToken:  "my-token",
+			Keys:        []string{"key-a", "key-b", "key-c"},
+		},
 	}
 	pool := keypool.NewKeyPool([]string{"key-a", "key-b", "key-c"}, nil)
 	pr := server.NewProviderRouter("")

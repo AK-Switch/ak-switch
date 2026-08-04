@@ -86,12 +86,14 @@ func TestConfigPost(t *testing.T) {
 	}
 
 	cfg := &config.Config{
-		TargetBase:  "http://localhost:19999",
-		Port:        19999,
-		MaxRetries:  3,
-		CooldownSec: 60,
-		AdminToken:  "",
-		Keys:        []string{"key-a", "key-b"},
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:  "http://localhost:19999",
+			Port:        19999,
+			MaxRetries:  3,
+			CooldownSec: 60,
+			AdminToken:  "",
+			Keys:        []string{"key-a", "key-b"},
+		},
 	}
 	pool := keypool.NewKeyPool([]string{"key-a", "key-b"}, nil)
 	pr := server.NewProviderRouter("")
@@ -150,16 +152,20 @@ func TestStatsHandler(t *testing.T) {
 // aggregated totals across all providers.
 func TestStatsHandlerPerProvider(t *testing.T) {
 	cfg1 := &config.Config{
-		TargetBase: "http://localhost:19998",
-		Port:       19999,
-		MaxRetries: 3, CooldownSec: 60,
-		Keys: []string{"key-a", "key-b", "key-c"},
+		ProviderConfig: config.ProviderConfig{
+			TargetBase: "http://localhost:19998",
+			Port:       19999,
+			MaxRetries: 3, CooldownSec: 60,
+			Keys: []string{"key-a", "key-b", "key-c"},
+		},
 	}
 	cfg2 := &config.Config{
-		TargetBase: "http://localhost:19997",
-		Port:       19998,
-		MaxRetries: 3, CooldownSec: 60,
-		Keys: []string{"key-x", "key-y"},
+		ProviderConfig: config.ProviderConfig{
+			TargetBase: "http://localhost:19997",
+			Port:       19998,
+			MaxRetries: 3, CooldownSec: 60,
+			Keys: []string{"key-x", "key-y"},
+		},
 	}
 	pool1 := keypool.NewKeyPool(cfg1.Keys, nil)
 	pool2 := keypool.NewKeyPool(cfg2.Keys, nil)
@@ -238,9 +244,11 @@ func TestStatsHandlerPerProvider(t *testing.T) {
 // reflects disabled keys correctly.
 func TestStatsHandlerPerProviderAfterDisable(t *testing.T) {
 	cfg := &config.Config{
-		TargetBase: "http://localhost:19999",
-		Port:       19999, MaxRetries: 3, CooldownSec: 60, AdminToken: "",
-		Keys: []string{"key-a", "key-b", "key-c"},
+		ProviderConfig: config.ProviderConfig{
+			TargetBase: "http://localhost:19999",
+			Port:       19999, MaxRetries: 3, CooldownSec: 60, AdminToken: "",
+			Keys: []string{"key-a", "key-b", "key-c"},
+		},
 	}
 	pool := keypool.NewKeyPool(cfg.Keys, nil)
 	pr := server.NewProviderRouter("")
@@ -276,11 +284,13 @@ func TestStatsHandlerPerProviderAfterDisable(t *testing.T) {
 
 func TestClearHandlerAuth(t *testing.T) {
 	cfg := &config.Config{
-		TargetBase:  "http://localhost:19999",
-		Port:        19999,
-		MaxRetries:  3,
-		CooldownSec: 60,
-		AdminToken:  "my-token",
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:  "http://localhost:19999",
+			Port:        19999,
+			MaxRetries:  3,
+			CooldownSec: 60,
+			AdminToken:  "my-token",
+		},
 	}
 	pool := keypool.NewKeyPool([]string{"key-a", "key-b", "key-c"}, nil)
 	pr := server.NewProviderRouter("")
@@ -349,12 +359,14 @@ func TestConfigHandlerPost_MethodNotAllowed(t *testing.T) {
 	}
 
 	cfg := &config.Config{
-		TargetBase:  "http://localhost:19999",
-		Port:        19999,
-		MaxRetries:  3,
-		CooldownSec: 60,
-		AdminToken:  "my-token",
-		Keys:        []string{"key-a", "key-b"},
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:  "http://localhost:19999",
+			Port:        19999,
+			MaxRetries:  3,
+			CooldownSec: 60,
+			AdminToken:  "my-token",
+			Keys:        []string{"key-a", "key-b"},
+		},
 	}
 	pool := keypool.NewKeyPool([]string{"key-a", "key-b"}, nil)
 	pr := server.NewProviderRouter("")
@@ -410,12 +422,14 @@ cooldown_sec = 60
 	}
 
 	cfg := &config.Config{
-		TargetBase:  "http://localhost:19999",
-		Port:        19999,
-		MaxRetries:  3,
-		CooldownSec: 60,
-		AdminToken:  "",
-		Keys:        []string{"key-a", "key-b"},
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:  "http://localhost:19999",
+			Port:        19999,
+			MaxRetries:  3,
+			CooldownSec: 60,
+			AdminToken:  "",
+			Keys:        []string{"key-a", "key-b"},
+		},
 	}
 	pool := keypool.NewKeyPool([]string{"key-a", "key-b"}, nil)
 	pr := server.NewProviderRouter("")
@@ -509,12 +523,14 @@ func TestLogLevelHandler_GetLevel(t *testing.T) {
 
 func TestLogLevelHandler_Unauthorized(t *testing.T) {
 	cfg := &config.Config{
-		TargetBase:  "http://localhost:19999",
-		Port:        19999,
-		MaxRetries:  3,
-		CooldownSec: 60,
-		AdminToken:  "secret-token",
-		Keys:        []string{"key-a"},
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:  "http://localhost:19999",
+			Port:        19999,
+			MaxRetries:  3,
+			CooldownSec: 60,
+			AdminToken:  "secret-token",
+			Keys:        []string{"key-a"},
+		},
 	}
 	pool := keypool.NewKeyPool([]string{"key-a"}, nil)
 	pr := server.NewProviderRouter("")
@@ -750,12 +766,14 @@ func TestRuntimeConfigHandler_SetInvalidLogLevel(t *testing.T) {
 
 func TestRuntimeConfigHandler_Unauthorized(t *testing.T) {
 	cfg := &config.Config{
-		TargetBase:  "http://localhost:19999",
-		Port:        19999,
-		MaxRetries:  3,
-		CooldownSec: 60,
-		AdminToken:  "secret-token",
-		Keys:        []string{"key-a"},
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:  "http://localhost:19999",
+			Port:        19999,
+			MaxRetries:  3,
+			CooldownSec: 60,
+			AdminToken:  "secret-token",
+			Keys:        []string{"key-a"},
+		},
 	}
 	pool := keypool.NewKeyPool([]string{"key-a"}, nil)
 	pr := server.NewProviderRouter("")

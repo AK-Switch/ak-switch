@@ -396,12 +396,14 @@ func TestProxyWithKeyManagement(t *testing.T) {
 
 	// Create AK Switch with 1 initial key (must have at least 1 to avoid panic in Next())
 	cfg := &config.Config{
-		TargetBase:  upstream.URL,
-		Port:        8080,
-		MaxRetries:  10,
-		CooldownSec: 60,
-		AdminToken:  "",
-		Keys:        []string{"initial-key"},
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:  upstream.URL,
+			Port:        8080,
+			MaxRetries:  10,
+			CooldownSec: 60,
+			AdminToken:  "",
+			Keys:        []string{"initial-key"},
+		},
 	}
 	pool := keypool.NewKeyPool([]string{"initial-key"}, nil)
 	pr := server.NewProviderRouter("")
@@ -499,10 +501,12 @@ func TestProxyOnlyAvailableKeysTried(t *testing.T) {
 	// The handler returns 429 twice then 200 -> should succeed on 3rd available key.
 	pool := keypool.NewKeyPool([]string{"key-a", "key-b", "key-c", "key-d", "key-e"}, nil)
 	cfg := &config.Config{
-		TargetBase:  upstream.URL,
-		Port:        0,
-		MaxRetries:  5,
-		CooldownSec: 30,
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:  upstream.URL,
+			Port:        0,
+			MaxRetries:  5,
+			CooldownSec: 30,
+		},
 	}
 	pr := server.NewProviderRouter("")
 	pr.AddProvider("test", cfg, pool)
@@ -964,10 +968,12 @@ func TestProxyError_UpstreamError(t *testing.T) {
 	// Set TargetBase to something that makes NewRequestWithContext fail.
 	// An invalid scheme causes http.NewRequestWithContext to return an error.
 	cfg := &config.Config{
-		TargetBase:  "://invalid",
-		Port:        0,
-		MaxRetries:  3,
-		CooldownSec: 60,
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:  "://invalid",
+			Port:        0,
+			MaxRetries:  3,
+			CooldownSec: 60,
+		},
 	}
 	pool := keypool.NewKeyPool([]string{"test-key-a"}, nil)
 	pr := server.NewProviderRouter("")

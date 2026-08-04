@@ -26,10 +26,12 @@ func TestKeyPersistence_AddKeyRestart(t *testing.T) {
 	defer upstream.Close()
 
 	cfg := &config.Config{
-		TargetBase:  upstream.URL,
-		Port:        0,
-		MaxRetries:  3,
-		CooldownSec: 60,
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:  upstream.URL,
+			Port:        0,
+			MaxRetries:  3,
+			CooldownSec: 60,
+		},
 	}
 	pool := keypool.NewKeyPool([]string{"initial-key"}, nil)
 	pr := server.NewProviderRouter("")
@@ -78,10 +80,12 @@ func TestKeyPersistence_AddKeyRestart(t *testing.T) {
 
 	restoredPool := keypool.NewKeyPool(fileKeys, fileNames)
 	newCfg := &config.Config{
-		TargetBase:  upstream.URL,
-		Port:        0,
-		MaxRetries:  3,
-		CooldownSec: 60,
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:  upstream.URL,
+			Port:        0,
+			MaxRetries:  3,
+			CooldownSec: 60,
+		},
 	}
 	pr2 := server.NewProviderRouter("")
 	pr2.AddProvider("test", newCfg, restoredPool)
@@ -121,10 +125,12 @@ func TestKeyPersistence_DeleteKeyRestart(t *testing.T) {
 	defer upstream.Close()
 
 	cfg := &config.Config{
-		TargetBase:  upstream.URL,
-		Port:        0,
-		MaxRetries:  3,
-		CooldownSec: 60,
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:  upstream.URL,
+			Port:        0,
+			MaxRetries:  3,
+			CooldownSec: 60,
+		},
 	}
 	pool := keypool.NewKeyPool([]string{"key-a", "key-b"}, nil)
 	pr := server.NewProviderRouter("")
@@ -183,10 +189,12 @@ func TestKeyPersistence_DisableKeyAndPersist(t *testing.T) {
 	defer upstream.Close()
 
 	cfg := &config.Config{
-		TargetBase:  upstream.URL,
-		Port:        0,
-		MaxRetries:  3,
-		CooldownSec: 60,
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:  upstream.URL,
+			Port:        0,
+			MaxRetries:  3,
+			CooldownSec: 60,
+		},
 	}
 	pool := keypool.NewKeyPool([]string{"key-a", "key-b"}, nil)
 	pr := server.NewProviderRouter("")
@@ -233,10 +241,12 @@ func TestKeyEncryption_NoEncryption_BackwardCompatible(t *testing.T) {
 	defer upstream.Close()
 
 	cfg := &config.Config{
-		TargetBase:  upstream.URL,
-		Port:        0,
-		MaxRetries:  3,
-		CooldownSec: 60,
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:  upstream.URL,
+			Port:        0,
+			MaxRetries:  3,
+			CooldownSec: 60,
+		},
 	}
 	pool := keypool.NewKeyPool([]string{"plaintext-key-a"}, nil)
 	pr := server.NewProviderRouter("")
