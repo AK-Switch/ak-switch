@@ -292,7 +292,7 @@ func TestLoadKeysFromStore_CustomFile(t *testing.T) {
 		t.Fatalf("write keys file: %v", err)
 	}
 
-	cfg := &config.Config{KeysFile: keysPath}
+	cfg := &config.Config{ProviderConfig: config.ProviderConfig{KeysFile: keysPath}}
 	keys, names, loaded := LoadKeysFromStore("test", cfg)
 	if !loaded {
 		t.Fatal("LoadKeysFromStore: loaded=false, want true")
@@ -316,7 +316,7 @@ func TestLoadKeysFromStore_CustomFileNotExist(t *testing.T) {
 	config.ConfigDir = dir
 	defer func() { config.ConfigDir = "" }()
 
-	cfg := &config.Config{KeysFile: filepath.Join(dir, "nonexistent.json")}
+	cfg := &config.Config{ProviderConfig: config.ProviderConfig{KeysFile: filepath.Join(dir, "nonexistent.json")}}
 	keys, names, loaded := LoadKeysFromStore("test", cfg)
 	if loaded {
 		t.Error("LoadKeysFromStore: loaded=true, want false")
@@ -337,7 +337,7 @@ func TestLoadKeysFromStore_NoSource(t *testing.T) {
 	config.ConfigDir = dir
 	defer func() { config.ConfigDir = "" }()
 
-	cfg := &config.Config{}
+	cfg := &config.Config{ProviderConfig: config.ProviderConfig{}}
 	keys, names, loaded := LoadKeysFromStore("test", cfg)
 	if loaded {
 		t.Error("LoadKeysFromStore: loaded=true, want false")
@@ -368,7 +368,7 @@ func TestLoadDisabledNames_FromFile(t *testing.T) {
 		t.Fatalf("SaveFullStore: %v", err)
 	}
 
-	cfg := &config.Config{KeysFile: keysPath}
+	cfg := &config.Config{ProviderConfig: config.ProviderConfig{KeysFile: keysPath}}
 	disabled := LoadDisabledNames("test-load-disabled-names", cfg)
 	if len(disabled) != 2 {
 		t.Fatalf("LoadDisabledNames returned %d names, want 2: %v", len(disabled), disabled)
@@ -397,7 +397,7 @@ func TestLoadDisabledNames_NoDisabledKeys(t *testing.T) {
 		t.Fatalf("SaveFullStore: %v", err)
 	}
 
-	cfg := &config.Config{KeysFile: keysPath}
+	cfg := &config.Config{ProviderConfig: config.ProviderConfig{KeysFile: keysPath}}
 	disabled := LoadDisabledNames("test-load-disabled-names", cfg)
 	if disabled != nil {
 		t.Errorf("LoadDisabledNames = %v, want nil", disabled)
@@ -409,7 +409,7 @@ func TestLoadDisabledNames_NoStore(t *testing.T) {
 	config.ConfigDir = dir
 	defer func() { config.ConfigDir = "" }()
 
-	cfg := &config.Config{}
+	cfg := &config.Config{ProviderConfig: config.ProviderConfig{}}
 	disabled := LoadDisabledNames("nonexistent", cfg)
 	if disabled != nil {
 		t.Errorf("LoadDisabledNames = %v, want nil", disabled)
@@ -451,7 +451,7 @@ func TestLoadKeysFromStore_MergesKeyringAndInsecure(t *testing.T) {
 		t.Fatalf("SaveKeysInsecure: %v", err)
 	}
 
-	cfg := &config.Config{}
+	cfg := &config.Config{ProviderConfig: config.ProviderConfig{}}
 	keys, names, loaded := LoadKeysFromStore("test-merge", cfg)
 	if !loaded {
 		t.Fatal("LoadKeysFromStore: loaded=false, want true")
@@ -508,7 +508,7 @@ func TestLoadKeysFromStore_MergesInsecureOnlyWhenKeyringMissingKeys(t *testing.T
 		t.Fatalf("SaveKeysInsecure: %v", err)
 	}
 
-	cfg := &config.Config{}
+	cfg := &config.Config{ProviderConfig: config.ProviderConfig{}}
 	keys, names, loaded := LoadKeysFromStore("test-merge-dupe", cfg)
 	if !loaded {
 		t.Fatal("LoadKeysFromStore: loaded=false, want true")

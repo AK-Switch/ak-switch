@@ -1257,17 +1257,19 @@ func TestCLI_ProviderInfo_Format(t *testing.T) {
 	tc := &config.TomlConfig{
 		Port: 8080,
 		Provider: map[string]*config.Config{
-			"alpha": {
-				TargetBase:          "https://alpha.test/v1",
-				CooldownSec:         60,
-				MaxRetries:          3,
-				BackoffCapSec:       120,
-				BackoffMultiplier:   2,
-				CBResetSec:          30,
-				UpstreamCBThreshold: 5,
-				HealthCheckIntervalSec: 30,
-				HealthCheckPath:       "/health",
-				HealthCheckTimeoutSec:  5,
+			"alpha": &config.Config{
+				ProviderConfig: config.ProviderConfig{
+					TargetBase:          "https://alpha.test/v1",
+					CooldownSec:         60,
+					MaxRetries:          3,
+					BackoffCapSec:       120,
+					BackoffMultiplier:   2,
+					CBResetSec:          30,
+					UpstreamCBThreshold: 5,
+					HealthCheckIntervalSec: 30,
+					HealthCheckPath:       "/health",
+					HealthCheckTimeoutSec:  5,
+				},
 			},
 		},
 	}

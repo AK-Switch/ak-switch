@@ -24,10 +24,12 @@ func TestLogEntry_HasNewFields(t *testing.T) {
 
 	logFile := filepath.Join(t.TempDir(), "test.log")
 	cfg := &config.Config{
-		TargetBase:  upstream.URL,
-		Port:        0,
-		MaxRetries:  10,
-		CooldownSec: 60,
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:  upstream.URL,
+			Port:        0,
+			MaxRetries:  10,
+			CooldownSec: 60,
+		},
 	}
 	pool := keypool.NewKeyPool([]string{"test-key-a", "test-key-b"}, nil)
 	pr := server.NewProviderRouter("")
@@ -87,10 +89,12 @@ func TestLogEntry_ExhaustionHas503(t *testing.T) {
 	// MaxRetries=2, 3 keys, all 429 -> 503
 	logFile := filepath.Join(t.TempDir(), "test.log")
 	cfg := &config.Config{
-		TargetBase:  upstream.URL,
-		Port:        0,
-		MaxRetries:  2,
-		CooldownSec: 2,
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:  upstream.URL,
+			Port:        0,
+			MaxRetries:  2,
+			CooldownSec: 2,
+		},
 	}
 	pool := keypool.NewKeyPool([]string{"key-a", "key-b", "key-c"}, nil)
 	pr := server.NewProviderRouter("")
@@ -157,10 +161,12 @@ func TestLogEntry_CLIFormat(t *testing.T) {
 
 	logFile := filepath.Join(t.TempDir(), "test.log")
 	cfg := &config.Config{
-		TargetBase:  upstream.URL,
-		Port:        0,
-		MaxRetries:  10,
-		CooldownSec: 60,
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:  upstream.URL,
+			Port:        0,
+			MaxRetries:  10,
+			CooldownSec: 60,
+		},
 	}
 	pool := keypool.NewKeyPool([]string{"test-key-a", "test-key-b"}, nil)
 	pr := server.NewProviderRouter("")

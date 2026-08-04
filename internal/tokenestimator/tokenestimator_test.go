@@ -137,3 +137,64 @@ func TestExtractResponseText_AnthropicNoTextBlock(t *testing.T) {
 		t.Errorf("ExtractResponseText = %q, want empty for tool_use only", text)
 	}
 }
+
+// ── ParseSSEEvent ──────────────────────────
+
+func TestParseSSEEvent_ContentBlockDelta(t *testing.T) {
+	raw := []byte(`{"type":"content_block_delta","delta":{"text":"hello","partial_json":"{\"key\""}}`)
+	tokens, delta := ParseSSEEvent(raw)
+	if tokens != 0 {
+		t.Errorf("expected 0 tokens, got %d", tokens)
+	}
+	if delta != "hello{\"key\"" {
+		t.Errorf("expected `hello{\"key\"`, got %q", delta)
+	}
+}
+
+func TestParseSSEEvent_ContentBlockStart(t *testing.T) {
+	raw := []byte(`{"type":"content_block_start","content_block":{"text":"greeting"}}`)
+	_, delta := ParseSSEEvent(raw)
+	if delta != "greeting" {
+		t.Errorf("expected `greeting`, got %q", delta)
+	}
+}
+
+func TestParseSSEEvent_MessageDelta(t *testing.T) {
+	raw := []byte(`{"type":"message_delta","usage":{"output_tokens":42}}`)
+	tokens, _ := ParseSSEEvent(raw)
+	if tokens != 42 {
+		t.Errorf("expected 42 tokens, got %d", tokens)
+	}
+}
+
+func TestParseSSEEvent_OpenAIFormat(t *testing.T) {
+	raw := []byte(`{"choices":[{"delta":{"content":"hi"}}]}`)
+	_, delta := ParseSSEEvent(raw)
+	if delta != "hi" {
+		t.Errorf("expected `hi`, got %q", delta)
+	}
+}
+
+func TestParseSSEEvent_NonDataLine(t *testing.T) {
+	raw := []byte(`event: ping`)
+	tokens, delta := ParseSSEEvent(raw)
+	if tokens != 0 || delta != "" {
+		t.Errorf("expected (0, \"\"), got (%d, %q)", tokens, delta)
+	}
+}
+
+func TestParseSSEEvent_InvalidJSON(t *testing.T) {
+	raw := []byte(`not json`)
+	tokens, delta := ParseSSEEvent(raw)
+	if tokens != 0 || delta != "" {
+		t.Errorf("expected (0, \"\"), got (%d, %q)", tokens, delta)
+	}
+}
+
+func TestParseSSEEvent_PartialJSON(t *testing.T) {
+	raw := []byte(`{"type":"content_block_delta","delta":{"partial_json":"{\"name\":"}}`)
+	_, delta := ParseSSEEvent(raw)
+	if delta != "{\"name\":" {
+		t.Errorf("expected `{\"name\":`, got %q", delta)
+	}
+}

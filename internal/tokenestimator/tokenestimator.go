@@ -155,3 +155,61 @@ func EstimateInput(bodyBytes []byte, model string) int {
 	}
 	return len(tke.Encode(inputBuf.String(), nil, nil))
 }
+
+// ParseSSEEvent parses a single SSE "data: " event line and returns
+// the extracted text delta and output token count.
+// Returns (0, "") for non-data lines, unrecognized JSON, or events
+// that don't carry text/token information.
+func ParseSSEEvent(raw []byte) (outputTokens int, textDelta string) {
+	if len(raw) == 0 {
+		return 0, ""
+	}
+
+	var result struct {
+		Type  string `json:"type"`
+		Delta *struct {
+			Text        string `json:"text"`
+			PartialJSON string `json:"partial_json"`
+		} `json:"delta,omitempty"`
+		ContentBlock *struct {
+			Text string `json:"text"`
+		} `json:"content_block,omitempty"`
+		Usage *struct {
+			OutputTokens int `json:"output_tokens"`
+		} `json:"usage,omitempty"`
+		Choices []struct {
+			Delta *struct {
+				Content string `json:"content"`
+			} `json:"delta,omitempty"`
+		} `json:"choices"`
+	}
+	if err := json.Unmarshal(raw, &result); err != nil || result.Type == "" {
+		// Try OpenAI format (no "type" field)
+		if err := json.Unmarshal(raw, &result); err != nil {
+			return 0, ""
+		}
+		for _, choice := range result.Choices {
+			if choice.Delta != nil {
+				textDelta += choice.Delta.Content
+			}
+		}
+		return 0, textDelta
+	}
+
+	switch result.Type {
+	case "content_block_delta":
+		if result.Delta != nil {
+			textDelta += result.Delta.Text
+			textDelta += result.Delta.PartialJSON
+		}
+	case "content_block_start":
+		if result.ContentBlock != nil {
+			textDelta += result.ContentBlock.Text
+		}
+	case "message_delta":
+		if result.Usage != nil && result.Usage.OutputTokens > 0 {
+			outputTokens = result.Usage.OutputTokens
+		}
+	}
+	return outputTokens, textDelta
+}

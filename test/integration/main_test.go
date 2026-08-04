@@ -37,10 +37,12 @@ func resetAllEnv() {
 func setupServer(tb testing.TB, upstream *httptest.Server, poolKeys []string, maxRetries, cooldownSec int) *httptest.Server {
 	tb.Helper()
 	cfg := &config.Config{
-		TargetBase:  upstream.URL,
-		Port:        0,
-		MaxRetries:  maxRetries,
-		CooldownSec: cooldownSec,
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:  upstream.URL,
+			Port:        0,
+			MaxRetries:  maxRetries,
+			CooldownSec: cooldownSec,
+		},
 	}
 	pool := keypool.NewKeyPool(poolKeys, nil)
 	pr := server.NewProviderRouter("")
@@ -51,12 +53,14 @@ func setupServer(tb testing.TB, upstream *httptest.Server, poolKeys []string, ma
 // newTestServer creates a test server with default config.
 func newTestServer(keys []string) *httptest.Server {
 	cfg := &config.Config{
-		TargetBase:  "http://localhost:19999",
-		Port:        19999,
-		MaxRetries:  3,
-		CooldownSec: 60,
-		AdminToken:  "",
-		Keys:        []string{"key-a", "key-b"},
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:  "http://localhost:19999",
+			Port:        19999,
+			MaxRetries:  3,
+			CooldownSec: 60,
+			AdminToken:  "",
+			Keys:        []string{"key-a", "key-b"},
+		},
 	}
 	pool := keypool.NewKeyPool(keys, nil)
 	pr := server.NewProviderRouter("")

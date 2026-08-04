@@ -36,14 +36,16 @@ func TestCB_RateLimitRecovery(t *testing.T) {
 	defer upstream.Close()
 
 	cfg := &config.Config{
-		TargetBase:          upstream.URL,
-		Port:                0,
-		MaxRetries:          10,
-		CooldownSec:         2,
-		BackoffCapSec:       120,
-		BackoffMultiplier:   2,
-		CBResetSec:          30,
-		UpstreamCBThreshold: 5,
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:          upstream.URL,
+			Port:                0,
+			MaxRetries:          10,
+			CooldownSec:         2,
+			BackoffCapSec:       120,
+			BackoffMultiplier:   2,
+			CBResetSec:          30,
+			UpstreamCBThreshold: 5,
+		},
 	}
 	pool := keypool.NewKeyPool([]string{"key-a", "key-b", "key-c"}, nil)
 	pr := server.NewProviderRouter("")
@@ -76,14 +78,16 @@ func TestCB_QuotaExhausted(t *testing.T) {
 	defer upstream.Close()
 
 	cfg := &config.Config{
-		TargetBase:          upstream.URL,
-		Port:                0,
-		MaxRetries:          3,
-		CooldownSec:         1,
-		BackoffCapSec:       5,
-		BackoffMultiplier:   2,
-		CBResetSec:          60,
-		UpstreamCBThreshold: 10,
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:          upstream.URL,
+			Port:                0,
+			MaxRetries:          3,
+			CooldownSec:         1,
+			BackoffCapSec:       5,
+			BackoffMultiplier:   2,
+			CBResetSec:          60,
+			UpstreamCBThreshold: 10,
+		},
 	}
 	pool := keypool.NewKeyPool([]string{"single-key"}, nil)
 	pr := server.NewProviderRouter("")
@@ -128,14 +132,16 @@ func TestCB_UpstreamErrorNoKeyPenalty(t *testing.T) {
 	defer upstream.Close()
 
 	cfg := &config.Config{
-		TargetBase:          upstream.URL,
-		Port:                0,
-		MaxRetries:          3,
-		CooldownSec:         1,
-		BackoffCapSec:       120,
-		BackoffMultiplier:   2,
-		CBResetSec:          300,
-		UpstreamCBThreshold: 10,
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:          upstream.URL,
+			Port:                0,
+			MaxRetries:          3,
+			CooldownSec:         1,
+			BackoffCapSec:       120,
+			BackoffMultiplier:   2,
+			CBResetSec:          300,
+			UpstreamCBThreshold: 10,
+		},
 	}
 	pool := keypool.NewKeyPool([]string{"test-key"}, nil)
 	pr := server.NewProviderRouter("")
@@ -210,14 +216,16 @@ func TestCB_UpstreamCircuitBreakerOpens(t *testing.T) {
 	defer upstream.Close()
 
 	cfg := &config.Config{
-		TargetBase:          upstream.URL,
-		Port:                0,
-		MaxRetries:          10,
-		CooldownSec:         1,
-		BackoffCapSec:       120,
-		BackoffMultiplier:   2,
-		CBResetSec:          60,
-		UpstreamCBThreshold: 3,
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:          upstream.URL,
+			Port:                0,
+			MaxRetries:          10,
+			CooldownSec:         1,
+			BackoffCapSec:       120,
+			BackoffMultiplier:   2,
+			CBResetSec:          60,
+			UpstreamCBThreshold: 3,
+		},
 	}
 	pool := keypool.NewKeyPool([]string{"test-key"}, nil)
 	pr := server.NewProviderRouter("")

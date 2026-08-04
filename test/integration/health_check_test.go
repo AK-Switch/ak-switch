@@ -83,14 +83,16 @@ func TestActiveHealthCheck_ProbeSuccess(t *testing.T) {
 	defer upstream.Close()
 
 	cfg := &config.Config{
-		TargetBase:             upstream.URL,
-		Port:                   0,
-		MaxRetries:             1,
-		CooldownSec:            60,
-		UpstreamCBThreshold:    3,
-		HealthCheckIntervalSec: 30,
-		HealthCheckPath:        "/health",
-		HealthCheckTimeoutSec:  5,
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:             upstream.URL,
+			Port:                   0,
+			MaxRetries:             1,
+			CooldownSec:            60,
+			UpstreamCBThreshold:    3,
+			HealthCheckIntervalSec: 30,
+			HealthCheckPath:        "/health",
+			HealthCheckTimeoutSec:  5,
+		},
 	}
 	pr, srv := newServer(t, cfg, []string{"test-key"})
 	defer srv.Close()
@@ -135,15 +137,17 @@ func TestActiveHealthCheck_ProbeFailure(t *testing.T) {
 	defer upstream.Close()
 
 	cfg := &config.Config{
-		TargetBase:             upstream.URL,
-		Port:                   0,
-		MaxRetries:             1, // each proxied request = 1 upstream call
-		CooldownSec:            60,
-		UpstreamCBThreshold:    3,
-		CBResetSec:             60, // long enough that CB stays open during test
-		HealthCheckIntervalSec: 30,
-		HealthCheckPath:        "/health",
-		HealthCheckTimeoutSec:  5,
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:             upstream.URL,
+			Port:                   0,
+			MaxRetries:             1, // each proxied request = 1 upstream call
+			CooldownSec:            60,
+			UpstreamCBThreshold:    3,
+			CBResetSec:             60, // long enough that CB stays open during test
+			HealthCheckIntervalSec: 30,
+			HealthCheckPath:        "/health",
+			HealthCheckTimeoutSec:  5,
+		},
 	}
 	pr, srv := newServer(t, cfg, []string{"test-key-a"})
 	defer srv.Close()
@@ -197,15 +201,17 @@ func TestActiveHealthCheck_Recovery(t *testing.T) {
 
 	// Short CB reset timeout for testing; bypasses Validate() in tests
 	cfg := &config.Config{
-		TargetBase:             upstream.URL,
-		Port:                   0,
-		MaxRetries:             1,
-		CooldownSec:            60,
-		UpstreamCBThreshold:    3,
-		CBResetSec:             1,
-		HealthCheckIntervalSec: 30,
-		HealthCheckPath:        "/health",
-		HealthCheckTimeoutSec:  5,
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:             upstream.URL,
+			Port:                   0,
+			MaxRetries:             1,
+			CooldownSec:            60,
+			UpstreamCBThreshold:    3,
+			CBResetSec:             1,
+			HealthCheckIntervalSec: 30,
+			HealthCheckPath:        "/health",
+			HealthCheckTimeoutSec:  5,
+		},
 	}
 	pr, srv := newServer(t, cfg, []string{"test-key-a"})
 	defer srv.Close()
@@ -275,15 +281,17 @@ func TestActiveHealthCheck_ProbeTimeout(t *testing.T) {
 	defer upstream.Close()
 
 	cfg := &config.Config{
-		TargetBase:             upstream.URL,
-		Port:                   0,
-		MaxRetries:             1,
-		CooldownSec:            60,
-		UpstreamCBThreshold:    1, // single timeout opens CB
-		CBResetSec:             30,
-		HealthCheckIntervalSec: 30,
-		HealthCheckPath:        "/health",
-		HealthCheckTimeoutSec:  1,
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:             upstream.URL,
+			Port:                   0,
+			MaxRetries:             1,
+			CooldownSec:            60,
+			UpstreamCBThreshold:    1, // single timeout opens CB
+			CBResetSec:             30,
+			HealthCheckIntervalSec: 30,
+			HealthCheckPath:        "/health",
+			HealthCheckTimeoutSec:  1,
+		},
 	}
 	pr, srv := newServer(t, cfg, []string{"test-key-a"})
 	defer srv.Close()
@@ -338,15 +346,17 @@ func TestActiveHealthCheck_ConfigDriven(t *testing.T) {
 	defer upstream.Close()
 
 	cfg := &config.Config{
-		TargetBase:             upstream.URL,
-		Port:                   8080,
-		MaxRetries:             3,
-		CooldownSec:            60,
-		HealthCheckIntervalSec: 10,
-		HealthCheckPath:        "/custom",
-		HealthCheckTimeoutSec:  3,
-		UpstreamCBThreshold:    5,
-		CBResetSec:             30,
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:             upstream.URL,
+			Port:                   8080,
+			MaxRetries:             3,
+			CooldownSec:            60,
+			HealthCheckIntervalSec: 10,
+			HealthCheckPath:        "/custom",
+			HealthCheckTimeoutSec:  3,
+			UpstreamCBThreshold:    5,
+			CBResetSec:             30,
+		},
 	}
 
 	// Verify config fields before creating ProviderRouter
@@ -433,14 +443,18 @@ func TestHealthHandler(t *testing.T) {
 // /health (no param) returns all providers.
 func TestHealthHandlerProviderFilter(t *testing.T) {
 	cfg1 := &config.Config{
-		TargetBase: "http://localhost:19998",
-		Port:       19999, MaxRetries: 3, CooldownSec: 60,
-		Keys: []string{"key-a", "key-b", "key-c"},
+		ProviderConfig: config.ProviderConfig{
+			TargetBase: "http://localhost:19998",
+			Port:       19999, MaxRetries: 3, CooldownSec: 60,
+			Keys: []string{"key-a", "key-b", "key-c"},
+		},
 	}
 	cfg2 := &config.Config{
-		TargetBase: "http://localhost:19997",
-		Port:       19998, MaxRetries: 3, CooldownSec: 60,
-		Keys: []string{"key-x", "key-y"},
+		ProviderConfig: config.ProviderConfig{
+			TargetBase: "http://localhost:19997",
+			Port:       19998, MaxRetries: 3, CooldownSec: 60,
+			Keys: []string{"key-x", "key-y"},
+		},
 	}
 	pool1 := keypool.NewKeyPool(cfg1.Keys, nil)
 	pool2 := keypool.NewKeyPool(cfg2.Keys, nil)
@@ -488,11 +502,13 @@ func TestHealthHandlerProviderFilter(t *testing.T) {
 
 func TestHealthHandlerAuth(t *testing.T) {
 	cfg := &config.Config{
-		TargetBase:  "http://localhost:19999",
-		Port:        19999,
-		MaxRetries:  3,
-		CooldownSec: 60,
-		AdminToken:  "my-token",
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:  "http://localhost:19999",
+			Port:        19999,
+			MaxRetries:  3,
+			CooldownSec: 60,
+			AdminToken:  "my-token",
+		},
 	}
 	pool := keypool.NewKeyPool([]string{"key-a", "key-b", "key-c"}, nil)
 	pr := server.NewProviderRouter("")

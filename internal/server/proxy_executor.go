@@ -251,7 +251,6 @@ func (px *ProxyExecutor) handleNonRetryable(w http.ResponseWriter, ps *ProviderS
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, resp.Body)
 
-	
 	slog.Warn("non-retryable client error", "provider", ps.Name, "method", method, "url", target, "status", resp.StatusCode, "key_name", keyName)
 	slog.Debug("proxy response debug", "status", resp.StatusCode, "duration_ms", time.Since(start).Seconds()*1000, "retries", attempt+1)
 	px.recordProxyMetrics(method, "4xx", fmt.Sprintf("%d", idx), start)
@@ -357,7 +356,6 @@ func (px *ProxyExecutor) handleSuccess(w http.ResponseWriter, ps *ProviderState,
 
 // ── Proxy Helpers ──────────────────────────────────────
 
-
 // recordProxyMetrics records request total count and duration metrics.
 func (px *ProxyExecutor) recordProxyMetrics(method, statusClass, keyIndex string, start time.Time) {
 	px.metrics.RequestsTotal.WithLabelValues(method, statusClass, keyIndex).Inc()
@@ -374,10 +372,11 @@ func (px *ProxyExecutor) writeAllKeysExhausted(w http.ResponseWriter, ps *Provid
 // ── Streaming Helpers ──────────────────────────────────
 
 // streamSSEAndEstimateTokens streams SSE events to the client while accumulating
-// text for token estimation. Supports multiple SSE formats:
+// text for token estimation. Supports multiple SSE formats via tokenestimator.ParseSSEEvent:
 //   - Anthropic: content_block_delta (delta.text), content_block_start (content_block.text),
 //     message_delta (usage.output_tokens)
 //   - OpenAI: choices[].delta.content
+//
 // After the stream ends, it uses the API's output_tokens from message_delta
 // when available, otherwise falls back to tiktoken estimation.
 func streamSSEAndEstimateTokens(w http.ResponseWriter, resp *http.Response, bodyBytes []byte, model string) (int, int, int64) {
@@ -385,7 +384,7 @@ func streamSSEAndEstimateTokens(w http.ResponseWriter, resp *http.Response, body
 
 	var outputBuf strings.Builder
 	var respBodySize int64
-	var apiOutputTokens int // from message_delta.usage.output_tokens
+	var apiOutputTokens int
 
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
@@ -411,55 +410,11 @@ func streamSSEAndEstimateTokens(w http.ResponseWriter, resp *http.Response, body
 
 		// Parse data: lines for SSE events
 		if strings.HasPrefix(line, "data: ") {
-			raw := []byte(line[6:])
-
-			// Try Anthropic format first
-			var anthropicData struct {
-				Type  string `json:"type"`
-				Delta *struct {
-					Text        string `json:"text"`
-					PartialJSON string `json:"partial_json"`
-				} `json:"delta,omitempty"`
-				ContentBlock *struct {
-					Text string `json:"text"`
-				} `json:"content_block,omitempty"`
-				Usage *struct {
-					OutputTokens int `json:"output_tokens"`
-				} `json:"usage,omitempty"`
-			}
-			if err := json.Unmarshal(raw, &anthropicData); err == nil && anthropicData.Type != "" {
-				switch anthropicData.Type {
-				case "content_block_delta":
-					if anthropicData.Delta != nil {
-						// Accumulate text from both text_delta and input_json_delta
-						outputBuf.WriteString(anthropicData.Delta.Text)
-						outputBuf.WriteString(anthropicData.Delta.PartialJSON)
-					}
-				case "content_block_start":
-					if anthropicData.ContentBlock != nil {
-						outputBuf.WriteString(anthropicData.ContentBlock.Text)
-					}
-				case "message_delta":
-					if anthropicData.Usage != nil && anthropicData.Usage.OutputTokens > 0 {
-						apiOutputTokens = anthropicData.Usage.OutputTokens
-					}
-				}
-			} else {
-				// Try OpenAI streaming format: {"choices":[{"delta":{"content":"..."}}]}
-				var openAIData struct {
-					Choices []struct {
-						Delta *struct {
-							Content string `json:"content"`
-						} `json:"delta,omitempty"`
-					} `json:"choices"`
-				}
-				if err := json.Unmarshal(raw, &openAIData); err == nil {
-					for _, choice := range openAIData.Choices {
-						if choice.Delta != nil {
-							outputBuf.WriteString(choice.Delta.Content)
-						}
-					}
-				}
+			raw := line[6:]
+			tokens, delta := tokenestimator.ParseSSEEvent([]byte(raw))
+			outputBuf.WriteString(delta)
+			if tokens > 0 {
+				apiOutputTokens = tokens
 			}
 		}
 

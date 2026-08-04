@@ -88,13 +88,11 @@ func TestValidate_CircuitBreakerFields(t *testing.T) {
 }
 
 func TestSanitized(t *testing.T) {
-	cfg := &Config{
-		Keys: []string{
-			"nvapi-xiKMDpevXK60t6gLsGW1",
-			"short",
-			"nvapi-KXZ6a_5Mwcew7Ekd32DD85OaLVZu3Q",
-		},
-	}
+	cfg := &Config{ProviderConfig: ProviderConfig{Keys: []string{
+		"nvapi-xiKMDpevXK60t6gLsGW1",
+		"short",
+		"nvapi-KXZ6a_5Mwcew7Ekd32DD85OaLVZu3Q",
+	}}}
 	s := cfg.Sanitized()
 
 	// Original must be unchanged
@@ -125,7 +123,7 @@ func TestSanitized(t *testing.T) {
 
 func TestSanitized_UsesUtilsMaskKey(t *testing.T) {
 	key := "sk-abcdefghijklmn"
-	cfg := &Config{Keys: []string{key}}
+	cfg := &Config{ProviderConfig: ProviderConfig{Keys: []string{key}}}
 	s := cfg.Sanitized()
 	expected := logentry.MaskKey(key)
 	if s.Keys[0] != expected {
@@ -204,7 +202,7 @@ func TestConfig_HealthCheckTimeoutTooSmall(t *testing.T) {
 
 func TestMergeDefaults_EmptyConfig(t *testing.T) {
 	cfg := &Config{}
-	mergeDefaults(cfg)
+	cfg.mergeDefaults()
 	def := DefaultConfig()
 
 	if cfg.Port != def.Port {
@@ -258,15 +256,15 @@ func TestMergeDefaults_EmptyConfig(t *testing.T) {
 }
 
 func TestMergeDefaults_PreservesSetValues(t *testing.T) {
-	cfg := &Config{
+	cfg := &Config{ProviderConfig: ProviderConfig{
 		Port:            9090,
 		Host:            "0.0.0.0",
 		CooldownSec:     45,
 		MaxRetries:      7,
 		BackoffCapSec:   300,
 		BackoffMultiplier: 3.5,
-	}
-	mergeDefaults(cfg)
+	}}
+	cfg.mergeDefaults()
 
 	if cfg.Port != 9090 {
 		t.Errorf("Port should be preserved, got %d", cfg.Port)
@@ -293,11 +291,11 @@ func TestMergeDefaults_PreservesSetValues(t *testing.T) {
 }
 
 func TestMergeDefaults_SkipsFieldsWithoutDefaultTag(t *testing.T) {
-	cfg := &Config{
+	cfg := &Config{ProviderConfig: ProviderConfig{
 		TargetBase: "https://api.example.com",
 		AdminToken: "my-token",
-	}
-	mergeDefaults(cfg)
+	}}
+	cfg.mergeDefaults()
 
 	// Fields without default tag should be preserved
 	if cfg.TargetBase != "https://api.example.com" {
@@ -400,6 +398,30 @@ func TestSaveToml_LoadToml_Roundtrip(t *testing.T) {
 	}
 	if loaded.MaxRetries != orig.MaxRetries {
 		t.Errorf("MaxRetries = %d, want %d", loaded.MaxRetries, orig.MaxRetries)
+	}
+}
+
+func TestSaveToml_NoRuntimeConfigSection(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.TargetBase = "https://api.example.com"
+	cfg.Port = 7070
+	cfg.Keys = []string{"test-key"}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate() error: %v", err)
+	}
+
+	tmpDir := t.TempDir()
+	tomlPath := filepath.Join(tmpDir, "validate_save.toml")
+	if err := SaveTomlConfig(&TomlConfig{Port: cfg.Port, Provider: map[string]*Config{"default": cfg}}, tomlPath); err != nil {
+		t.Fatalf("SaveTomlConfig() error: %v", err)
+	}
+
+	data, err := os.ReadFile(tomlPath)
+	if err != nil {
+		t.Fatalf("ReadFile error: %v", err)
+	}
+	if strings.Contains(string(data), "RuntimeConfig") {
+		t.Errorf("TOML should not contain 'RuntimeConfig' section, got:\n%s", string(data))
 	}
 }
 
@@ -959,4 +981,84 @@ func TestFindServerPort_FirstProviderPicked(t *testing.T) {
 	if port != 9999 {
 		t.Errorf("FindServerPort() = %d, want 9999", port)
 	}
+}
+
+// ============================================================
+// ProviderConfig, RuntimeConfig, backward compatibility tests
+// ============================================================
+
+func TestDefaultProviderConfig(t *testing.T) {
+	pc := DefaultProviderConfig()
+	if pc.Port != 8080 { t.Errorf("Port = %d, want 8080", pc.Port) }
+	if pc.Host != "127.0.0.1" { t.Errorf("Host = %q, want %q", pc.Host, "127.0.0.1") }
+	if pc.TargetBase != "" { t.Errorf("TargetBase should be empty, got %q", pc.TargetBase) }
+	if pc.MaxRetries != 1 { t.Errorf("MaxRetries = %d, want 1", pc.MaxRetries) }
+	if pc.CooldownSec != 15 { t.Errorf("CooldownSec = %d, want 15", pc.CooldownSec) }
+	if pc.HealthCheckPath != "/health" { t.Errorf("HealthCheckPath = %q, want %q", pc.HealthCheckPath, "/health") }
+	if pc.CalibrationIntervalSec != 3600 { t.Errorf("CalibrationIntervalSec = %d, want 3600", pc.CalibrationIntervalSec) }
+}
+
+func TestDefaultRuntimeConfig(t *testing.T) {
+	rc := DefaultRuntimeConfig()
+	if rc.HTTPTimeoutSec != 30 { t.Errorf("HTTPTimeoutSec = %d, want 30", rc.HTTPTimeoutSec) }
+	if rc.MaxRetries != 1 { t.Errorf("MaxRetries = %d, want 1", rc.MaxRetries) }
+	if rc.CooldownSec != 15 { t.Errorf("CooldownSec = %d, want 15", rc.CooldownSec) }
+	if rc.LogLevel != "info" { t.Errorf("LogLevel = %q, want %q", rc.LogLevel, "info") }
+}
+
+func TestProviderConfig_Validate_PortRange(t *testing.T) {
+	pc := DefaultProviderConfig()
+	pc.TargetBase = "https://example.com"
+	pc.Keys = []string{"key1"}
+	tests := []struct{ port int; wantErr bool }{
+		{0, true}, {-1, true}, {65536, true}, {8080, false},
+	}
+	for _, tt := range tests {
+		pc.Port = tt.port
+		err := pc.Validate()
+		if (err != nil) != tt.wantErr {
+			t.Errorf("Port=%d: wantErr=%v, got err=%v", tt.port, tt.wantErr, err)
+		}
+	}
+}
+
+func TestRuntimeConfig_Validate_HTTPTimeoutSec(t *testing.T) {
+	tests := []struct{ sec int; wantErr bool }{
+		{0, true}, {-1, true}, {1, false}, {30, false},
+	}
+	for _, tt := range tests {
+		rc := &RuntimeConfig{HTTPTimeoutSec: tt.sec}
+		err := rc.Validate()
+		if (err != nil) != tt.wantErr {
+			t.Errorf("HTTPTimeoutSec=%d: wantErr=%v, got err=%v", tt.sec, tt.wantErr, err)
+		}
+	}
+}
+
+func TestProviderConfig_Validate_HealthCheckTimeoutSec(t *testing.T) {
+	tests := []struct{ sec int; wantErr bool }{
+		{0, true}, {-1, true}, {1, false}, {5, false},
+	}
+	for _, tt := range tests {
+		pc := DefaultProviderConfig()
+		pc.TargetBase = "https://example.com"
+		pc.Keys = []string{"key1"}
+		pc.HealthCheckTimeoutSec = tt.sec
+		err := pc.Validate()
+		if (err != nil) != tt.wantErr {
+			t.Errorf("HealthCheckTimeoutSec=%d: wantErr=%v, got err=%v", tt.sec, tt.wantErr, err)
+		}
+	}
+}
+
+func TestConfig_BackwardCompatibility(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.Port != 8080 { t.Errorf("Port = %d, want 8080", cfg.Port) }
+	if cfg.HTTPTimeoutSec != 30 { t.Errorf("HTTPTimeoutSec = %d, want 30", cfg.HTTPTimeoutSec) }
+	if cfg.MaxRetries != 1 { t.Errorf("MaxRetries = %d, want 1", cfg.MaxRetries) }
+
+	cfg.Port = 9090
+	cfg.HTTPTimeoutSec = 60
+	if cfg.Port != 9090 { t.Error("field mutation broken") }
+	if cfg.HTTPTimeoutSec != 60 { t.Error("field mutation broken") }
 }
