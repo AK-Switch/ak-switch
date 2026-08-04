@@ -93,7 +93,7 @@ func LoadAllTomlProviders(path string) (map[string]*Config, error) {
 		if p == nil {
 			p = &Config{ProviderConfig: *DefaultProviderConfig()}
 		} else {
-			p.ProviderConfig.mergeDefaults()
+			p.mergeDefaults()
 			p.Port = port
 		}
 		// Top-level host used as fallback when provider-level host is empty

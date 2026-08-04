@@ -262,10 +262,3 @@ func (pc *ProviderConfig) mergeDefaults() {
 	}
 }
 
-// mergeConfig fills in zero-value fields with defaults from DefaultConfig.
-// This is used after TOML parsing to ensure optional fields have sensible defaults.
-// Deprecated: mergeConfig is kept for backward compatibility. mergeDefaults replaces this.
-//nolint:gocritic
-func mergeConfig(cfg *Config) {
-	cfg.ProviderConfig.mergeDefaults()
-}
