@@ -25,15 +25,17 @@ func testStartTime() time.Time { return time.Now() }
 func newTestProviderState(t *testing.T, name string, keys []string) *ProviderState {
 	t.Helper()
 	cfg := &config.Config{
-		TargetBase:             "http://localhost:19999",
-		Port:                   0,
-		MaxRetries:             3,
-		CooldownSec:            60,
-		UpstreamCBThreshold:    5,
-		CBResetSec:             30,
-		HealthCheckIntervalSec: 30,
-		HealthCheckPath:        "/health",
-		HealthCheckTimeoutSec:  5,
+		ProviderConfig: config.ProviderConfig{
+			TargetBase:             "http://localhost:19999",
+			Port:                   0,
+			MaxRetries:             3,
+			CooldownSec:            60,
+			UpstreamCBThreshold:    5,
+			CBResetSec:             30,
+			HealthCheckIntervalSec: 30,
+			HealthCheckPath:        "/health",
+			HealthCheckTimeoutSec:  5,
+		},
 	}
 	pool := keypool.NewKeyPool(keys, nil)
 	pr := NewProviderRouter("")
@@ -282,7 +284,7 @@ func TestMaskSensitiveData_ShortBodyUnchanged(t *testing.T) {
 // ── buildTargetURL ──────────────────────────────────
 
 func TestBuildTargetURL_BasicPath(t *testing.T) {
-	cfg := &config.Config{TargetBase: "https://api.example.com/v1"}
+	cfg := &config.Config{ProviderConfig: config.ProviderConfig{TargetBase: "https://api.example.com/v1"}}
 	req, _ := http.NewRequest("GET", "https://akswitch/test/v1/chat", nil)
 	url := buildTargetURL(cfg, req.URL.Path, req.URL.RawQuery)
 	if url != "https://api.example.com/v1/test/v1/chat" {

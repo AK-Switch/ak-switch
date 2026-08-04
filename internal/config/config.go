@@ -176,6 +176,15 @@ func (rc *RuntimeConfig) Validate() error {
 // so RuntimeConfig is ready for the runtime-config endpoint.
 // Returns a descriptive error for the first problem found.
 func (c *Config) Validate() error {
+	if c.HealthCheckTimeoutSec < 1 {
+		return &ConfigError{Category: "config", Message: fmt.Sprintf("配置错误: HEALTH_CHECK_TIMEOUT_SEC=%d 不能小于 1", c.HealthCheckTimeoutSec)}
+	}
+	if err := c.ProviderConfig.Validate(); err != nil {
+		return err
+	}
+	if err := c.RuntimeConfig.Validate(); err != nil {
+		return err
+	}
 	c.RuntimeConfig.HTTPTimeoutSec = c.HTTPTimeoutSec
 	c.RuntimeConfig.MaxRetries = c.MaxRetries
 	c.RuntimeConfig.CooldownSec = c.CooldownSec
@@ -184,13 +193,7 @@ func (c *Config) Validate() error {
 	c.RuntimeConfig.CBResetSec = c.CBResetSec
 	c.RuntimeConfig.UpstreamCBThreshold = c.UpstreamCBThreshold
 	c.RuntimeConfig.LogLevel = c.LogLevel
-	if c.HealthCheckTimeoutSec < 1 {
-		return &ConfigError{Category: "config", Message: fmt.Sprintf("配置错误: HEALTH_CHECK_TIMEOUT_SEC=%d 不能小于 1", c.HealthCheckTimeoutSec)}
-	}
-	if err := c.ProviderConfig.Validate(); err != nil {
-		return err
-	}
-	return c.RuntimeConfig.Validate()
+	return nil
 }
 
 // Sanitized returns a copy of the Config with sensitive fields masked.

@@ -236,7 +236,7 @@ func TestLoadKeysFromStore_KeyringPriority(t *testing.T) {
 	os.WriteFile(oldPath, oldData, 0644)
 
 	// LoadKeysFromStore should return keyring data, not file data
-	cfg := &config.Config{}
+	cfg := &config.Config{ProviderConfig: config.ProviderConfig{}}
 	keys, names, loaded := LoadKeysFromStore("priority-test", cfg)
 	if !loaded {
 		t.Fatal("LoadKeysFromStore: loaded=false, want true")
@@ -266,7 +266,7 @@ func TestLoadKeysFromStore_CustomFileStillWorks(t *testing.T) {
 	data, _ := json.MarshalIndent(store, "", "  ")
 	os.WriteFile(keysPath, data, 0644)
 
-	cfg := &config.Config{KeysFile: keysPath}
+	cfg := &config.Config{ProviderConfig: config.ProviderConfig{KeysFile: keysPath}}
 	keys, _, loaded := LoadKeysFromStore("test", cfg)
 	if !loaded {
 		t.Fatal("LoadKeysFromStore: loaded=false, want true")
@@ -367,7 +367,7 @@ func TestLoadKeysFromStore_InsecureFileFallback(t *testing.T) {
 		t.Fatalf("SaveKeysInsecure: %v", err)
 	}
 
-	cfg := &config.Config{}
+	cfg := &config.Config{ProviderConfig: config.ProviderConfig{}}
 	keys, names, loaded := LoadKeysFromStore("fromstore-test", cfg)
 	if !loaded {
 		t.Fatal("LoadKeysFromStore: loaded=false, want true")
