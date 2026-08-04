@@ -22,6 +22,7 @@ type ProviderLookup interface {
 	FirstProvider() *ProviderState
 	ForEach(fn func(name string, ps *ProviderState))
 	ProviderNames() []string
+	ReloadConfig(providers map[string]*config.Config, logManager *LogManager)
 }
 
 // ── AdminAPI ────────────────────────────────────────────
@@ -572,67 +573,7 @@ func (api *AdminAPI) reloadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	api.pm.ForEach(func(name string, ps *ProviderState) {
-		if cfg, ok := providers[name]; ok {
-			// Load keys from configured keys file or standard encrypted store
-			keys, keyNames := loadKeysFromConfig(name, cfg)
-			if len(keys) > 0 {
-				cfg.Keys = keys
-				cfg.KeyNames = keyNames
-			}
-
-			// Update existing provider — preserve disabled state across reload
-			oldPool := ps.Pool
-			var disabledNames []string
-			for i := 0; i < oldPool.Len(); i++ {
-				if oldPool.IsDisabled(i) {
-					n, _ := oldPool.Name(i)
-					disabledNames = append(disabledNames, n)
-				}
-			}
-
-			ps.Config = cfg
-			ps.Pool = keypool.NewKeyPool(cfg.Keys, cfg.KeyNames)
-			ps.Pool.ConfigureCBs(
-				time.Duration(cfg.CooldownSec)*time.Second,
-				time.Duration(cfg.BackoffCapSec)*time.Second,
-				cfg.BackoffMultiplier,
-			)
-
-			for _, name := range disabledNames {
-				for i := 0; i < ps.Pool.Len(); i++ {
-					n, _ := ps.Pool.Name(i)
-					if n == name {
-						_ = ps.Pool.Disable(i)
-					}
-				}
-			}
-			api.logManager.ApplyLevel(cfg.LogLevel)
-		}
-	})
-
-	// Add new providers not already in the router
-	existingNames := api.pm.ProviderNames()
-	for name, cfg := range providers {
-		found := false
-		for _, existing := range existingNames {
-			if existing == name {
-				found = true
-				break
-			}
-		}
-		if !found {
-			keys, keyNames := loadKeysFromConfig(name, cfg)
-			if len(keys) > 0 {
-				cfg.Keys = keys
-				cfg.KeyNames = keyNames
-			}
-			pool := keypool.NewKeyPool(cfg.Keys, cfg.KeyNames)
-			_ = NewProviderState(name, cfg, pool, api.dashboardHTML, cfg.KeysFile)
-			api.logManager.ApplyLevel(cfg.LogLevel)
-			// New providers are added to the router through a callback
-		}
-	}
+	api.pm.ReloadConfig(providers, api.logManager)
 
 	slog.Info("config reloaded", "providers", len(providers))
 	respondJSON(w, http.StatusOK, map[string]bool{"success": true})
@@ -693,8 +634,10 @@ func (api *AdminAPI) handleRuntimeConfigGet(w http.ResponseWriter, r *http.Reque
 	})
 
 	if key != "" {
-		// Key specified without provider — return from first provider
-		api.pm.ForEach(func(name string, ps *ProviderState) {
+		// Key specified without provider — return from first provider that has it
+		names := api.pm.ProviderNames()
+		for _, name := range names {
+			ps := api.pm.LookupProvider(name)
 			params := api.getRuntimeParams(ps)
 			val, ok := params[key]
 			if !ok {
@@ -706,8 +649,8 @@ func (api *AdminAPI) handleRuntimeConfigGet(w http.ResponseWriter, r *http.Reque
 				"key":      key,
 				"value":    val,
 			})
-		})
-		return
+			return
+		}
 	}
 
 	respondJSON(w, http.StatusOK, result)
@@ -944,22 +887,21 @@ func (api *AdminAPI) checkAdminToken(w http.ResponseWriter, r *http.Request, pro
 // If no providers have AdminToken configured, access is allowed without token.
 func (api *AdminAPI) checkAnyAdminToken(w http.ResponseWriter, r *http.Request) bool {
 	token := r.Header.Get("X-Admin-Token")
+	names := api.pm.ProviderNames()
 	matched := false
-	api.pm.ForEach(func(_ string, ps *ProviderState) {
-		if ps.Config.AdminToken != "" && ps.Config.AdminToken == token {
-			matched = true
+	hasAnyToken := false
+	for _, name := range names {
+		ps := api.pm.LookupProvider(name)
+		if ps.Config.AdminToken != "" {
+			hasAnyToken = true
+			if ps.Config.AdminToken == token {
+				matched = true
+			}
 		}
-	})
+	}
 	if matched {
 		return true
 	}
-	// If no provider has AdminToken configured, allow access
-	hasAnyToken := false
-	api.pm.ForEach(func(_ string, ps *ProviderState) {
-		if ps.Config.AdminToken != "" {
-			hasAnyToken = true
-		}
-	})
 	if !hasAnyToken {
 		return true
 	}
