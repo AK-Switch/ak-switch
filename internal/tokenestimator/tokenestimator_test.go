@@ -4,6 +4,8 @@ package tokenestimator
 
 import (
 	"testing"
+
+	"akswitch/internal/tracker"
 )
 
 // ── ExtractTokenUsage ──────────────────────────────────
@@ -252,4 +254,31 @@ func TestProcessResponse_InvalidJSON(t *testing.T) {
 	if in != 0 || out != 0 {
 		t.Errorf("expected 0,0 for invalid JSON, got %d,%d", in, out)
 	}
+}
+
+// ── RecordCalibration ──────────────────────────
+
+func TestRecordCalibration_BothPositive(t *testing.T) {
+	cal := tracker.NewCalibrator(100)
+	RecordCalibration(cal, "gpt-4o", 10, 10, 5, 5)
+	// No panic = pass. Calibrator internals are tested separately.
+}
+
+func TestRecordCalibration_ZeroInput(t *testing.T) {
+	cal := tracker.NewCalibrator(100)
+	RecordCalibration(cal, "gpt-4o", 0, 0, 5, 5) // estInput=0, should not record
+	RecordCalibration(cal, "gpt-4o", 10, 10, 0, 0) // estOutput=0, should not record
+	// No panic = pass
+}
+
+func TestRecordCalibration_AllZero(t *testing.T) {
+	cal := tracker.NewCalibrator(100)
+	RecordCalibration(cal, "", 0, 0, 0, 0) // nothing to record
+	// No panic = pass
+}
+
+func TestRecordCalibration_EmptyModel(t *testing.T) {
+	cal := tracker.NewCalibrator(100)
+	RecordCalibration(cal, "", 10, 10, 5, 5) // empty model, should not record
+	// No panic = pass
 }

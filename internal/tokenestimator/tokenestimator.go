@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	tiktoken "github.com/pkoukk/tiktoken-go"
+	"akswitch/internal/tracker"
 )
 
 // ExtractTokenUsage attempts to parse input_tokens/output_tokens from a JSON response body.
@@ -221,4 +222,19 @@ func ProcessResponse(bodyBytes []byte, model string) (inputTokens, outputTokens 
 	inputTokens, outputTokens = ExtractTokenUsage(bodyBytes)
 	responseText = ExtractResponseText(bodyBytes)
 	return
+}
+
+// RecordCalibration conditionally records calibration samples.
+// Only records when estimate > 0 and actual > 0 for each direction.
+// This consolidates the repeated if-estimate>0-actual>0 pattern.
+func RecordCalibration(cal *tracker.Calibrator, model string, estInput, actualInput, estOutput, actualOutput int) {
+	if cal == nil || model == "" {
+		return
+	}
+	if estInput > 0 && actualInput > 0 {
+		cal.Record(model, estInput, actualInput)
+	}
+	if estOutput > 0 && actualOutput > 0 {
+		cal.Record(model, estOutput, actualOutput)
+	}
 }
