@@ -4,6 +4,8 @@ package tokenestimator
 
 import (
 	"testing"
+
+	"akswitch/internal/tracker"
 )
 
 // ── ExtractTokenUsage ──────────────────────────────────
@@ -197,4 +199,86 @@ func TestParseSSEEvent_PartialJSON(t *testing.T) {
 	if delta != "{\"name\":" {
 		t.Errorf("expected `{\"name\":`, got %q", delta)
 	}
+}
+
+// ── ProcessResponse ──────────────────────────
+
+func TestProcessResponse_AnthropicFormat(t *testing.T) {
+	body := []byte(`{"usage":{"input_tokens":10,"output_tokens":5},"content":[{"type":"text","text":"hello"}]}`)
+	in, out, text := ProcessResponse(body)
+	if in != 10 {
+		t.Errorf("inputTokens = %d, want 10", in)
+	}
+	if out != 5 {
+		t.Errorf("outputTokens = %d, want 5", out)
+	}
+	if text != "hello" {
+		t.Errorf("responseText = %q, want %q", text, "hello")
+	}
+}
+
+func TestProcessResponse_OpenAIFormat(t *testing.T) {
+	body := []byte(`{"usage":{"prompt_tokens":8,"completion_tokens":3},"choices":[{"message":{"content":"hi"}}]}`)
+	in, out, text := ProcessResponse(body)
+	if in != 8 {
+		t.Errorf("inputTokens = %d, want 8", in)
+	}
+	if out != 3 {
+		t.Errorf("outputTokens = %d, want 3", out)
+	}
+	if text != "hi" {
+		t.Errorf("responseText = %q, want %q", text, "hi")
+	}
+}
+
+func TestProcessResponse_NoUsage(t *testing.T) {
+	body := []byte(`{"id":"msg_xxx"}`)
+	in, out, _ := ProcessResponse(body)
+	if in != 0 || out != 0 {
+		t.Errorf("expected 0,0 for missing usage, got %d,%d", in, out)
+	}
+}
+
+func TestProcessResponse_EmptyBody(t *testing.T) {
+	in, out, text := ProcessResponse([]byte{})
+	if in != 0 || out != 0 {
+		t.Errorf("expected 0,0 for empty body, got %d,%d", in, out)
+	}
+	if text != "" {
+		t.Errorf("responseText = %q, want empty", text)
+	}
+}
+
+func TestProcessResponse_InvalidJSON(t *testing.T) {
+	in, out, _ := ProcessResponse([]byte(`not json`))
+	if in != 0 || out != 0 {
+		t.Errorf("expected 0,0 for invalid JSON, got %d,%d", in, out)
+	}
+}
+
+// ── RecordCalibration ──────────────────────────
+
+func TestRecordCalibration_BothPositive(t *testing.T) {
+	cal := tracker.NewCalibrator(100)
+	RecordCalibration(cal, "gpt-4o", 10, 10, 5, 5)
+	// No panic = pass. Calibrator internals are tested separately.
+}
+
+func TestRecordCalibration_ZeroInput(t *testing.T) {
+	cal := tracker.NewCalibrator(100)
+	RecordCalibration(cal, "gpt-4o", 0, 0, 5, 5) // estInput=0, should not record
+	RecordCalibration(cal, "gpt-4o", 10, 10, 0, 0) // estOutput=0, should not record
+	// No panic = pass
+}
+
+func TestRecordCalibration_AllZero(t *testing.T) {
+	cal := tracker.NewCalibrator(100)
+	RecordCalibration(cal, "", 0, 0, 0, 0) // nothing to record
+	// No panic = pass
+}
+
+func TestRecordCalibration_EmptyModel(t *testing.T) {
+	cal := tracker.NewCalibrator(100)
+	RecordCalibration(cal, "", 10, 10, 5, 5) // empty model, should not record
+	// No panic = pass
 }

@@ -190,8 +190,14 @@ AK Switch 的 Key 选择策略是**RPM 感知 + Round-Robin** 混合算法：
 
 ### Token 追踪
 
-非流式请求：从响应 body 的 `usage` 字段提取 `input_tokens` 和 `output_tokens`。
-流式请求：使用 tiktoken-go 库估算，通过 `cl100k_base` 编码器对输出文本进行编码。
+`tokenestimator` 包（`internal/tokenestimator/`）负责所有 token 相关的提取与估算：
+
+- **模型提取**：`ExtractModel()` 从请求 body 解析 `model` 字段
+- **非流式响应**：`ProcessResponse()` 统一提取 `input_tokens`/`output_tokens` 和响应文本，替代原有的 `ExtractTokenUsage` + `ExtractResponseText` 两步调用
+- **流式估算**：`EstimateInput()` / `EstimateOutput()` 使用 tiktoken-go 对文本编码估算，支持 `cl100k_base`（GPT-4 等）和 `o200k_base`（GPT-4o 等）两种编码器
+- **校准记录**：`RecordCalibration()` 封装 `est>0 && actual>0` 的条件判断，将有效样本写入 Calibrator
+
+非流式请求通过 `ProcessResponse` 获得上游实际值，流式请求通过 `EstimateInput`/`EstimateOutput` 估算后由 Calibrator 校准。
 
 ### Calibrator 校准
 
