@@ -600,6 +600,15 @@ func (api *AdminAPI) handleRuntimeConfigGet(w http.ResponseWriter, r *http.Reque
 	key := r.URL.Query().Get("key")
 	pName := r.URL.Query().Get("provider")
 
+	if pName == "all" {
+		result := make(map[string]map[string]interface{})
+		api.pm.ForEach(func(name string, ps *ProviderState) {
+			result[name] = api.getRuntimeParams(ps)
+		})
+		respondJSON(w, http.StatusOK, result)
+		return
+	}
+
 	if pName != "" {
 		ps := api.pm.LookupProvider(pName)
 		if ps == nil {
@@ -673,114 +682,45 @@ func (api *AdminAPI) handleRuntimeConfigSet(w http.ResponseWriter, r *http.Reque
 	pName := r.URL.Query().Get("provider")
 	persist := r.URL.Query().Get("persist") == "true"
 
+	if pName == "all" {
+		var names []string
+		var newValue interface{}
+		var firstErr error
+		api.pm.ForEach(func(name string, ps *ProviderState) {
+			val, err := api.setRuntimeConfigField(ps, body.Key, body.Value)
+			if firstErr == nil && err != nil {
+				firstErr = err
+			}
+			if newValue == nil && val != nil {
+				newValue = val
+			}
+			names = append(names, name)
+		})
+		if firstErr != nil {
+			respondJSON(w, http.StatusBadRequest, map[string]string{"error": firstErr.Error()})
+			return
+		}
+		if persist {
+			_ = api.persistRuntimeConfigFieldToDefault(body.Key, newValue)
+		}
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"key":       body.Key,
+			"value":     newValue,
+			"persisted": persist,
+			"providers": names,
+		})
+		return
+	}
+
 	ps, errMsg := api.resolveProviderByName(pName)
 	if ps == nil {
 		respondJSON(w, http.StatusNotFound, map[string]string{"error": errMsg})
 		return
 	}
 
-	var newValue interface{}
-	switch body.Key {
-	case "http_timeout_sec":
-		v, err := toInt(body.Value)
-		if err != nil || v < 1 {
-			respondJSON(w, http.StatusBadRequest, map[string]string{"error": "http_timeout_sec must be a positive integer"})
-			return
-		}
-		ps.Proxy.client.Timeout = time.Duration(v) * time.Second
-		ps.Config.HTTPTimeoutSec = v
-		newValue = v
-
-	case "max_retries":
-		v, err := toInt(body.Value)
-		if err != nil || v < 0 {
-			respondJSON(w, http.StatusBadRequest, map[string]string{"error": "max_retries must be a non-negative integer"})
-			return
-		}
-		ps.Config.MaxRetries = v
-		newValue = v
-
-	case "cooldown_sec":
-		v, err := toInt(body.Value)
-		if err != nil || v < 1 {
-			respondJSON(w, http.StatusBadRequest, map[string]string{"error": "cooldown_sec must be a positive integer"})
-			return
-		}
-		ps.Config.CooldownSec = v
-		ps.Pool.ConfigureCBs(
-			time.Duration(v)*time.Second,
-			time.Duration(ps.Config.BackoffCapSec)*time.Second,
-			ps.Config.BackoffMultiplier,
-		)
-		newValue = v
-
-	case "backoff_cap_sec":
-		v, err := toInt(body.Value)
-		if err != nil || v < 1 {
-			respondJSON(w, http.StatusBadRequest, map[string]string{"error": "backoff_cap_sec must be a positive integer"})
-			return
-		}
-		ps.Config.BackoffCapSec = v
-		ps.Pool.ConfigureCBs(
-			time.Duration(ps.Config.CooldownSec)*time.Second,
-			time.Duration(v)*time.Second,
-			ps.Config.BackoffMultiplier,
-		)
-		newValue = v
-
-	case "backoff_multiplier":
-		v, err := toFloat64(body.Value)
-		if err != nil || v < 1.0 {
-			respondJSON(w, http.StatusBadRequest, map[string]string{"error": "backoff_multiplier must be a number >= 1.0"})
-			return
-		}
-		ps.Config.BackoffMultiplier = v
-		ps.Pool.ConfigureCBs(
-			time.Duration(ps.Config.CooldownSec)*time.Second,
-			time.Duration(ps.Config.BackoffCapSec)*time.Second,
-			v,
-		)
-		newValue = v
-
-	case "cb_reset_sec":
-		v, err := toInt(body.Value)
-		if err != nil || v < 1 {
-			respondJSON(w, http.StatusBadRequest, map[string]string{"error": "cb_reset_sec must be a positive integer"})
-			return
-		}
-		ps.Proxy.upCB.SetResetTimeout(time.Duration(v) * time.Second)
-		ps.Config.CBResetSec = v
-		newValue = v
-
-	case "upstream_cb_threshold":
-		v, err := toInt(body.Value)
-		if err != nil || v < 1 {
-			respondJSON(w, http.StatusBadRequest, map[string]string{"error": "upstream_cb_threshold must be a positive integer"})
-			return
-		}
-		ps.Proxy.upCB.SetThreshold(v)
-		ps.Config.UpstreamCBThreshold = v
-		newValue = v
-
-	case "log_level":
-		v, ok := body.Value.(string)
-		if !ok {
-			respondJSON(w, http.StatusBadRequest, map[string]string{"error": "log_level must be a string"})
-			return
-		}
-		v = strings.TrimSpace(strings.ToLower(v))
-		switch v {
-		case "debug", "info", "warn", "error":
-			api.logManager.ApplyLevel(v)
-			ps.Config.LogLevel = v
-			newValue = v
-		default:
-			respondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid log level, use: debug, info, warn, error"})
-			return
-		}
-
-	default:
-		respondJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("unknown key %q", body.Key)})
+	newValue, err := api.setRuntimeConfigField(ps, body.Key, body.Value)
+	if err != nil {
+		respondJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 
@@ -807,6 +747,95 @@ func (api *AdminAPI) handleRuntimeConfigSet(w http.ResponseWriter, r *http.Reque
 		"value":     newValue,
 		"persisted": persisted,
 	})
+}
+
+// setRuntimeConfigField applies a runtime config change to a provider's
+// in-memory config and runtime state. Returns the new value and an error
+// if the key is unknown or the value is invalid.
+func (api *AdminAPI) setRuntimeConfigField(ps *ProviderState, key string, value interface{}) (interface{}, error) {
+	switch key {
+	case "http_timeout_sec":
+		v, err := toInt(value)
+		if err != nil || v < 1 {
+			return nil, fmt.Errorf("http_timeout_sec must be a positive integer")
+		}
+		ps.Proxy.client.Timeout = time.Duration(v) * time.Second
+		ps.Config.HTTPTimeoutSec = v
+		return v, nil
+	case "max_retries":
+		v, err := toInt(value)
+		if err != nil || v < 0 {
+			return nil, fmt.Errorf("max_retries must be a non-negative integer")
+		}
+		ps.Config.MaxRetries = v
+		return v, nil
+	case "cooldown_sec":
+		v, err := toInt(value)
+		if err != nil || v < 1 {
+			return nil, fmt.Errorf("cooldown_sec must be a positive integer")
+		}
+		ps.Config.CooldownSec = v
+		ps.Pool.ConfigureCBs(
+			time.Duration(v)*time.Second,
+			time.Duration(ps.Config.BackoffCapSec)*time.Second,
+			ps.Config.BackoffMultiplier,
+		)
+		return v, nil
+	case "backoff_cap_sec":
+		v, err := toInt(value)
+		if err != nil || v < 1 {
+			return nil, fmt.Errorf("backoff_cap_sec must be a positive integer")
+		}
+		ps.Config.BackoffCapSec = v
+		ps.Pool.ConfigureCBs(
+			time.Duration(ps.Config.CooldownSec)*time.Second,
+			time.Duration(v)*time.Second,
+			ps.Config.BackoffMultiplier,
+		)
+		return v, nil
+	case "backoff_multiplier":
+		v, err := toFloat64(value)
+		if err != nil || v < 1.0 {
+			return nil, fmt.Errorf("backoff_multiplier must be a number >= 1.0")
+		}
+		ps.Config.BackoffMultiplier = v
+		ps.Pool.ConfigureCBs(
+			time.Duration(ps.Config.CooldownSec)*time.Second,
+			time.Duration(ps.Config.BackoffCapSec)*time.Second,
+			v,
+		)
+		return v, nil
+	case "cb_reset_sec":
+		v, err := toInt(value)
+		if err != nil || v < 1 {
+			return nil, fmt.Errorf("cb_reset_sec must be a positive integer")
+		}
+		ps.Proxy.upCB.SetResetTimeout(time.Duration(v) * time.Second)
+		ps.Config.CBResetSec = v
+		return v, nil
+	case "upstream_cb_threshold":
+		v, err := toInt(value)
+		if err != nil || v < 1 {
+			return nil, fmt.Errorf("upstream_cb_threshold must be a positive integer")
+		}
+		ps.Proxy.upCB.SetThreshold(v)
+		ps.Config.UpstreamCBThreshold = v
+		return v, nil
+	case "log_level":
+		raw, ok := value.(string)
+		if !ok {
+			return nil, fmt.Errorf("log_level must be a string")
+		}
+		v := strings.TrimSpace(strings.ToLower(raw))
+		switch v {
+		case "debug", "info", "warn", "error":
+			api.logManager.ApplyLevel(v)
+			ps.Config.LogLevel = v
+			return v, nil
+		}
+		return nil, fmt.Errorf("invalid log level, use: debug, info, warn, error")
+	}
+	return nil, fmt.Errorf("unknown key %q", key)
 }
 
 // getRuntimeParams returns all runtime-configurable parameters for a provider.
@@ -992,6 +1021,52 @@ func (api *AdminAPI) persistRuntimeConfigField(ps *ProviderState, key string, va
 	case "log_level":
 		v, _ := value.(string)
 		providerCfg.LogLevel = v
+	}
+
+	return config.SaveTomlConfig(tc, xdgPath)
+}
+
+// persistRuntimeConfigFieldToDefault saves a field to the [provider.default] section.
+// This is used when applying config to all providers so new providers inherit the value.
+func (api *AdminAPI) persistRuntimeConfigFieldToDefault(key string, value interface{}) error {
+	xdgPath, err := config.XDGConfigPath()
+	if err != nil {
+		return err
+	}
+
+	tc, err := config.LoadTomlConfig(xdgPath)
+	if err != nil {
+		return err
+	}
+	if tc.Default == nil {
+		tc.Default = &config.Config{}
+	}
+
+	switch key {
+	case "http_timeout_sec":
+		v, _ := toInt(value)
+		tc.Default.HTTPTimeoutSec = v
+	case "max_retries":
+		v, _ := toInt(value)
+		tc.Default.MaxRetries = v
+	case "cooldown_sec":
+		v, _ := toInt(value)
+		tc.Default.CooldownSec = v
+	case "backoff_cap_sec":
+		v, _ := toInt(value)
+		tc.Default.BackoffCapSec = v
+	case "backoff_multiplier":
+		v, _ := toFloat64(value)
+		tc.Default.BackoffMultiplier = v
+	case "cb_reset_sec":
+		v, _ := toInt(value)
+		tc.Default.CBResetSec = v
+	case "upstream_cb_threshold":
+		v, _ := toInt(value)
+		tc.Default.UpstreamCBThreshold = v
+	case "log_level":
+		v, _ := value.(string)
+		tc.Default.LogLevel = v
 	}
 
 	return config.SaveTomlConfig(tc, xdgPath)

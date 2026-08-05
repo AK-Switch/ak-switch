@@ -203,6 +203,160 @@ func TestKeyOperationHandler_OperationError(t *testing.T) {
 	}
 }
 
+// ── Runtime Config ─────────────────────────────────────
+
+func TestHandleRuntimeConfigGet_ProviderAll(t *testing.T) {
+	pr := newTestRouterWithKeys(t, []string{"sk-key-0", "sk-key-1"})
+	cfg2 := config.DefaultConfig()
+	cfg2.MaxRetries = 5
+	cfg2.CooldownSec = 30
+	pool2 := keypool.NewKeyPool([]string{"sk-key-2"}, nil)
+	pr.AddProvider("provider-b", cfg2, pool2)
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/api/runtime-config?provider=all", nil)
+	r.Header.Set("X-Admin-Token", "")
+	pr.api.runtimeConfigHandler(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	var result map[string]map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("decode failed: %v", err)
+	}
+	if _, ok := result["test"]; !ok {
+		t.Error("missing provider 'test' in response")
+	}
+	if _, ok := result["provider-b"]; !ok {
+		t.Error("missing provider 'provider-b' in response")
+	}
+	// Verify provider-b has the overridden values
+	if result["provider-b"]["max_retries"] != float64(5) {
+		t.Errorf("provider-b max_retries = %v, want 5", result["provider-b"]["max_retries"])
+	}
+	if result["provider-b"]["cooldown_sec"] != float64(30) {
+		t.Errorf("provider-b cooldown_sec = %v, want 30", result["provider-b"]["cooldown_sec"])
+	}
+}
+
+func TestHandleRuntimeConfigGet_ProviderAllWithKey(t *testing.T) {
+	pr := newTestRouterWithKeys(t, []string{"sk-key-0", "sk-key-1"})
+	cfg2 := config.DefaultConfig()
+	cfg2.MaxRetries = 5
+	pool2 := keypool.NewKeyPool([]string{"sk-key-2"}, nil)
+	pr.AddProvider("provider-b", cfg2, pool2)
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/api/runtime-config?provider=all&key=max_retries", nil)
+	r.Header.Set("X-Admin-Token", "")
+	pr.api.runtimeConfigHandler(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	var result map[string]map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("decode failed: %v", err)
+	}
+	if _, ok := result["test"]; !ok {
+		t.Error("missing provider 'test' in response")
+	}
+	if _, ok := result["provider-b"]; !ok {
+		t.Error("missing provider 'provider-b' in response")
+	}
+}
+
+func TestHandleRuntimeConfigSet_ProviderAll(t *testing.T) {
+	pr := newTestRouterWithKeys(t, []string{"sk-key-0", "sk-key-1"})
+	cfg2 := config.DefaultConfig()
+	cfg2.MaxRetries = 5
+	pool2 := keypool.NewKeyPool([]string{"sk-key-2"}, nil)
+	pr.AddProvider("provider-b", cfg2, pool2)
+
+	w := httptest.NewRecorder()
+	body := strings.NewReader(`{"key":"cooldown_sec","value":60}`)
+	r := httptest.NewRequest(http.MethodPost, "/api/runtime-config?provider=all", body)
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("X-Admin-Token", "")
+	pr.api.runtimeConfigHandler(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	var result map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("decode failed: %v", err)
+	}
+	if result["key"] != "cooldown_sec" {
+		t.Errorf("key = %q, want cooldown_sec", result["key"])
+	}
+	if result["value"] != float64(60) {
+		t.Errorf("value = %v, want 60", result["value"])
+	}
+	providers, ok := result["providers"].([]interface{})
+	if !ok {
+		t.Fatalf("providers type = %T, want []interface{}", result["providers"])
+	}
+	if len(providers) != 2 {
+		t.Errorf("providers count = %d, want 2", len(providers))
+	}
+
+	// Verify both providers' runtime config was updated
+	testPs := pr.Provider("test")
+	if testPs.Config.CooldownSec != 60 {
+		t.Errorf("test CooldownSec = %d, want 60", testPs.Config.CooldownSec)
+	}
+	providerBPs := pr.Provider("provider-b")
+	if providerBPs.Config.CooldownSec != 60 {
+		t.Errorf("provider-b CooldownSec = %d, want 60", providerBPs.Config.CooldownSec)
+	}
+}
+
+func TestHandleRuntimeConfigSet_ProviderAllInvalidValue(t *testing.T) {
+	pr := newTestRouterWithKeys(t, []string{"sk-key-0"})
+
+	w := httptest.NewRecorder()
+	body := strings.NewReader(`{"key":"http_timeout_sec","value":0}`)
+	r := httptest.NewRequest(http.MethodPost, "/api/runtime-config?provider=all", body)
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("X-Admin-Token", "")
+	pr.api.runtimeConfigHandler(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+	var result map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("decode failed: %v", err)
+	}
+	if result["error"] != "http_timeout_sec must be a positive integer" {
+		t.Errorf("error = %q, want 'http_timeout_sec must be a positive integer'", result["error"])
+	}
+}
+
+func TestHandleRuntimeConfigSet_ProviderAllInvalidKey(t *testing.T) {
+	pr := newTestRouterWithKeys(t, []string{"sk-key-0"})
+
+	w := httptest.NewRecorder()
+	body := strings.NewReader(`{"key":"nonexistent_key","value":1}`)
+	r := httptest.NewRequest(http.MethodPost, "/api/runtime-config?provider=all", body)
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("X-Admin-Token", "")
+	pr.api.runtimeConfigHandler(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+	var result map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("decode failed: %v", err)
+	}
+	if result["error"] != "unknown key \"nonexistent_key\"" {
+		t.Errorf("error = %q, want 'unknown key \"nonexistent_key\"'", result["error"])
+	}
+}
+
 // ── Helpers ────────────────────────────────────────────
 
 // newTestRouterWithKeys creates a ProviderRouter with a single provider named "test"
