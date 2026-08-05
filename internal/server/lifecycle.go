@@ -260,8 +260,8 @@ func sendCalibrationRequest(calibrator *tracker.Calibrator, pool *keypool.KeyPoo
 		return
 	}
 
-	// Extract actual token usage from upstream response
-	actualInput, actualOutput := tokenestimator.ExtractTokenUsage(respBody)
+	// Extract actual token usage and response text from upstream response
+	actualInput, actualOutput, respText := tokenestimator.ProcessResponse(respBody, model)
 	if actualInput == 0 && actualOutput == 0 {
 		slog.Debug("calibration: no token usage in response, skipping")
 		return
@@ -269,16 +269,10 @@ func sendCalibrationRequest(calibrator *tracker.Calibrator, pool *keypool.KeyPoo
 
 	// Run tiktoken estimation for comparison
 	estInput := tokenestimator.EstimateInput([]byte(body), model)
-	respText := tokenestimator.ExtractResponseText(respBody)
 	estOutput := tokenestimator.EstimateOutput(respText, model)
 
 	// Record calibration samples
-	if estInput > 0 && actualInput > 0 {
-		calibrator.Record(model, estInput, actualInput)
-	}
-	if estOutput > 0 && actualOutput > 0 {
-		calibrator.Record(model, estOutput, actualOutput)
-	}
+	tokenestimator.RecordCalibration(calibrator, model, estInput, actualInput, estOutput, actualOutput)
 
 	slog.Debug("calibration: recorded",
 		"model", model,
