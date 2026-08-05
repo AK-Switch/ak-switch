@@ -30,12 +30,24 @@ func TestConfigListCmd_HasAllFlag(t *testing.T) {
 	}
 }
 
+func TestConfigGetCmd_HasAllFlag(t *testing.T) {
+	if configGetCmd.Flags().Lookup("all") == nil {
+		t.Fatal("expected --all flag on config get command")
+	}
+}
+
 func TestConfigGetCmd_Exists(t *testing.T) {
 	if configGetCmd == nil {
 		t.Fatal("configGetCmd is nil")
 	}
 	if configGetCmd.Use != "get <key> [provider]" {
 		t.Errorf("expected Use 'get <key> [provider]', got %q", configGetCmd.Use)
+	}
+}
+
+func TestConfigSetCmd_HasAllFlag(t *testing.T) {
+	if configSetCmd.Flags().Lookup("all") == nil {
+		t.Fatal("expected --all flag on config set command")
 	}
 }
 
