@@ -13,6 +13,7 @@ type TomlConfig struct {
 	Port              int                  `toml:"port"`
 	Host              string               `toml:"host,omitempty"`
 	DefaultProvider   string               `toml:"default_provider,omitempty"`
+	Default           *Config              `toml:"provider.default"`
 	CredentialsDir    string               `toml:"credentials_dir,omitempty"` // Directory containing provider credential files (JSONL)
 	LogFile           string               `toml:"log_file,omitempty"`
 	LogMaxSize        int                  `toml:"log_max_size"`

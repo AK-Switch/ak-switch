@@ -3,6 +3,7 @@
 package config
 
 import (
+	"os"
 	"testing"
 )
 
@@ -110,5 +111,92 @@ func TestDeepCopy(t *testing.T) {
 	}
 	if original.Keys[0] != "key1" {
 		t.Errorf("original.Keys[0] changed to %s", original.Keys[0])
+	}
+}
+
+func TestLoadAllTomlProviders_WithDefaultSection(t *testing.T) {
+	toml := `
+port = 8080
+
+[provider.default]
+max_retries = 3
+cooldown_sec = 20
+log_level = "warn"
+
+[provider.sensenova]
+target = "https://api.sensenova.com/v1"
+keys_file = "sensenova.keys"
+
+[provider.claude]
+target = "https://api.anthropic.com/v1"
+max_retries = 5
+`
+	tmpFile := writeTempToml(t, toml)
+	defer os.Remove(tmpFile)
+
+	providers, err := LoadAllTomlProviders(tmpFile)
+	if err != nil {
+		t.Fatalf("LoadAllTomlProviders failed: %v", err)
+	}
+
+	// sensenova inherits max_retries=3, cooldown_sec=20, log_level="warn" from default
+	s := providers["sensenova"]
+	if s == nil {
+		t.Fatal("provider 'sensenova' not found")
+	}
+	if s.MaxRetries != 3 {
+		t.Errorf("sensenova.MaxRetries = %d, want 3 (inherited)", s.MaxRetries)
+	}
+	if s.CooldownSec != 20 {
+		t.Errorf("sensenova.CooldownSec = %d, want 20 (inherited)", s.CooldownSec)
+	}
+	if s.LogLevel != "warn" {
+		t.Errorf("sensenova.LogLevel = %q, want \"warn\" (inherited)", s.LogLevel)
+	}
+	if s.TargetBase != "https://api.sensenova.com/v1" {
+		t.Errorf("sensenova.TargetBase = %q", s.TargetBase)
+	}
+
+	// claude overrides max_retries=5, inherits cooldown_sec=20, log_level="warn"
+	c := providers["claude"]
+	if c == nil {
+		t.Fatal("provider 'claude' not found")
+	}
+	if c.MaxRetries != 5 {
+		t.Errorf("claude.MaxRetries = %d, want 5 (overridden)", c.MaxRetries)
+	}
+	if c.CooldownSec != 20 {
+		t.Errorf("claude.CooldownSec = %d, want 20 (inherited)", c.CooldownSec)
+	}
+	if c.LogLevel != "warn" {
+		t.Errorf("claude.LogLevel = %q, want \"warn\" (inherited)", c.LogLevel)
+	}
+}
+
+func TestLoadAllTomlProviders_WithoutDefaultSection(t *testing.T) {
+	// No [provider.default] — behavior unchanged
+	toml := `
+port = 9090
+
+[provider.sensenova]
+target = "https://api.sensenova.com/v1"
+max_retries = 3
+`
+	tmpFile := writeTempToml(t, toml)
+	defer os.Remove(tmpFile)
+
+	providers, err := LoadAllTomlProviders(tmpFile)
+	if err != nil {
+		t.Fatalf("LoadAllTomlProviders failed: %v", err)
+	}
+	s := providers["sensenova"]
+	if s == nil {
+		t.Fatal("provider 'sensenova' not found")
+	}
+	if s.MaxRetries != 3 {
+		t.Errorf("MaxRetries = %d, want 3", s.MaxRetries)
+	}
+	if s.Port != 9090 {
+		t.Errorf("Port = %d, want 9090", s.Port)
 	}
 }
