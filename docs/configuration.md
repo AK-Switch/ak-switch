@@ -57,6 +57,64 @@ Provider 名称（TOML 段名，如 `[provider.nvidia]` 中的 `nvidia`）建议
 | `log_max_size` | 否 | `100` | 日志文件轮转大小（MB），达到此值自动轮转 |
 | `log_max_age` | 否 | `7` | 日志文件保留天数，超过此期限的轮转文件自动删除 |
 
+### `[provider.default]` — 跨 Provider 默认值
+
+`[provider.default]` 允许定义一组对**所有 provider** 生效的默认参数。加载时采用三层继承：
+
+```
+struct tag 默认值（硬编码）→ [provider.default]（TOML 全局段）→ [provider.xxx]（TOML 单 provider 段）
+```
+
+- **`struct tag` 默认值** — Go 结构体 `default` 标签定义的最底层值，永不覆盖
+- **`[provider.default]`** — TOML 全局默认段，为所有 provider 提供共享默认值。仅当 provider 自身未显式设置该字段时才生效（零值不覆盖）
+- **`[provider.xxx]`** — 单 provider 段，优先级最高
+
+9 个可继承的字段：
+
+| 字段 | struct 默认 | 说明 |
+|------|-----------|------|
+| `max_retries` | `1` | 完整遍历 key pool 的最大轮数 |
+| `http_timeout_sec` | `30` | HTTP 客户端超时（秒） |
+| `cooldown_sec` | `60` | 429 后 Key 冷却的基础时长（秒） |
+| `backoff_cap_sec` | `120` | Key 指数退避上限（秒） |
+| `backoff_multiplier` | `2.0` | Key 指数退避倍数 |
+| `cb_reset_sec` | `30` | 上游熔断器 OPEN → HALF_OPEN 超时（秒） |
+| `upstream_cb_threshold` | `5` | 上游熔断器连续失败触发阈值 |
+| `health_check_interval_sec` | `30` | 主动健康检查间隔（秒） |
+| `log_level` | `"info"` | 日志级别 |
+
+不可继承的字段（必须每个 provider 显式设置）：
+
+- `target` — 上游 API 地址，每个 provider 不同
+- `keys` / `keys_file` — 每个 provider 的 key 集合
+- `port` / `host` — 全局共享，非 provider 级
+- `admin_token` — 每个 provider 的鉴权令牌
+
+**示例：**
+
+```toml
+port = 8080
+
+# 全局默认值 — 所有 provider 继承，除非自身显式覆盖
+[provider.default]
+max_retries = 2
+cooldown_sec = 15
+log_level = "warn"
+
+# sensenova 继承默认值，只覆盖 target 和 cooldown
+[provider.sensenova]
+target = "https://api.sensenova.com/v1"
+cooldown_sec = 30
+
+# nvidia 完全自定义，不使用任何默认值
+[provider.nvidia]
+target = "https://integrate.api.nvidia.com/v1"
+max_retries = 5
+cooldown_sec = 60
+```
+
+此时 sensenova 的实际参数为：`max_retries=2`（继承）、`cooldown_sec=30`（自身覆盖）、`log_level="warn"`（继承）。
+
 ### 自动生成
 
 ```bash
