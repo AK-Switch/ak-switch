@@ -86,6 +86,13 @@ var configInitCmd = &cobra.Command{
 					},
 				},
 			},
+			Default: &config.Config{
+				ProviderConfig: config.ProviderConfig{
+					MaxRetries:  2,
+					CooldownSec: 15,
+					LogLevel:    "info",
+				},
+			},
 		}
 		if err := config.SaveTomlConfig(tc, path); err != nil {
 			return fmt.Errorf("failed to write config file: %w", err)
