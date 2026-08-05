@@ -123,22 +123,9 @@ func (api *AdminAPI) logLevelHandler(w http.ResponseWriter, r *http.Request) {
 func (api *AdminAPI) configHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
 		// Return config for a specific provider or all providers
-		ps, _ := api.resolveProvider(r)
+		ps, errMsg := api.resolveProvider(r)
 		if ps == nil {
-			// Return all providers
-			result := make(map[string]config.ConfigPayload)
-			api.pm.ForEach(func(name string, p *ProviderState) {
-				keys := p.Pool.Keys()
-				maskedKeys := make([]string, len(keys))
-				for i, k := range keys {
-					maskedKeys[i] = logentry.MaskKey(k)
-				}
-				result[name] = config.ConfigPayload{
-					TargetBase: p.Config.TargetBase,
-					Keys:       maskedKeys,
-				}
-			})
-			respondJSON(w, http.StatusOK, map[string]interface{}{"providers": result})
+			respondJSON(w, http.StatusNotFound, map[string]string{"error": errMsg})
 			return
 		}
 

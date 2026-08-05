@@ -256,7 +256,7 @@ func (c *Config) DeepCopy() *Config {
 // mergeWithDefaults merges override into base, returning a new Config.
 // Non-zero fields in override take precedence over base.
 // Non-inheritable fields (TargetBase, Keys, KeyNames, Port, Host, etc.)
-// are always taken from override regardless of zero value.
+// are taken from override only when non-zero/non-empty.
 //
 // The 9 inheritable fields are: MaxRetries, HTTPTimeoutSec, CooldownSec,
 // BackoffCapSec, BackoffMultiplier, CBResetSec, UpstreamCBThreshold,

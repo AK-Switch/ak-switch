@@ -15,6 +15,24 @@ func TestConfigInitCmd_Flags(t *testing.T) {
 	}
 }
 
+func TestConfigInitCmd_Exists(t *testing.T) {
+	if configInitCmd == nil {
+		t.Fatal("configInitCmd is nil")
+	}
+	if configInitCmd.Use != "init" {
+		t.Errorf("expected Use 'init', got %q", configInitCmd.Use)
+	}
+}
+
+func TestConfigViewCmd_Exists(t *testing.T) {
+	if configViewCmd == nil {
+		t.Fatal("configViewCmd is nil")
+	}
+	if configViewCmd.Use != "view" {
+		t.Errorf("expected Use 'view', got %q", configViewCmd.Use)
+	}
+}
+
 func TestConfigListCmd_Exists(t *testing.T) {
 	if configListCmd == nil {
 		t.Fatal("configListCmd is nil")
