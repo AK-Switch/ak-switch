@@ -6,7 +6,6 @@ import (
 	akswitchmetrics "akswitch/internal/metrics"
 	"bufio"
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -275,15 +274,10 @@ func (px *ProxyExecutor) handleSuccess(w http.ResponseWriter, ps *ProviderState,
 
 	var inputTokens, outputTokens int
 	var model string
+	var responseText string
 
 	// Extract model name from request body for calibration
-	var reqBody struct {
-		Model string `json:"model"`
-	}
-	if len(bodyBytes) > 0 {
-		_ = json.Unmarshal(bodyBytes, &reqBody)
-		model = reqBody.Model
-	}
+	model = tokenestimator.ExtractModel(bodyBytes)
 
 	var respBodySize int64
 
@@ -295,20 +289,11 @@ func (px *ProxyExecutor) handleSuccess(w http.ResponseWriter, ps *ProviderState,
 		body, err := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 		if err == nil {
-			inputTokens, outputTokens = tokenestimator.ExtractTokenUsage(body)
-			// Also run tiktoken estimation for calibration comparison
-			inputEstimate := tokenestimator.EstimateInput(bodyBytes, model)
-			responseText := tokenestimator.ExtractResponseText(body)
+			inputTokens, outputTokens, responseText = tokenestimator.ProcessResponse(body, model)
 			outputEstimate := tokenestimator.EstimateOutput(responseText, model)
-			if model != "" {
-				if inputEstimate > 0 && inputTokens > 0 {
-					px.calibrator.Record(model, inputEstimate, inputTokens)
-				}
-				if outputEstimate > 0 && outputTokens > 0 {
-					px.calibrator.Record(model, outputEstimate, outputTokens)
-				}
-			}
-			// Fallback to tiktoken estimation when API response doesn't include output_tokens
+			tokenestimator.RecordCalibration(px.calibrator, model,
+				tokenestimator.EstimateInput(bodyBytes, model), inputTokens,
+				outputEstimate, outputTokens)
 			if outputTokens == 0 && outputEstimate > 0 {
 				outputTokens = outputEstimate
 			}
