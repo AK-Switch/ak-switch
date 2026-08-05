@@ -291,22 +291,52 @@ func mergeWithDefaults(base, override *Config) *Config {
 	if override.LogLevel != "" {
 		result.LogLevel = override.LogLevel
 	}
-	// Non-inheritable fields — always take from override
-	result.Port = override.Port
-	result.Host = override.Host
-	result.TargetBase = override.TargetBase
-	result.AdminToken = override.AdminToken
-	result.DisableThinking = override.DisableThinking
-	result.GenaiModel = override.GenaiModel
-	result.Keys = override.Keys
-	result.KeyNames = override.KeyNames
-	result.KeysFile = override.KeysFile
-	result.HealthCheckPath = override.HealthCheckPath
-	result.HealthCheckTimeoutSec = override.HealthCheckTimeoutSec
-	result.LogFile = override.LogFile
-	result.LogMaxSize = override.LogMaxSize
-	result.LogMaxAge = override.LogMaxAge
-	result.CalibrationIntervalSec = override.CalibrationIntervalSec
+	// Non-inheritable fields — only override if non-zero/non-empty
+	if override.Port != 0 {
+		result.Port = override.Port
+	}
+	if override.Host != "" {
+		result.Host = override.Host
+	}
+	if override.TargetBase != "" {
+		result.TargetBase = override.TargetBase
+	}
+	if override.AdminToken != "" {
+		result.AdminToken = override.AdminToken
+	}
+	if override.DisableThinking {
+		result.DisableThinking = true
+	}
+	if override.GenaiModel != "" {
+		result.GenaiModel = override.GenaiModel
+	}
+	if len(override.Keys) > 0 {
+		result.Keys = override.Keys
+	}
+	if len(override.KeyNames) > 0 {
+		result.KeyNames = override.KeyNames
+	}
+	if override.KeysFile != "" {
+		result.KeysFile = override.KeysFile
+	}
+	if override.HealthCheckPath != "" {
+		result.HealthCheckPath = override.HealthCheckPath
+	}
+	if override.HealthCheckTimeoutSec != 0 {
+		result.HealthCheckTimeoutSec = override.HealthCheckTimeoutSec
+	}
+	if override.LogFile != "" {
+		result.LogFile = override.LogFile
+	}
+	if override.LogMaxSize != 0 {
+		result.LogMaxSize = override.LogMaxSize
+	}
+	if override.LogMaxAge != 0 {
+		result.LogMaxAge = override.LogMaxAge
+	}
+	if override.CalibrationIntervalSec != 0 {
+		result.CalibrationIntervalSec = override.CalibrationIntervalSec
+	}
 	// Sync runtime config
 	result.RuntimeConfig.HTTPTimeoutSec = result.HTTPTimeoutSec
 	result.RuntimeConfig.MaxRetries = result.MaxRetries
