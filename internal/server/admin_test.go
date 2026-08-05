@@ -18,7 +18,7 @@ import (
 
 func TestKeyOperationHandler_Disable(t *testing.T) {
 	pr := newTestRouterWithKeys(t, []string{"sk-key-0", "sk-key-1"})
-	handler := pr.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
+	handler := pr.api.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
 		return pool.Disable(idx)
 	})
 
@@ -37,7 +37,7 @@ func TestKeyOperationHandler_Disable(t *testing.T) {
 
 func TestKeyOperationHandler_Enable(t *testing.T) {
 	pr := newTestRouterWithKeys(t, []string{"sk-key-0", "sk-key-1"})
-	handler := pr.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
+	handler := pr.api.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
 		return pool.Enable(idx)
 	})
 
@@ -59,7 +59,7 @@ func TestKeyOperationHandler_Enable(t *testing.T) {
 
 func TestKeyOperationHandler_Cooldown(t *testing.T) {
 	pr := newTestRouterWithKeys(t, []string{"sk-key-0", "sk-key-1"})
-	handler := pr.keyOperationHandler(func(pool *keypool.KeyPool, cfg *config.Config, idx int) error {
+	handler := pr.api.keyOperationHandler(func(pool *keypool.KeyPool, cfg *config.Config, idx int) error {
 		return pool.Cooldown(idx, time.Duration(cfg.CooldownSec)*time.Second)
 	})
 
@@ -75,7 +75,7 @@ func TestKeyOperationHandler_Cooldown(t *testing.T) {
 
 func TestKeyOperationHandler_Delete(t *testing.T) {
 	pr := newTestRouterWithKeys(t, []string{"sk-key-0", "sk-key-1"})
-	handler := pr.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
+	handler := pr.api.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
 		return pool.RemoveKey(idx)
 	})
 
@@ -94,7 +94,7 @@ func TestKeyOperationHandler_Delete(t *testing.T) {
 
 func TestKeyOperationHandler_ProviderNotFound(t *testing.T) {
 	pr := newTestRouterWithKeys(t, []string{"sk-key-0"})
-	handler := pr.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
+	handler := pr.api.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
 		return pool.Disable(idx)
 	})
 
@@ -118,7 +118,7 @@ func TestKeyOperationHandler_ProviderNotFound(t *testing.T) {
 
 func TestKeyOperationHandler_InvalidIndex(t *testing.T) {
 	pr := newTestRouterWithKeys(t, []string{"sk-key-0"})
-	handler := pr.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
+	handler := pr.api.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
 		return pool.Disable(idx)
 	})
 
@@ -135,7 +135,7 @@ func TestKeyOperationHandler_InvalidIndex(t *testing.T) {
 func TestKeyOperationHandler_IndexZero(t *testing.T) {
 	// API uses 1-based indexing, so index "0" should be rejected
 	pr := newTestRouterWithKeys(t, []string{"sk-key-0"})
-	handler := pr.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
+	handler := pr.api.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
 		return pool.Disable(idx)
 	})
 
@@ -151,7 +151,7 @@ func TestKeyOperationHandler_IndexZero(t *testing.T) {
 
 func TestKeyOperationHandler_IndexOutOfBounds(t *testing.T) {
 	pr := newTestRouterWithKeys(t, []string{"sk-key-0"})
-	handler := pr.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
+	handler := pr.api.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
 		return pool.Disable(idx)
 	})
 
@@ -173,7 +173,7 @@ func TestKeyOperationHandler_AdminTokenRequired(t *testing.T) {
 	pool := keypool.NewKeyPool(cfg.Keys, nil)
 	pr.AddProvider("test", cfg, pool)
 
-	handler := pr.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
+	handler := pr.api.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
 		return pool.Disable(idx)
 	})
 
@@ -189,7 +189,7 @@ func TestKeyOperationHandler_AdminTokenRequired(t *testing.T) {
 
 func TestKeyOperationHandler_OperationError(t *testing.T) {
 	pr := newTestRouterWithKeys(t, []string{"sk-key-0"})
-	handler := pr.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
+	handler := pr.api.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
 		return pool.Disable(999) // out-of-range inside operation
 	})
 

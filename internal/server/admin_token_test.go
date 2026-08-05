@@ -23,7 +23,7 @@ func TestCheckAdminToken_ProviderNotFound(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 
-	got := pr.checkAdminToken(w, r, "nonexistent")
+	got := pr.api.checkAdminToken(w, r, "nonexistent")
 	if got {
 		t.Errorf("checkAdminToken for nonexistent provider: got true, want false")
 	}
@@ -43,7 +43,7 @@ func TestCheckAdminToken_HasToken_NoHeader(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 
-	got := pr.checkAdminToken(w, r, "test-provider")
+	got := pr.api.checkAdminToken(w, r, "test-provider")
 	if got {
 		t.Errorf("expected false (no token provided), got true")
 	}
@@ -64,7 +64,7 @@ func TestCheckAdminToken_HasToken_CorrectHeader(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	r.Header.Set("X-Admin-Token", "secret-token")
 
-	got := pr.checkAdminToken(w, r, "test-provider")
+	got := pr.api.checkAdminToken(w, r, "test-provider")
 	if !got {
 		t.Errorf("expected true (correct token), got false")
 	}
@@ -82,7 +82,7 @@ func TestCheckAdminToken_HasToken_WrongHeader(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	r.Header.Set("X-Admin-Token", "wrong-token")
 
-	got := pr.checkAdminToken(w, r, "test-provider")
+	got := pr.api.checkAdminToken(w, r, "test-provider")
 	if got {
 		t.Errorf("expected false (wrong token), got true")
 	}
@@ -101,7 +101,7 @@ func TestCheckAdminToken_NoTokenConfigured_NoHeader(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 
-	got := pr.checkAdminToken(w, r, "test-provider")
+	got := pr.api.checkAdminToken(w, r, "test-provider")
 	if !got {
 		t.Errorf("expected true (no token configured), got false")
 	}
@@ -118,7 +118,7 @@ func TestCheckAdminToken_NoTokenConfigured_WithHeader(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	r.Header.Set("X-Admin-Token", "some-random-token")
 
-	got := pr.checkAdminToken(w, r, "test-provider")
+	got := pr.api.checkAdminToken(w, r, "test-provider")
 	if !got {
 		t.Errorf("expected true (no token configured, header ignored), got false")
 	}
@@ -143,7 +143,7 @@ func TestCheckAdminToken_MixedProviders_AWithToken_NoHeader(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 
-	got := pr.checkAdminToken(w, r, "provider-a")
+	got := pr.api.checkAdminToken(w, r, "provider-a")
 	if got {
 		t.Errorf("expected false (A requires token but none provided), got true")
 	}
@@ -165,7 +165,7 @@ func TestCheckAnyAdminToken_HasToken_NoHeader(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 
-	got := pr.checkAnyAdminToken(w, r)
+	got := pr.api.checkAnyAdminToken(w, r)
 	if got {
 		t.Errorf("expected false (no token provided), got true")
 	}
@@ -186,7 +186,7 @@ func TestCheckAnyAdminToken_HasToken_CorrectHeader(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	r.Header.Set("X-Admin-Token", "secret-token")
 
-	got := pr.checkAnyAdminToken(w, r)
+	got := pr.api.checkAnyAdminToken(w, r)
 	if !got {
 		t.Errorf("expected true (correct token), got false")
 	}
@@ -204,7 +204,7 @@ func TestCheckAnyAdminToken_HasToken_WrongHeader(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	r.Header.Set("X-Admin-Token", "wrong-token")
 
-	got := pr.checkAnyAdminToken(w, r)
+	got := pr.api.checkAnyAdminToken(w, r)
 	if got {
 		t.Errorf("expected false (wrong token), got true")
 	}
@@ -223,7 +223,7 @@ func TestCheckAnyAdminToken_AllNoToken(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 
-	got := pr.checkAnyAdminToken(w, r)
+	got := pr.api.checkAnyAdminToken(w, r)
 	if !got {
 		t.Errorf("expected true (no tokens anywhere), got false")
 	}
@@ -235,7 +235,7 @@ func TestCheckAnyAdminToken_EmptyRouter(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 
-	got := pr.checkAnyAdminToken(w, r)
+	got := pr.api.checkAnyAdminToken(w, r)
 	if !got {
 		t.Errorf("expected true (empty router, no auth needed), got false")
 	}
@@ -261,7 +261,7 @@ func TestCheckAnyAdminToken_AnyTokenMatches(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	r.Header.Set("X-Admin-Token", "token-b")
 
-	got := pr.checkAnyAdminToken(w, r)
+	got := pr.api.checkAnyAdminToken(w, r)
 	if !got {
 		t.Errorf("expected true (token-b matches provider-b), got false")
 	}

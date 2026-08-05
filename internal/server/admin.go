@@ -4,25 +4,8 @@ import (
 	"akswitch/internal/config"
 	"akswitch/internal/keypool"
 	"fmt"
-	"net/http"
 	"strconv"
 )
-
-// ── Delegation Wrappers ─────────────────────────────────
-// These thin wrappers preserve the ProviderRouter method interface
-// used by existing tests, delegating to AdminAPI.
-
-func (pr *ProviderRouter) keyOperationHandler(operation func(*keypool.KeyPool, *config.Config, int) error) http.HandlerFunc {
-	return pr.api.keyOperationHandler(operation)
-}
-
-func (pr *ProviderRouter) checkAdminToken(w http.ResponseWriter, r *http.Request, providerName string) bool {
-	return pr.api.checkAdminToken(w, r, providerName)
-}
-
-func (pr *ProviderRouter) checkAnyAdminToken(w http.ResponseWriter, r *http.Request) bool {
-	return pr.api.checkAnyAdminToken(w, r)
-}
 
 // ── Package-level helpers (used by admin_api.go) ────────
 

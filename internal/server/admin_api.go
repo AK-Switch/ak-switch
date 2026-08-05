@@ -634,15 +634,13 @@ func (api *AdminAPI) handleRuntimeConfigGet(w http.ResponseWriter, r *http.Reque
 	})
 
 	if key != "" {
-		// Key specified without provider — return from first provider that has it
 		names := api.pm.ProviderNames()
 		for _, name := range names {
 			ps := api.pm.LookupProvider(name)
 			params := api.getRuntimeParams(ps)
 			val, ok := params[key]
 			if !ok {
-				respondJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("unknown key %q", key)})
-				return
+				continue
 			}
 			respondJSON(w, http.StatusOK, map[string]interface{}{
 				"provider": name,
@@ -651,6 +649,8 @@ func (api *AdminAPI) handleRuntimeConfigGet(w http.ResponseWriter, r *http.Reque
 			})
 			return
 		}
+		respondJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("unknown key %q", key)})
+		return
 	}
 
 	respondJSON(w, http.StatusOK, result)
