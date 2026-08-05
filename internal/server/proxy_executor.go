@@ -289,7 +289,7 @@ func (px *ProxyExecutor) handleSuccess(w http.ResponseWriter, ps *ProviderState,
 		body, err := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 		if err == nil {
-			inputTokens, outputTokens, responseText = tokenestimator.ProcessResponse(body, model)
+			inputTokens, outputTokens, responseText = tokenestimator.ProcessResponse(body)
 			outputEstimate := tokenestimator.EstimateOutput(responseText, model)
 			tokenestimator.RecordCalibration(px.calibrator, model,
 				tokenestimator.EstimateInput(bodyBytes, model), inputTokens,

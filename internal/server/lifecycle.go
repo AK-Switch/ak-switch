@@ -261,7 +261,7 @@ func sendCalibrationRequest(calibrator *tracker.Calibrator, pool *keypool.KeyPoo
 	}
 
 	// Extract actual token usage and response text from upstream response
-	actualInput, actualOutput, respText := tokenestimator.ProcessResponse(respBody, model)
+	actualInput, actualOutput, respText := tokenestimator.ProcessResponse(respBody)
 	if actualInput == 0 && actualOutput == 0 {
 		slog.Debug("calibration: no token usage in response, skipping")
 		return
