@@ -31,6 +31,43 @@ Providers (from /home/user/.config/akswitch/config.toml):
   sensenova   https://api.sensenova.com/v1                      3001
 ```
 
+### config 命令
+
+`akswitch config` 管理运行时配置和 `config.toml` 文件。
+
+**初始化：**
+
+```bash
+akswitch config init                # 在 XDG 目录生成示例 config.toml
+akswitch config init --path ./test.toml  # 指定输出路径
+```
+
+**查看：**
+
+```bash
+akswitch config view                # 打印当前 config.toml 内容
+akswitch config list                # 列出第一个 provider 的运行时参数
+akswitch config list sensenova      # 列出指定 provider 的运行时参数
+akswitch config list --all          # 列出所有 provider 的运行时参数
+akswitch config get http_timeout_sec    # 取第一个 provider 的参数值
+akswitch config get log_level sensenova  # 取指定 provider 的参数值
+akswitch config get cooldown_sec --all   # 取所有 provider 的参数值
+```
+
+**修改（即时生效，不重启）：**
+
+```bash
+akswitch config set log_level debug            # 修改第一个 provider 的 log_level
+akswitch config set max_retries 5 --persist     # 修改并写入 config.toml
+akswitch config set log_level info sensenova    # 修改指定 provider
+akswitch config set cooldown_sec 30 --all       # 批量修改所有 provider
+akswitch config set max_retries 3 --all --persist  # 批量修改并持久化到 [provider.default]
+```
+
+`--all` 批量写入时使用 `--persist` 会写入 `[provider.default]` 段，新添加的 provider 会自动继承这些值。非批量修改的 `--persist` 写入对应 provider 的独立段。
+
+可调参数：`http_timeout_sec`、`max_retries`、`cooldown_sec`、`backoff_cap_sec`、`backoff_multiplier`、`cb_reset_sec`、`upstream_cb_threshold`、`log_level`。
+
 ### provider info 输出示例
 
 ```

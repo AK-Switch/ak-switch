@@ -207,6 +207,148 @@ func (c *Config) Sanitized() *Config {
 	return &s
 }
 
+// DeepCopy returns a deep copy of the Config.
+func (c *Config) DeepCopy() *Config {
+	keys := make([]string, len(c.Keys))
+	copy(keys, c.Keys)
+	keyNames := make([]string, len(c.KeyNames))
+	copy(keyNames, c.KeyNames)
+	return &Config{
+		ProviderConfig: ProviderConfig{
+			Port:                 c.Port,
+			Host:                 c.Host,
+			TargetBase:           c.TargetBase,
+			AdminToken:           c.AdminToken,
+			DisableThinking:      c.DisableThinking,
+			GenaiModel:           c.GenaiModel,
+			MaxRetries:           c.MaxRetries,
+			LogLevel:             c.LogLevel,
+			CooldownSec:          c.CooldownSec,
+			HTTPTimeoutSec:       c.HTTPTimeoutSec,
+			Keys:                 keys,
+			KeyNames:             keyNames,
+			KeysFile:             c.KeysFile,
+			BackoffCapSec:        c.BackoffCapSec,
+			BackoffMultiplier:    c.BackoffMultiplier,
+			CBResetSec:           c.CBResetSec,
+			UpstreamCBThreshold:  c.UpstreamCBThreshold,
+			HealthCheckIntervalSec: c.HealthCheckIntervalSec,
+			HealthCheckPath:      c.HealthCheckPath,
+			HealthCheckTimeoutSec: c.HealthCheckTimeoutSec,
+			LogFile:              c.LogFile,
+			LogMaxSize:           c.LogMaxSize,
+			LogMaxAge:            c.LogMaxAge,
+			CalibrationIntervalSec: c.CalibrationIntervalSec,
+		},
+		RuntimeConfig: RuntimeConfig{
+			HTTPTimeoutSec:      c.RuntimeConfig.HTTPTimeoutSec,
+			MaxRetries:          c.RuntimeConfig.MaxRetries,
+			CooldownSec:         c.RuntimeConfig.CooldownSec,
+			BackoffCapSec:       c.RuntimeConfig.BackoffCapSec,
+			BackoffMultiplier:   c.RuntimeConfig.BackoffMultiplier,
+			CBResetSec:          c.RuntimeConfig.CBResetSec,
+			UpstreamCBThreshold: c.RuntimeConfig.UpstreamCBThreshold,
+			LogLevel:            c.RuntimeConfig.LogLevel,
+		},
+	}
+}
+
+// mergeWithDefaults merges override into base, returning a new Config.
+// Non-zero fields in override take precedence over base.
+// Non-inheritable fields (TargetBase, Keys, KeyNames, Port, Host, etc.)
+// are taken from override only when non-zero/non-empty.
+//
+// The 9 inheritable fields are: MaxRetries, HTTPTimeoutSec, CooldownSec,
+// BackoffCapSec, BackoffMultiplier, CBResetSec, UpstreamCBThreshold,
+// HealthCheckIntervalSec, LogLevel.
+func mergeWithDefaults(base, override *Config) *Config {
+	result := base.DeepCopy()
+	// Inheritable fields — only override if non-zero
+	if override.MaxRetries != 0 {
+		result.MaxRetries = override.MaxRetries
+	}
+	if override.HTTPTimeoutSec != 0 {
+		result.HTTPTimeoutSec = override.HTTPTimeoutSec
+	}
+	if override.CooldownSec != 0 {
+		result.CooldownSec = override.CooldownSec
+	}
+	if override.BackoffCapSec != 0 {
+		result.BackoffCapSec = override.BackoffCapSec
+	}
+	if override.BackoffMultiplier != 0 {
+		result.BackoffMultiplier = override.BackoffMultiplier
+	}
+	if override.CBResetSec != 0 {
+		result.CBResetSec = override.CBResetSec
+	}
+	if override.UpstreamCBThreshold != 0 {
+		result.UpstreamCBThreshold = override.UpstreamCBThreshold
+	}
+	if override.HealthCheckIntervalSec != 0 {
+		result.HealthCheckIntervalSec = override.HealthCheckIntervalSec
+	}
+	if override.LogLevel != "" {
+		result.LogLevel = override.LogLevel
+	}
+	// Non-inheritable fields — only override if non-zero/non-empty
+	if override.Port != 0 {
+		result.Port = override.Port
+	}
+	if override.Host != "" {
+		result.Host = override.Host
+	}
+	if override.TargetBase != "" {
+		result.TargetBase = override.TargetBase
+	}
+	if override.AdminToken != "" {
+		result.AdminToken = override.AdminToken
+	}
+	if override.DisableThinking {
+		result.DisableThinking = true
+	}
+	if override.GenaiModel != "" {
+		result.GenaiModel = override.GenaiModel
+	}
+	if len(override.Keys) > 0 {
+		result.Keys = override.Keys
+	}
+	if len(override.KeyNames) > 0 {
+		result.KeyNames = override.KeyNames
+	}
+	if override.KeysFile != "" {
+		result.KeysFile = override.KeysFile
+	}
+	if override.HealthCheckPath != "" {
+		result.HealthCheckPath = override.HealthCheckPath
+	}
+	if override.HealthCheckTimeoutSec != 0 {
+		result.HealthCheckTimeoutSec = override.HealthCheckTimeoutSec
+	}
+	if override.LogFile != "" {
+		result.LogFile = override.LogFile
+	}
+	if override.LogMaxSize != 0 {
+		result.LogMaxSize = override.LogMaxSize
+	}
+	if override.LogMaxAge != 0 {
+		result.LogMaxAge = override.LogMaxAge
+	}
+	if override.CalibrationIntervalSec != 0 {
+		result.CalibrationIntervalSec = override.CalibrationIntervalSec
+	}
+	// Sync runtime config
+	result.RuntimeConfig.HTTPTimeoutSec = result.HTTPTimeoutSec
+	result.RuntimeConfig.MaxRetries = result.MaxRetries
+	result.RuntimeConfig.CooldownSec = result.CooldownSec
+	result.RuntimeConfig.BackoffCapSec = result.BackoffCapSec
+	result.RuntimeConfig.BackoffMultiplier = result.BackoffMultiplier
+	result.RuntimeConfig.CBResetSec = result.CBResetSec
+	result.RuntimeConfig.UpstreamCBThreshold = result.UpstreamCBThreshold
+	result.RuntimeConfig.LogLevel = result.LogLevel
+	return result
+}
+
 // mergeDefaults fills in zero-value fields with their default values using
 // reflection on `default` struct tags. This is used after TOML parsing to
 // ensure optional fields have sensible defaults without hand-writing if-statements

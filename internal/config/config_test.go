@@ -320,6 +320,9 @@ target = "https://api.example.com"
 
 cooldown_sec = 45
 max_retries = 7
+
+[provider.myapi]
+target = "https://myapi.example.com"
 `
 	if err := os.WriteFile(tomlPath, []byte(content), 0644); err != nil {
 		t.Fatal(err)
@@ -328,12 +331,12 @@ max_retries = 7
 	if err != nil {
 		t.Fatalf("LoadAllTomlProviders() unexpected error: %v", err)
 	}
-	cfg, ok := providers["default"]
+	cfg, ok := providers["myapi"]
 	if !ok {
-		t.Fatal("provider default not found in map")
+		t.Fatal("provider myapi not found in map")
 	}
-	if cfg.TargetBase != "https://api.example.com" {
-		t.Errorf("TargetBase = %q, want %q", cfg.TargetBase, "https://api.example.com")
+	if cfg.TargetBase != "https://myapi.example.com" {
+		t.Errorf("TargetBase = %q, want %q", cfg.TargetBase, "https://myapi.example.com")
 	}
 	if cfg.Port != 9090 {
 		t.Errorf("Port = %d, want %d", cfg.Port, 9090)
@@ -374,7 +377,7 @@ func TestSaveToml_LoadToml_Roundtrip(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	tomlPath := filepath.Join(tmpDir, "roundtrip.toml")
-	if err := SaveTomlConfig(&TomlConfig{Port: orig.Port, Provider: map[string]*Config{"default": orig}}, tomlPath); err != nil {
+	if err := SaveTomlConfig(&TomlConfig{Port: orig.Port, Provider: map[string]*Config{"myapi": orig}}, tomlPath); err != nil {
 		t.Fatalf("SaveTomlConfig() error: %v", err)
 	}
 
@@ -382,9 +385,9 @@ func TestSaveToml_LoadToml_Roundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadAllTomlProviders() error: %v", err)
 	}
-	loaded, ok := providers["default"]
+	loaded, ok := providers["myapi"]
 	if !ok {
-		t.Fatal("provider default not found in map")
+		t.Fatal("provider myapi not found in map")
 	}
 
 	if loaded.TargetBase != orig.TargetBase {
@@ -412,7 +415,7 @@ func TestSaveToml_NoRuntimeConfigSection(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	tomlPath := filepath.Join(tmpDir, "validate_save.toml")
-	if err := SaveTomlConfig(&TomlConfig{Port: cfg.Port, Provider: map[string]*Config{"default": cfg}}, tomlPath); err != nil {
+	if err := SaveTomlConfig(&TomlConfig{Port: cfg.Port, Provider: map[string]*Config{"myapi": cfg}}, tomlPath); err != nil {
 		t.Fatalf("SaveTomlConfig() error: %v", err)
 	}
 
@@ -428,7 +431,7 @@ func TestSaveToml_NoRuntimeConfigSection(t *testing.T) {
 func TestLoadToml_MissingFieldsUseDefaults(t *testing.T) {
 	tmpDir := t.TempDir()
 	tomlPath := filepath.Join(tmpDir, "minimal.toml")
-	content := `[provider.default]
+	content := `[provider.myapi]
 target = "https://api.example.com"
 `
 	if err := os.WriteFile(tomlPath, []byte(content), 0644); err != nil {
@@ -438,9 +441,9 @@ target = "https://api.example.com"
 	if err != nil {
 		t.Fatalf("LoadAllTomlProviders() unexpected error: %v", err)
 	}
-	cfg, ok := providers["default"]
+	cfg, ok := providers["myapi"]
 	if !ok {
-		t.Fatal("provider default not found in map")
+		t.Fatal("provider myapi not found in map")
 	}
 	// TargetBase should be set from TOML
 	if cfg.TargetBase != "https://api.example.com" {
@@ -468,36 +471,39 @@ func TestTomlProviderConfig_AllFields(t *testing.T) {
 	content := `port = 7070
 
 [provider.default]
-	target = "https://api.example.com"
-	cooldown_sec = 45
-	max_retries = 7
-	disable_thinking = true
-	genai_model = "opus-4.8"
-	log_level = "debug"
-	admin_token = "myadmintoken"
-	keys_file = "/data/keys.json"
-	backoff_cap_sec = 300
-	backoff_multiplier = 3.5
-	cb_reset_sec = 60
-	upstream_cb_threshold = 10
-	health_check_interval_sec = 15
-	http_timeout_sec = 45
-		log_file = "/var/log/akswitch.log"
-		log_max_size = 200
-		log_max_age = 30
+target = "https://api.example.com"
+cooldown_sec = 45
+max_retries = 7
+disable_thinking = true
+genai_model = "opus-4.8"
+log_level = "debug"
+admin_token = "myadmintoken"
+keys_file = "/data/keys.json"
+backoff_cap_sec = 300
+backoff_multiplier = 3.5
+cb_reset_sec = 60
+upstream_cb_threshold = 10
+health_check_interval_sec = 15
+http_timeout_sec = 45
+log_file = "/var/log/akswitch.log"
+log_max_size = 200
+log_max_age = 30
+
+[provider.myapi]
+target = "https://myapi.example.com"
 `
 	path := writeTempToml(t, content)
 	providers, err := LoadAllTomlProviders(path)
 	if err != nil {
 		t.Fatalf("LoadAllTomlProviders() unexpected error: %v", err)
 	}
-	cfg, ok := providers["default"]
+	cfg, ok := providers["myapi"]
 	if !ok {
-		t.Fatal("provider default not found in map")
+		t.Fatal("provider myapi not found in map")
 	}
 
-	if cfg.TargetBase != "https://api.example.com" {
-		t.Errorf("TargetBase = %q, want %q", cfg.TargetBase, "https://api.example.com")
+	if cfg.TargetBase != "https://myapi.example.com" {
+		t.Errorf("TargetBase = %q, want %q", cfg.TargetBase, "https://myapi.example.com")
 	}
 	if cfg.Port != 7070 {
 		t.Errorf("Port = %d, want %d", cfg.Port, 7070)
@@ -554,21 +560,24 @@ func TestTomlProviderConfig_AllFields(t *testing.T) {
 
 func TestTomlProviderConfig_DefaultValues(t *testing.T) {
 	content := `[provider.default]
-	target = "https://api.example.com"
+target = "https://api.example.com"
+
+[provider.myapi]
+target = "https://myapi.example.com"
 `
 	path := writeTempToml(t, content)
 	providers, err := LoadAllTomlProviders(path)
 	if err != nil {
 		t.Fatalf("LoadAllTomlProviders() unexpected error: %v", err)
 	}
-	cfg, ok := providers["default"]
+	cfg, ok := providers["myapi"]
 	if !ok {
-		t.Fatal("provider default not found in map")
+		t.Fatal("provider myapi not found in map")
 	}
 
 	// Core fields set from TOML
-	if cfg.TargetBase != "https://api.example.com" {
-		t.Errorf("TargetBase = %q, want %q", cfg.TargetBase, "https://api.example.com")
+	if cfg.TargetBase != "https://myapi.example.com" {
+		t.Errorf("TargetBase = %q, want %q", cfg.TargetBase, "https://myapi.example.com")
 	}
 
 	// All optional fields should fall through to DefaultConfig
@@ -645,7 +654,7 @@ func TestTomlProviderConfig_Roundtrip(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	tomlPath := filepath.Join(tmpDir, "roundtrip_ext.toml")
-	if err := SaveTomlConfig(&TomlConfig{Port: orig.Port, Provider: map[string]*Config{"default": orig}}, tomlPath); err != nil {
+	if err := SaveTomlConfig(&TomlConfig{Port: orig.Port, Provider: map[string]*Config{"myapi": orig}}, tomlPath); err != nil {
 		t.Fatalf("SaveTomlConfig() error: %v", err)
 	}
 
@@ -653,9 +662,9 @@ func TestTomlProviderConfig_Roundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadAllTomlProviders() error: %v", err)
 	}
-	loaded, ok := providers["default"]
+	loaded, ok := providers["myapi"]
 	if !ok {
-		t.Fatal("provider default not found in map")
+		t.Fatal("provider myapi not found in map")
 	}
 
 	if loaded.TargetBase != orig.TargetBase {
@@ -727,6 +736,11 @@ func TestLoadToml_BasicTarget(t *testing.T) {
 	tomlPath := filepath.Join(tmpDir, "basic.toml")
 	content := `[provider.default]
 target = "https://api.example.com"
+cooldown_sec = 45
+max_retries = 7
+
+[provider.myapi]
+target = "https://myapi.example.com"
 `
 	if err := os.WriteFile(tomlPath, []byte(content), 0644); err != nil {
 		t.Fatal(err)
@@ -735,12 +749,19 @@ target = "https://api.example.com"
 	if err != nil {
 		t.Fatalf("LoadAllTomlProviders() unexpected error: %v", err)
 	}
-	cfg, ok := providers["default"]
+	cfg, ok := providers["myapi"]
 	if !ok {
-		t.Fatal("provider default not found in map")
+		t.Fatal("provider myapi not found in map")
 	}
-	if cfg.TargetBase != "https://api.example.com" {
-		t.Errorf("TargetBase = %q, want %q", cfg.TargetBase, "https://api.example.com")
+	if cfg.TargetBase != "https://myapi.example.com" {
+		t.Errorf("TargetBase = %q, want %q", cfg.TargetBase, "https://myapi.example.com")
+	}
+	// myapi should inherit cooldown_sec=45, max_retries=7 from [provider.default]
+	if cfg.CooldownSec != 45 {
+		t.Errorf("CooldownSec = %d, want 45 (inherited)", cfg.CooldownSec)
+	}
+	if cfg.MaxRetries != 7 {
+		t.Errorf("MaxRetries = %d, want 7 (inherited)", cfg.MaxRetries)
 	}
 }
 
@@ -751,6 +772,9 @@ func TestLoadAllTomlProviders_DeprecatedFieldWarns(t *testing.T) {
 		content := `[provider.default]
 target = "https://api.example.com"
 genai = "https://ai.example.com"
+
+[provider.myapi]
+target = "https://myapi.example.com"
 `
 		if err := os.WriteFile(tomlPath, []byte(content), 0644); err != nil {
 			t.Fatal(err)
@@ -776,6 +800,9 @@ genai = "https://ai.example.com"
 		content := `[provider.default]
 target = "https://api.example.com"
 genai="https://ai.example.com"
+
+[provider.myapi]
+target = "https://myapi.example.com"
 `
 		if err := os.WriteFile(tomlPath, []byte(content), 0644); err != nil {
 			t.Fatal(err)

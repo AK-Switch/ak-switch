@@ -28,7 +28,9 @@ func init() {
 
 	configInitCmd.Flags().StringP("path", "p", "", "Output path for config.toml (default: XDG config directory)")
 	configListCmd.Flags().Bool("all", false, "Show all providers")
+	configGetCmd.Flags().Bool("all", false, "Show value from all providers")
 	configSetCmd.Flags().Bool("persist", false, "Persist the change to the config file")
+	configSetCmd.Flags().Bool("all", false, "Apply to all providers (writes to [provider.default] when used with --persist)")
 }
 
 var configCmd = &cobra.Command{
@@ -82,6 +84,13 @@ var configInitCmd = &cobra.Command{
 						CooldownSec: 30,
 						MaxRetries:  5,
 					},
+				},
+			},
+			Default: &config.Config{
+				ProviderConfig: config.ProviderConfig{
+					MaxRetries:  2,
+					CooldownSec: 15,
+					LogLevel:    "info",
 				},
 			},
 		}
@@ -256,11 +265,49 @@ var configGetCmd = &cobra.Command{
 
 	Examples:
 	  akswitch config get http_timeout_sec
-	  akswitch config get max_retries sensenova`,
+	  akswitch config get max_retries sensenova
+	  akswitch config get log_level --all`,
 	Args: cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client := &http.Client{Timeout: 5 * time.Second}
 		key := args[0]
+		all, _ := cmd.Flags().GetBool("all")
+
+		if all {
+			baseURL := fmt.Sprintf("http://%s:%d/api/runtime-config?provider=all", detectServerHost(), detectServerPort())
+			providers, err := doRuntimeConfigGet(client, baseURL)
+			if err != nil {
+				return err
+			}
+
+			names := make([]string, 0, len(providers))
+			for n := range providers {
+				names = append(names, n)
+			}
+			sort.Strings(names)
+
+			for _, name := range names {
+				params, ok := providers[name].(map[string]interface{})
+				if !ok {
+					continue
+				}
+				val, hasKey := params[key]
+				if !hasKey {
+					continue
+				}
+				switch v := val.(type) {
+				case float64:
+					if v == float64(int(v)) {
+						fmt.Printf("%s: %d\n", name, int(v))
+					} else {
+						fmt.Printf("%s: %.1f\n", name, v)
+					}
+				default:
+					fmt.Printf("%s: %v\n", name, v)
+				}
+			}
+			return nil
+		}
 
 		params := url.Values{}
 		params.Set("key", key)
@@ -333,17 +380,21 @@ var configSetCmd = &cobra.Command{
 	Examples:
 	  akswitch config set http_timeout_sec 60
 	  akswitch config set max_retries 5 --persist
-	  akswitch config set log_level debug sensenova`,
+	  akswitch config set log_level debug sensenova
+	  akswitch config set log_level info --all --persist`,
 	Args: cobra.RangeArgs(2, 3),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client := &http.Client{Timeout: 5 * time.Second}
 		key := args[0]
 		value := args[1]
 
+		all, _ := cmd.Flags().GetBool("all")
 		persist, _ := cmd.Flags().GetBool("persist")
 
 		params := url.Values{}
-		if len(args) > 2 {
+		if all {
+			params.Set("provider", "all")
+		} else if len(args) > 2 {
 			params.Set("provider", args[2])
 		}
 		if persist {
@@ -419,6 +470,40 @@ var configSetCmd = &cobra.Command{
 
 		return nil
 	},
+}
+
+// doRuntimeConfigGet sends a GET to the runtime-config endpoint and returns
+// the providers map (provider_name -> params_map). The URL must already
+// contain any query parameters (e.g. ?provider=all).
+func doRuntimeConfigGet(client *http.Client, baseURL string) (map[string]interface{}, error) {
+	req, err := http.NewRequest(http.MethodGet, baseURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("server not reachable: %w", err)
+	}
+	if token, tokErr := loadAdminTokenFromConfig(); tokErr == nil && token != "" {
+		req.Header.Set("X-Admin-Token", token)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("server not reachable: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return nil, fmt.Errorf("auth failed (HTTP %d): check X-Admin-Token in server config", resp.StatusCode)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API error (HTTP %d): %s", resp.StatusCode, string(body))
+	}
+
+	var providers map[string]interface{}
+	if err := json.Unmarshal(body, &providers); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %s", string(body))
+	}
+	return providers, nil
 }
 
 // printProviderParams prints a provider's runtime parameters.

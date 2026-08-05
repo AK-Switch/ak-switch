@@ -30,6 +30,7 @@
 | `GET` | `/api/stats` | 否 | 请求统计（成功率、Key 状态、运行时长） |
 | `POST` | `/api/reload` | 是 | 从 `config.toml` 重新加载配置 |
 | `POST` | `/api/log-level` | 是 | 动态修改日志级别。body: `{"level": "debug\|info\|warn\|error"}` |
+| `GET` | `/api/runtime-config` | 是 | 运行时调参。`GET` 时 `?key=` 取单个值，`?provider=` 指定 provider，`?provider=all` 返回所有 provider 的参数字典。`POST` body: `{"key":"<name>","value":<val>}`，`?provider=` 指定目标，`?provider=all` 批量应用，`?persist=true` 写入 `config.toml`（`provider=all` 时写入 `[provider.default]`） |
 | `GET` | `/logs` | 否 | 获取请求日志（最近 1000 条） |
 | `POST` | `/clear` | 是 | 清空日志 |
 | `GET` | `/metrics` | 否 | Prometheus 指标 |
@@ -66,6 +67,83 @@ curl -X POST http://localhost:3000/api/reload \
   "uptime_seconds": 3600
 }
 ```
+
+### `/api/runtime-config` 响应示例
+
+**GET — 单个 key，指定 provider：**
+```json
+{
+  "provider": "sensenova",
+  "key": "log_level",
+  "value": "debug"
+}
+```
+
+**GET — 指定 provider 所有参数：**
+```json
+{
+  "provider": "sensenova",
+  "params": {
+    "http_timeout_sec": 30,
+    "max_retries": 3,
+    "cooldown_sec": 60,
+    "backoff_cap_sec": 120,
+    "backoff_multiplier": 2.0,
+    "cb_reset_sec": 30,
+    "upstream_cb_threshold": 5,
+    "log_level": "info"
+  }
+}
+```
+
+**GET — `?provider=all`，返回所有 provider 的参数字典：**
+```json
+{
+  "nvidia": {
+    "http_timeout_sec": 30,
+    "max_retries": 3,
+    ...
+  },
+  "sensenova": {
+    "http_timeout_sec": 30,
+    "max_retries": 1,
+    ...
+  }
+}
+```
+
+**POST — 设置单个 key（成功）：**
+```json
+{
+  "provider": "sensenova",
+  "key": "log_level",
+  "value": "debug",
+  "persisted": false
+}
+```
+
+**POST — `?provider=all&persist=true`（批量设置并持久化）：**
+```json
+{
+  "key": "cooldown_sec",
+  "value": 30,
+  "persisted": true,
+  "providers": ["nvidia", "sensenova"]
+}
+```
+
+**可调参数：**
+
+| key | 类型 | 说明 |
+|-----|------|------|
+| `http_timeout_sec` | int | HTTP 客户端超时（秒，>= 1） |
+| `max_retries` | int | 完整遍历 key pool 的最大轮数（>= 0） |
+| `cooldown_sec` | int | 429 后 Key 冷却基础时长（秒，>= 1） |
+| `backoff_cap_sec` | int | Key 指数退避上限（秒，>= 1） |
+| `backoff_multiplier` | float | Key 指数退避倍数（>= 1.0） |
+| `cb_reset_sec` | int | 上游熔断器 OPEN → HALF_OPEN 超时（秒，>= 1） |
+| `upstream_cb_threshold` | int | 上游熔断器连续失败触发阈值（>= 1） |
+| `log_level` | string | 日志级别：`debug` / `info` / `warn` / `error` |
 
 ## 错误码
 
