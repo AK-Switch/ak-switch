@@ -213,3 +213,12 @@ func ParseSSEEvent(raw []byte) (outputTokens int, textDelta string) {
 	}
 	return outputTokens, textDelta
 }
+
+// ProcessResponse extracts the actual token counts and response text
+// from a non-streaming API response body. Returns (inputTokens, outputTokens, responseText).
+// This consolidates the repeated pattern of ExtractTokenUsage + ExtractResponseText calls.
+func ProcessResponse(bodyBytes []byte, model string) (inputTokens, outputTokens int, responseText string) {
+	inputTokens, outputTokens = ExtractTokenUsage(bodyBytes)
+	responseText = ExtractResponseText(bodyBytes)
+	return
+}
