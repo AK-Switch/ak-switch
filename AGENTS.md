@@ -114,6 +114,15 @@ main 分支受保护，禁止直接推送。遵循 GitHub Flow + 原子 commit�
 
 提交后 `go install ./cmd/akswitch/` 更新本地二进制。
 
+## Issue 关闭规范
+
+PR 合并后，对应的 issue 必须关闭。两种方式：
+
+1. **PR 描述中写关闭关键词** — `Closes #N`、`Fixes #N`、`Resolves #N`（GitHub 自动识别并关闭）
+2. **PR 合并后发现漏关** — 立即补一条 `Closes #N` 的评论，或手动 `gh issue close N`
+
+**规则：** 一个 PR 只关自己对应的 issue，不要顺手关别的。
+
 ## Dev Environment
 
 - Go 1.23+（构建使用 Go 1.26）
