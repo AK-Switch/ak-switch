@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -63,26 +62,15 @@ func (ps *ProviderState) PersistKeys() {
 }
 
 type ProviderRouter struct {
-	proxy    *http.Server
-	listener net.Listener
-
 	pm              *ProviderManager
 	api             *AdminAPI
+	lifecycle       *ServerLifecycle
 	logManager      *LogManager
 	metrics         *akswitchmetrics.Metrics
 	metricsRegistry *prometheus.Registry
 	calibrator      *tracker.Calibrator
 	taskManager     *BackgroundTaskManager
 	proxyExecutor   *ProxyExecutor
-
-	wg      sync.WaitGroup
-	mux     *http.ServeMux
-	muxOnce sync.Once
-
-	disableKeyHandler  http.HandlerFunc
-	enableKeyHandler   http.HandlerFunc
-	cooldownKeyHandler http.HandlerFunc
-	deleteKeyHandler   http.HandlerFunc
 }
 
 func NewProviderRouter(dashboardHTML string) *ProviderRouter {
@@ -92,19 +80,16 @@ func NewProviderRouter(dashboardHTML string) *ProviderRouter {
 	lm := NewLogManager()
 	tm := NewBackgroundTaskManager(m)
 	pe := NewProxyExecutor(m, cal)
+	lifecycle := NewServerLifecycle(tm)
 	api := NewAdminAPI(pm, lm, dashboardHTML, time.Now())
 
 	pr := &ProviderRouter{
-		pm: pm, api: api, logManager: lm,
-		metrics: m, metricsRegistry: reg, calibrator: cal,
-		taskManager: tm, proxyExecutor: pe,
+		pm: pm, api: api, lifecycle: lifecycle,
+		logManager: lm, metrics: m, metricsRegistry: reg,
+		calibrator: cal, taskManager: tm, proxyExecutor: pe,
 	}
-	pr.disableKeyHandler = api.keyOperationHandler(func(p *keypool.KeyPool, _ *config.Config, i int) error { return p.Disable(i) })
-	pr.enableKeyHandler = api.keyOperationHandler(func(p *keypool.KeyPool, _ *config.Config, i int) error { return p.Enable(i) })
-	pr.cooldownKeyHandler = api.keyOperationHandler(func(p *keypool.KeyPool, c *config.Config, i int) error {
-		return p.Cooldown(i, time.Duration(c.CooldownSec)*time.Second)
-	})
-	pr.deleteKeyHandler = api.keyOperationHandler(func(p *keypool.KeyPool, _ *config.Config, i int) error { return p.RemoveKey(i) })
+	mux := lifecycle.Handler()
+	registerRoutes(pr, mux)
 	return pr
 }
 
@@ -113,69 +98,29 @@ func (pr *ProviderRouter) AddProvider(name string, cfg *config.Config, pool *key
 }
 
 func (pr *ProviderRouter) Start(host string, port int) error {
-	addr := fmt.Sprintf("%s:%d", host, port)
-	mux := pr.Handler()
-	proxy := &http.Server{Handler: mux}
-	listener, err := net.Listen("tcp", addr)
-	if err != nil {
-		return fmt.Errorf("bind failed: %w", err)
-	}
-	pr.listener = listener
-	pr.proxy = proxy
-	pr.wg.Add(1)
-	go func() {
-		defer pr.wg.Done()
-		slog.Info("server started", "addr", listener.Addr().String())
-		if err := pr.proxy.Serve(listener); err != http.ErrServerClosed {
-			slog.Error("server error", "error", err)
-		}
-	}()
-	return nil
+	return pr.lifecycle.Start(host, port)
 }
 
 func (pr *ProviderRouter) StartWithListener(listener net.Listener) error {
-	mux := pr.Handler()
-	pr.listener = listener
-	pr.proxy = &http.Server{Handler: mux}
-	pr.wg.Add(1)
-	go func() {
-		defer pr.wg.Done()
-		slog.Info("server started", "addr", listener.Addr().String())
-		if err := pr.proxy.Serve(listener); err != http.ErrServerClosed {
-			slog.Error("server error", "error", err)
-		}
-	}()
-	return nil
+	return pr.lifecycle.StartWithListener(listener)
 }
 
-func (pr *ProviderRouter) registerRoutes(mux *http.ServeMux) {
+func (pr *ProviderRouter) Shutdown(ctx context.Context) {
+	pr.lifecycle.Shutdown(ctx)
+}
+
+func (pr *ProviderRouter) Stop() {
+	pr.lifecycle.Stop()
+}
+
+func registerRoutes(pr *ProviderRouter, mux *http.ServeMux) {
 	pr.api.RegisterRoutes(mux)
 	mux.HandleFunc("/", pr.proxyHandler)
 	mux.Handle("GET /metrics", promhttp.HandlerFor(pr.metricsRegistry, promhttp.HandlerOpts{}))
 }
 
 func (pr *ProviderRouter) Handler() *http.ServeMux {
-	pr.muxOnce.Do(func() {
-		mux := http.NewServeMux()
-		pr.registerRoutes(mux)
-		pr.mux = mux
-	})
-	return pr.mux
-}
-
-func (pr *ProviderRouter) Shutdown(ctx context.Context) {
-	if pr.proxy != nil {
-		if err := pr.proxy.Shutdown(ctx); err != nil {
-			slog.Error("shutdown error", "error", err)
-		} else {
-			slog.Info("server shut down")
-		}
-	}
-}
-
-func (pr *ProviderRouter) Stop() {
-	pr.taskManager.Stop()
-	pr.wg.Wait()
+	return pr.lifecycle.Handler()
 }
 
 func (pr *ProviderRouter) ProviderNames() []string { return pr.pm.ProviderNames() }
