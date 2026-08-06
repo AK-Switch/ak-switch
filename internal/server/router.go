@@ -130,7 +130,7 @@ func (ps *ProviderState) PoolName(i int) (string, error)              { return p
 func (ps *ProviderState) PoolKeyStatusLabel(i int, now time.Time) string { return ps.pool.KeyStatusLabel(i, now) }
 func (ps *ProviderState) PoolRequestsInLastMinute(i int) int               { return ps.pool.RequestsInLastMinute(i) }
 func (ps *ProviderState) PoolCleanupOldRequests(i int)                      { ps.pool.CleanupOldRequests(i) }
-func (ps *ProviderState) PoolCB(i int) circuitbreaker.CircuitBreaker        { return ps.pool.CB(i) }
+func (ps *ProviderState) PoolCB(i int) *circuitbreaker.KeyCircuitBreaker { return ps.pool.CB(i) }
 func (ps *ProviderState) PoolIsDisabled(i int) bool                   { return ps.pool.IsDisabled(i) }
 func (ps *ProviderState) PoolLen() int                                { return ps.pool.Len() }
 func (ps *ProviderState) PoolAuthFailCount(idx int) int               { return ps.pool.CB(idx).AuthFailCount() }
