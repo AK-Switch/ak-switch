@@ -262,6 +262,7 @@ func (px *ProxyExecutor) handleNonRetryable(w http.ResponseWriter, ps *ProviderS
 func (px *ProxyExecutor) handleSuccess(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, method, target string, bodyBytes []byte, attempt int) {
 	pool := ps.pool
 	keyName, _ := pool.Name(idx)
+	pool.RecordSuccess(idx)
 	ps.RecordUpstreamSuccess()
 
 	copyHeaders(w.Header(), resp.Header)
