@@ -37,8 +37,8 @@ func NewProxyExecutor(metrics *akswitchmetrics.Metrics, calibrator *tracker.Cali
 // It handles key selection, upstream request, response dispatch, and retries.
 func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *ProviderState) {
 	pool := ps.pool
-	client := ps.proxy.client
-	upCB := ps.proxy.upCB
+	client := ps.client
+	upCB := ps.UpstreamCB()
 
 	start := time.Now()
 

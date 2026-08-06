@@ -23,7 +23,8 @@ type ProviderState struct {
 	name          string
 	config        *config.Config
 	pool          *keypool.KeyPool
-	proxy         *ProxyEngine
+	client        *http.Client
+	upCB          *circuitbreaker.UpstreamCircuitBreaker
 	healthMu      sync.RWMutex
 	lastCheckTime time.Time
 	lastCheckOK   bool
@@ -32,9 +33,12 @@ type ProviderState struct {
 }
 
 func NewProviderState(name string, cfg *config.Config, pool *keypool.KeyPool, dash, keysFile string) *ProviderState {
+	upCB := circuitbreaker.NewUpstreamCircuitBreaker(cfg.UpstreamCBThreshold,
+		time.Duration(cfg.CBResetSec)*time.Second)
 	return &ProviderState{
 		name: name, config: cfg, pool: pool,
-		proxy:        NewProxyEngine(cfg, pool),
+		client:        &http.Client{Timeout: time.Duration(cfg.HTTPTimeoutSec) * time.Second},
+		upCB:          upCB,
 		dashboardHTML: dash, keysFile: keysFile,
 	}
 }
@@ -101,18 +105,18 @@ func (ps *ProviderState) ConfigurePoolCBs(base, backoffCap time.Duration, multip
 }
 
 // Proxy proxy methods — forward to ps.proxy
-func (ps *ProviderState) SetProxyTimeout(d time.Duration)          { ps.proxy.client.Timeout = d }
-func (ps *ProviderState) ProxyClientTimeout() time.Duration        { return ps.proxy.client.Timeout }
-func (ps *ProviderState) ResetUpstreamCB()                         { ps.proxy.upCB.Reset() }
-func (ps *ProviderState) RecordUpstreamFailure()                   { ps.proxy.upCB.RecordFailure() }
-func (ps *ProviderState) RecordUpstreamSuccess()                   { ps.proxy.upCB.RecordSuccess() }
-func (ps *ProviderState) UpstreamCBAllow() bool                    { return ps.proxy.upCB.Allow() }
-func (ps *ProviderState) SetUpstreamCBResetTimeout(sec int)        { ps.proxy.upCB.SetResetTimeout(time.Duration(sec) * time.Second) }
+func (ps *ProviderState) SetProxyTimeout(d time.Duration)          { ps.client.Timeout = d }
+func (ps *ProviderState) ProxyClientTimeout() time.Duration        { return ps.client.Timeout }
+func (ps *ProviderState) ResetUpstreamCB()                         { ps.upCB.Reset() }
+func (ps *ProviderState) RecordUpstreamFailure()                   { ps.upCB.RecordFailure() }
+func (ps *ProviderState) RecordUpstreamSuccess()                   { ps.upCB.RecordSuccess() }
+func (ps *ProviderState) UpstreamCBAllow() bool                    { return ps.upCB.Allow() }
+func (ps *ProviderState) SetUpstreamCBResetTimeout(sec int)        { ps.upCB.SetResetTimeout(time.Duration(sec) * time.Second) }
 
-func (ps *ProviderState) UpstreamCBState() circuitbreaker.State    { return ps.proxy.upCB.State() }
-func (ps *ProviderState) UpstreamCB() circuitbreaker.CircuitBreaker { return ps.proxy.upCB }
+func (ps *ProviderState) UpstreamCBState() circuitbreaker.State    { return ps.upCB.State() }
+func (ps *ProviderState) UpstreamCB() *circuitbreaker.UpstreamCircuitBreaker { return ps.upCB }
 
-func (ps *ProviderState) SetUpstreamProxyCBThreshold(n int) { ps.proxy.upCB.SetThreshold(n) }
+func (ps *ProviderState) SetUpstreamProxyCBThreshold(n int) { ps.upCB.SetThreshold(n) }
 
 func (ps *ProviderState) HasAdminToken() bool         { return ps.config.AdminToken != "" }
 func (ps *ProviderState) CheckAdminToken(token string) bool {
@@ -196,7 +200,7 @@ func (pr *ProviderRouter) StartBackgroundTasks() {
 	pr.pm.ForEach(func(name string, ps *ProviderState) {
 		p := ps
 		pr.taskManager.StartKeyPoolMetrics(p.pool, p.Name())
-		pr.taskManager.StartHealthCheck(p.config, p.proxy, p)
+		pr.taskManager.StartHealthCheck(p.config, p)
 		if p.config.GenaiModel != "" {
 			interval := time.Duration(p.config.CalibrationIntervalSec) * time.Second
 			pr.taskManager.StartCalibrator(pr.calibrator, p.pool, p.config.TargetBase, p.config.GenaiModel, interval)
