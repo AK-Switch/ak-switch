@@ -357,6 +357,85 @@ func TestHandleRuntimeConfigSet_ProviderAllInvalidKey(t *testing.T) {
 	}
 }
 
+// ── setRuntimeConfigField table-driven tests ─────────────
+
+func TestSetRuntimeConfigField_ValidValues(t *testing.T) {
+	pr := newTestRouterWithKeys(t, []string{"sk-key-0"})
+	ps := pr.Provider("test")
+
+	cases := []struct {
+		key   string
+		value interface{}
+		want  interface{}
+		check func(t *testing.T, ps *ProviderState, got interface{})
+	}{
+		{"http_timeout_sec", 15, int(15), func(t *testing.T, ps *ProviderState, got interface{}) {
+			if ps.Proxy.client.Timeout != 15*time.Second {
+				t.Errorf("timeout = %v, want 15s", ps.Proxy.client.Timeout)
+			}
+		}},
+		{"max_retries", 5, int(5), nil},
+		{"cooldown_sec", 60, int(60), nil},
+		{"backoff_cap_sec", 120, int(120), nil},
+		{"backoff_multiplier", 2.0, float64(2.0), nil},
+		{"cb_reset_sec", 30, int(30), nil},
+		{"upstream_cb_threshold", 10, int(10), nil},
+		{"log_level", "debug", "debug", func(t *testing.T, ps *ProviderState, got interface{}) {
+			if ps.Config.LogLevel != "debug" {
+				t.Errorf("log_level = %q, want debug", ps.Config.LogLevel)
+			}
+		}},
+	}
+
+	for _, tc := range cases {
+		got, err := pr.api.setRuntimeConfigField(ps, tc.key, tc.value)
+		if err != nil {
+			t.Errorf("%s: unexpected error: %v", tc.key, err)
+			continue
+		}
+		if got != tc.want {
+			t.Errorf("%s: got %v (%T), want %v", tc.key, got, got, tc.want)
+		}
+		if tc.check != nil {
+			tc.check(t, ps, got)
+		}
+	}
+}
+
+func TestSetRuntimeConfigField_InvalidValues(t *testing.T) {
+	pr := newTestRouterWithKeys(t, []string{"sk-key-0"})
+	ps := pr.Provider("test")
+
+	cases := []struct {
+		key   string
+		value interface{}
+		wantErr string
+	}{
+		{"http_timeout_sec", 0, "must be a positive integer"},
+		{"http_timeout_sec", "abc", "strconv.Atoi"},
+		{"max_retries", -1, "must be a non-negative integer"},
+		{"cooldown_sec", 0, "must be a positive integer"},
+		{"backoff_cap_sec", 0, "must be a positive integer"},
+		{"backoff_multiplier", 0.5, "must be a number >= 1.0"},
+		{"cb_reset_sec", 0, "must be a positive integer"},
+		{"upstream_cb_threshold", 0, "must be a positive integer"},
+		{"log_level", "invalid", "invalid log level, use: debug, info, warn, error"},
+		{"log_level", 123, "expected string, got int"},
+		{"nonexistent_key", 1, "unknown key \"nonexistent_key\""},
+	}
+
+	for _, tc := range cases {
+		_, err := pr.api.setRuntimeConfigField(ps, tc.key, tc.value)
+		if err == nil {
+			t.Errorf("%s(%v): expected error, got nil", tc.key, tc.value)
+			continue
+		}
+		if !strings.Contains(err.Error(), tc.wantErr) {
+			t.Errorf("%s(%v): error = %q, want substring %q", tc.key, tc.value, err.Error(), tc.wantErr)
+		}
+	}
+}
+
 // ── Helpers ────────────────────────────────────────────
 
 // newTestRouterWithKeys creates a ProviderRouter with a single provider named "test"

@@ -566,7 +566,197 @@ func (api *AdminAPI) reloadHandler(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]bool{"success": true})
 }
 
-// ── Runtime Config Handlers ─────────────────────────────
+// ── Runtime Config Descriptor Table ──────────────────────
+// Each entry defines how to parse, validate, apply, and persist a
+// runtime-configurable field. Three dispatch sites (set, persist, persist-to-default)
+// all iterate this table, so adding a field only requires one entry here.
+
+type configField struct {
+	key       string
+	parse     func(interface{}) (interface{}, error)
+	validate  func(interface{}) error
+	apply     func(ps *ProviderState, lm *LogManager, v interface{}) error
+	setConfig func(cfg *config.Config, v interface{})
+}
+
+var runtimeConfigFields = []configField{
+	{
+		key:     "http_timeout_sec",
+		parse:   parseToInt,
+		validate: positiveInt,
+		apply: func(ps *ProviderState, _ *LogManager, v interface{}) error {
+			ps.Proxy.client.Timeout = time.Duration(v.(int)) * time.Second
+			return nil
+		},
+		setConfig: func(cfg *config.Config, v interface{}) { cfg.HTTPTimeoutSec = v.(int) },
+	},
+	{
+		key:      "max_retries",
+		parse:    parseToInt,
+		validate: nonNegativeInt,
+		setConfig: func(cfg *config.Config, v interface{}) { cfg.MaxRetries = v.(int) },
+	},
+	{
+		key:     "cooldown_sec",
+		parse:   parseToInt,
+		validate: positiveInt,
+		apply: func(ps *ProviderState, _ *LogManager, v interface{}) error {
+			ps.Pool.ConfigureCBs(
+				time.Duration(v.(int))*time.Second,
+				time.Duration(ps.Config.BackoffCapSec)*time.Second,
+				ps.Config.BackoffMultiplier,
+			)
+			return nil
+		},
+		setConfig: func(cfg *config.Config, v interface{}) { cfg.CooldownSec = v.(int) },
+	},
+	{
+		key:     "backoff_cap_sec",
+		parse:   parseToInt,
+		validate: positiveInt,
+		apply: func(ps *ProviderState, _ *LogManager, v interface{}) error {
+			ps.Pool.ConfigureCBs(
+				time.Duration(ps.Config.CooldownSec)*time.Second,
+				time.Duration(v.(int))*time.Second,
+				ps.Config.BackoffMultiplier,
+			)
+			return nil
+		},
+		setConfig: func(cfg *config.Config, v interface{}) { cfg.BackoffCapSec = v.(int) },
+	},
+	{
+		key:     "backoff_multiplier",
+		parse:   parseToFloat64,
+		validate: ge1Float64,
+		apply: func(ps *ProviderState, _ *LogManager, v interface{}) error {
+			ps.Pool.ConfigureCBs(
+				time.Duration(ps.Config.CooldownSec)*time.Second,
+				time.Duration(ps.Config.BackoffCapSec)*time.Second,
+				v.(float64),
+			)
+			return nil
+		},
+		setConfig: func(cfg *config.Config, v interface{}) { cfg.BackoffMultiplier = v.(float64) },
+	},
+	{
+		key:     "cb_reset_sec",
+		parse:   parseToInt,
+		validate: positiveInt,
+		apply: func(ps *ProviderState, _ *LogManager, v interface{}) error {
+			ps.Proxy.upCB.SetResetTimeout(time.Duration(v.(int)) * time.Second)
+			return nil
+		},
+		setConfig: func(cfg *config.Config, v interface{}) { cfg.CBResetSec = v.(int) },
+	},
+	{
+		key:     "upstream_cb_threshold",
+		parse:   parseToInt,
+		validate: positiveInt,
+		apply: func(ps *ProviderState, _ *LogManager, v interface{}) error {
+			ps.Proxy.upCB.SetThreshold(v.(int))
+			return nil
+		},
+		setConfig: func(cfg *config.Config, v interface{}) { cfg.UpstreamCBThreshold = v.(int) },
+	},
+	{
+		key:     "log_level",
+		parse:   parseToString,
+		validate: validLogLevel,
+		apply: func(_ *ProviderState, lm *LogManager, v interface{}) error {
+			lm.ApplyLevel(v.(string))
+			return nil
+		},
+		setConfig: func(cfg *config.Config, v interface{}) { cfg.LogLevel = v.(string) },
+	},
+}
+
+func findField(key string) *configField {
+	for i := range runtimeConfigFields {
+		if runtimeConfigFields[i].key == key {
+			return &runtimeConfigFields[i]
+		}
+	}
+	return nil
+}
+
+// applyField runs the apply side-effect and sets the Config field for a descriptor.
+func (f *configField) applyField(ps *ProviderState, lm *LogManager, v interface{}) {
+	if f.apply != nil {
+		_ = f.apply(ps, lm, v)
+	}
+	f.setConfig(ps.Config, v)
+}
+
+// applyFieldToTarget sets the field value on a target Config struct.
+func (f *configField) applyFieldToTarget(targetCfg *config.Config, v interface{}) {
+	f.setConfig(targetCfg, v)
+}
+
+// ── Validators ────────────────────────────────────────────
+
+func positiveInt(v interface{}) error {
+	i, ok := v.(int)
+	if !ok || i < 1 {
+		return fmt.Errorf("must be a positive integer")
+	}
+	return nil
+}
+
+func nonNegativeInt(v interface{}) error {
+	i, ok := v.(int)
+	if !ok || i < 0 {
+		return fmt.Errorf("must be a non-negative integer")
+	}
+	return nil
+}
+
+func ge1Float64(v interface{}) error {
+	f, ok := v.(float64)
+	if !ok || f < 1.0 {
+		return fmt.Errorf("must be a number >= 1.0")
+	}
+	return nil
+}
+
+func validLogLevel(v interface{}) error {
+	s, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("must be a string")
+	}
+	switch s {
+	case "debug", "info", "warn", "error":
+		return nil
+	}
+	return fmt.Errorf("invalid log level, use: debug, info, warn, error")
+}
+
+// ── Parsers ───────────────────────────────────────────────
+
+func parseToInt(v interface{}) (interface{}, error) {
+	i, err := toInt(v)
+	if err != nil {
+		return nil, err
+	}
+	return i, nil
+}
+
+func parseToFloat64(v interface{}) (interface{}, error) {
+	f, err := toFloat64(v)
+	if err != nil {
+		return nil, err
+	}
+	return f, nil
+}
+
+func parseToString(v interface{}) (interface{}, error) {
+	s, ok := v.(string)
+	if !ok {
+		return nil, fmt.Errorf("expected string, got %T", v)
+	}
+	return s, nil
+}
+
+// ── Runtime Config Handlers ───────────────────────────────
 
 func (api *AdminAPI) runtimeConfigHandler(w http.ResponseWriter, r *http.Request) {
 	if !api.checkAnyAdminToken(w, r) {
@@ -740,89 +930,19 @@ func (api *AdminAPI) handleRuntimeConfigSet(w http.ResponseWriter, r *http.Reque
 // in-memory config and runtime state. Returns the new value and an error
 // if the key is unknown or the value is invalid.
 func (api *AdminAPI) setRuntimeConfigField(ps *ProviderState, key string, value interface{}) (interface{}, error) {
-	switch key {
-	case "http_timeout_sec":
-		v, err := toInt(value)
-		if err != nil || v < 1 {
-			return nil, fmt.Errorf("http_timeout_sec must be a positive integer")
-		}
-		ps.Proxy.client.Timeout = time.Duration(v) * time.Second
-		ps.Config.HTTPTimeoutSec = v
-		return v, nil
-	case "max_retries":
-		v, err := toInt(value)
-		if err != nil || v < 0 {
-			return nil, fmt.Errorf("max_retries must be a non-negative integer")
-		}
-		ps.Config.MaxRetries = v
-		return v, nil
-	case "cooldown_sec":
-		v, err := toInt(value)
-		if err != nil || v < 1 {
-			return nil, fmt.Errorf("cooldown_sec must be a positive integer")
-		}
-		ps.Config.CooldownSec = v
-		ps.Pool.ConfigureCBs(
-			time.Duration(v)*time.Second,
-			time.Duration(ps.Config.BackoffCapSec)*time.Second,
-			ps.Config.BackoffMultiplier,
-		)
-		return v, nil
-	case "backoff_cap_sec":
-		v, err := toInt(value)
-		if err != nil || v < 1 {
-			return nil, fmt.Errorf("backoff_cap_sec must be a positive integer")
-		}
-		ps.Config.BackoffCapSec = v
-		ps.Pool.ConfigureCBs(
-			time.Duration(ps.Config.CooldownSec)*time.Second,
-			time.Duration(v)*time.Second,
-			ps.Config.BackoffMultiplier,
-		)
-		return v, nil
-	case "backoff_multiplier":
-		v, err := toFloat64(value)
-		if err != nil || v < 1.0 {
-			return nil, fmt.Errorf("backoff_multiplier must be a number >= 1.0")
-		}
-		ps.Config.BackoffMultiplier = v
-		ps.Pool.ConfigureCBs(
-			time.Duration(ps.Config.CooldownSec)*time.Second,
-			time.Duration(ps.Config.BackoffCapSec)*time.Second,
-			v,
-		)
-		return v, nil
-	case "cb_reset_sec":
-		v, err := toInt(value)
-		if err != nil || v < 1 {
-			return nil, fmt.Errorf("cb_reset_sec must be a positive integer")
-		}
-		ps.Proxy.upCB.SetResetTimeout(time.Duration(v) * time.Second)
-		ps.Config.CBResetSec = v
-		return v, nil
-	case "upstream_cb_threshold":
-		v, err := toInt(value)
-		if err != nil || v < 1 {
-			return nil, fmt.Errorf("upstream_cb_threshold must be a positive integer")
-		}
-		ps.Proxy.upCB.SetThreshold(v)
-		ps.Config.UpstreamCBThreshold = v
-		return v, nil
-	case "log_level":
-		raw, ok := value.(string)
-		if !ok {
-			return nil, fmt.Errorf("log_level must be a string")
-		}
-		v := strings.TrimSpace(strings.ToLower(raw))
-		switch v {
-		case "debug", "info", "warn", "error":
-			api.logManager.ApplyLevel(v)
-			ps.Config.LogLevel = v
-			return v, nil
-		}
-		return nil, fmt.Errorf("invalid log level, use: debug, info, warn, error")
+	f := findField(key)
+	if f == nil {
+		return nil, fmt.Errorf("unknown key %q", key)
 	}
-	return nil, fmt.Errorf("unknown key %q", key)
+	v, err := f.parse(value)
+	if err != nil {
+		return nil, fmt.Errorf("%s %w", key, err)
+	}
+	if err := f.validate(v); err != nil {
+		return nil, fmt.Errorf("%s %w", key, err)
+	}
+	f.applyField(ps, api.logManager, v)
+	return v, nil
 }
 
 // getRuntimeParams returns all runtime-configurable parameters for a provider.
@@ -837,6 +957,63 @@ func (api *AdminAPI) getRuntimeParams(ps *ProviderState) map[string]interface{} 
 		"upstream_cb_threshold": ps.Config.UpstreamCBThreshold,
 		"log_level":             ps.Config.LogLevel,
 	}
+}
+
+// persistRuntimeConfigField saves a single field change to the TOML config file.
+// Only the specified field is modified; other fields are preserved.
+func (api *AdminAPI) persistRuntimeConfigField(ps *ProviderState, key string, value interface{}) error {
+	xdgPath, err := config.XDGConfigPath()
+	if err != nil {
+		return fmt.Errorf("failed to determine config path: %w", err)
+	}
+
+	tc, err := config.LoadTomlConfig(xdgPath)
+	if err != nil {
+		return fmt.Errorf("failed to load config file: %w", err)
+	}
+
+	if tc.Provider == nil {
+		tc.Provider = make(map[string]*config.Config)
+	}
+
+	providerCfg, ok := tc.Provider[ps.Name]
+	if !ok {
+		providerCfg = &config.Config{}
+		tc.Provider[ps.Name] = providerCfg
+	}
+
+	f := findField(key)
+	if f == nil {
+		return fmt.Errorf("unknown key %q", key)
+	}
+	f.applyFieldToTarget(providerCfg, value)
+
+	return config.SaveTomlConfig(tc, xdgPath)
+}
+
+// persistRuntimeConfigFieldToDefault saves a field to the [provider.default] section.
+// This is used when applying config to all providers so new providers inherit the value.
+func (api *AdminAPI) persistRuntimeConfigFieldToDefault(key string, value interface{}) error {
+	xdgPath, err := config.XDGConfigPath()
+	if err != nil {
+		return err
+	}
+
+	tc, err := config.LoadTomlConfig(xdgPath)
+	if err != nil {
+		return err
+	}
+	if tc.Default == nil {
+		tc.Default = &config.Config{}
+	}
+
+	f := findField(key)
+	if f == nil {
+		return fmt.Errorf("unknown key %q", key)
+	}
+	f.applyFieldToTarget(tc.Default, value)
+
+	return config.SaveTomlConfig(tc, xdgPath)
 }
 
 // ── Key CRUD Handler Factory ────────────────────────────
@@ -957,104 +1134,4 @@ func (api *AdminAPI) resolveProviderByName(name string) (*ProviderState, string)
 		return nil, "no providers configured"
 	}
 	return ps, ""
-}
-
-// persistRuntimeConfigField saves a single field change to the TOML config file.
-// Only the specified field is modified; other fields are preserved.
-func (api *AdminAPI) persistRuntimeConfigField(ps *ProviderState, key string, value interface{}) error {
-	xdgPath, err := config.XDGConfigPath()
-	if err != nil {
-		return fmt.Errorf("failed to determine config path: %w", err)
-	}
-
-	tc, err := config.LoadTomlConfig(xdgPath)
-	if err != nil {
-		return fmt.Errorf("failed to load config file: %w", err)
-	}
-
-	if tc.Provider == nil {
-		tc.Provider = make(map[string]*config.Config)
-	}
-
-	providerCfg, ok := tc.Provider[ps.Name]
-	if !ok {
-		providerCfg = &config.Config{}
-		tc.Provider[ps.Name] = providerCfg
-	}
-
-	// Only modify the specific field
-	switch key {
-	case "http_timeout_sec":
-		v, _ := toInt(value)
-		providerCfg.HTTPTimeoutSec = v
-	case "max_retries":
-		v, _ := toInt(value)
-		providerCfg.MaxRetries = v
-	case "cooldown_sec":
-		v, _ := toInt(value)
-		providerCfg.CooldownSec = v
-	case "backoff_cap_sec":
-		v, _ := toInt(value)
-		providerCfg.BackoffCapSec = v
-	case "backoff_multiplier":
-		v, _ := toFloat64(value)
-		providerCfg.BackoffMultiplier = v
-	case "cb_reset_sec":
-		v, _ := toInt(value)
-		providerCfg.CBResetSec = v
-	case "upstream_cb_threshold":
-		v, _ := toInt(value)
-		providerCfg.UpstreamCBThreshold = v
-	case "log_level":
-		v, _ := value.(string)
-		providerCfg.LogLevel = v
-	}
-
-	return config.SaveTomlConfig(tc, xdgPath)
-}
-
-// persistRuntimeConfigFieldToDefault saves a field to the [provider.default] section.
-// This is used when applying config to all providers so new providers inherit the value.
-func (api *AdminAPI) persistRuntimeConfigFieldToDefault(key string, value interface{}) error {
-	xdgPath, err := config.XDGConfigPath()
-	if err != nil {
-		return err
-	}
-
-	tc, err := config.LoadTomlConfig(xdgPath)
-	if err != nil {
-		return err
-	}
-	if tc.Default == nil {
-		tc.Default = &config.Config{}
-	}
-
-	switch key {
-	case "http_timeout_sec":
-		v, _ := toInt(value)
-		tc.Default.HTTPTimeoutSec = v
-	case "max_retries":
-		v, _ := toInt(value)
-		tc.Default.MaxRetries = v
-	case "cooldown_sec":
-		v, _ := toInt(value)
-		tc.Default.CooldownSec = v
-	case "backoff_cap_sec":
-		v, _ := toInt(value)
-		tc.Default.BackoffCapSec = v
-	case "backoff_multiplier":
-		v, _ := toFloat64(value)
-		tc.Default.BackoffMultiplier = v
-	case "cb_reset_sec":
-		v, _ := toInt(value)
-		tc.Default.CBResetSec = v
-	case "upstream_cb_threshold":
-		v, _ := toInt(value)
-		tc.Default.UpstreamCBThreshold = v
-	case "log_level":
-		v, _ := value.(string)
-		tc.Default.LogLevel = v
-	}
-
-	return config.SaveTomlConfig(tc, xdgPath)
 }
