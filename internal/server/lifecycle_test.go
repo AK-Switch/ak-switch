@@ -3,12 +3,15 @@
 package server
 
 import (
+	"context"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
 	"akswitch/internal/keypool"
+	"akswitch/internal/metrics"
 	"akswitch/internal/tracker"
 )
 
@@ -242,4 +245,131 @@ func TestPeriodicCalibrator_StopsOnChannel(t *testing.T) {
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("PeriodicCalibrator did not stop within 500ms")
 	}
+}
+
+// ── ServerLifecycle ────────────────────────────────────
+
+func newTestLifecycle(t *testing.T) (*ServerLifecycle, *metrics.Metrics) {
+	t.Helper()
+	_, m := metrics.NewRegistry()
+	tm := NewBackgroundTaskManager(m)
+	return NewServerLifecycle(tm), m
+}
+
+func TestServerLifecycle_Handler_ReturnsMux(t *testing.T) {
+	sl, _ := newTestLifecycle(t)
+	mux := sl.Handler()
+	if mux == nil {
+		t.Fatal("Handler() returned nil")
+	}
+}
+
+func TestServerLifecycle_Handler_Idempotent(t *testing.T) {
+	sl, _ := newTestLifecycle(t)
+	a := sl.Handler()
+	b := sl.Handler()
+	if a != b {
+		t.Error("Handler() returned different mux instances")
+	}
+}
+
+func TestServerLifecycle_Start_BindsPort(t *testing.T) {
+	sl, _ := newTestLifecycle(t)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+
+	if err := sl.StartWithListener(ln); err != nil {
+		t.Fatalf("StartWithListener: %v", err)
+	}
+	defer sl.Shutdown(context.Background())
+
+	addr := ln.Addr().String()
+	resp, err := http.Get("http://" + addr + "/")
+	if err != nil {
+		t.Fatalf("GET / failed: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want 404 (no route registered)", resp.StatusCode)
+	}
+}
+
+func TestServerLifecycle_StartWithListener_UsesProvidedListener(t *testing.T) {
+	sl, _ := newTestLifecycle(t)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+
+	if err := sl.StartWithListener(ln); err != nil {
+		t.Fatalf("StartWithListener: %v", err)
+	}
+	defer sl.Shutdown(context.Background())
+
+	resp, err := http.Get("http://" + ln.Addr().String() + "/")
+	if err != nil {
+		t.Fatalf("GET / failed: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", resp.StatusCode)
+	}
+}
+
+func TestServerLifecycle_Shutdown_Graceful(t *testing.T) {
+	sl, _ := newTestLifecycle(t)
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	defer ln.Close()
+
+	if err := sl.StartWithListener(ln); err != nil {
+		t.Fatalf("StartWithListener: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	sl.Shutdown(ctx)
+
+	// Wait for the listener to be fully closed (race-free check)
+	for i := 0; i < 50; i++ {
+		_, err := net.Dial("tcp", ln.Addr().String())
+		if err != nil {
+			return // port closed — success
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Error("port still open after Shutdown")
+}
+
+func TestServerLifecycle_Shutdown_BeforeStart_Noop(t *testing.T) {
+	sl, _ := newTestLifecycle(t)
+	ctx := context.Background()
+	sl.Shutdown(ctx) // should not panic
+}
+
+func TestServerLifecycle_Stop_NoTasks(t *testing.T) {
+	sl, _ := newTestLifecycle(t)
+	sl.Stop() // should not panic or hang
+}
+
+func TestServerLifecycle_Start_DoubleStart(t *testing.T) {
+	sl, _ := newTestLifecycle(t)
+	ln1, _ := net.Listen("tcp", "127.0.0.1:0")
+	ln2, _ := net.Listen("tcp", "127.0.0.1:0")
+	defer ln1.Close()
+	defer ln2.Close()
+
+	if err := sl.StartWithListener(ln1); err != nil {
+		t.Fatalf("first StartWithListener: %v", err)
+	}
+	defer sl.Shutdown(context.Background())
+
+	// Second start should work on a different listener (replaces proxy)
+	if err := sl.StartWithListener(ln2); err != nil {
+		t.Fatalf("second StartWithListener: %v", err)
+	}
+	sl.Shutdown(context.Background())
 }

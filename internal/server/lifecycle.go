@@ -1,9 +1,11 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -15,6 +17,85 @@ import (
 	"akswitch/internal/tokenestimator"
 	"akswitch/internal/tracker"
 )
+
+// ServerLifecycle manages the HTTP server lifecycle: start, shutdown, and route mux.
+type ServerLifecycle struct {
+	proxy       *http.Server
+	listener    net.Listener
+	wg          sync.WaitGroup
+	taskManager *BackgroundTaskManager
+	mux         *http.ServeMux
+	muxOnce     sync.Once
+}
+
+// NewServerLifecycle creates a ServerLifecycle.
+func NewServerLifecycle(taskManager *BackgroundTaskManager) *ServerLifecycle {
+	return &ServerLifecycle{taskManager: taskManager}
+}
+
+// Handler returns the mux, lazily creating one on first call.
+func (sl *ServerLifecycle) Handler() *http.ServeMux {
+	sl.muxOnce.Do(func() {
+		if sl.mux == nil {
+			sl.mux = http.NewServeMux()
+		}
+	})
+	return sl.mux
+}
+
+// Start begins listening and serving on the given host:port.
+func (sl *ServerLifecycle) Start(host string, port int) error {
+	addr := fmt.Sprintf("%s:%d", host, port)
+	mux := sl.Handler()
+	sl.proxy = &http.Server{Handler: mux}
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("bind failed: %w", err)
+	}
+	sl.listener = listener
+	sl.wg.Add(1)
+	go func() {
+		defer sl.wg.Done()
+		slog.Info("server started", "addr", listener.Addr().String())
+		if err := sl.proxy.Serve(listener); err != http.ErrServerClosed {
+			slog.Error("server error", "error", err)
+		}
+	}()
+	return nil
+}
+
+// StartWithListener begins serving on an existing listener.
+func (sl *ServerLifecycle) StartWithListener(listener net.Listener) error {
+	mux := sl.Handler()
+	sl.listener = listener
+	sl.proxy = &http.Server{Handler: mux}
+	sl.wg.Add(1)
+	go func() {
+		defer sl.wg.Done()
+		slog.Info("server started", "addr", listener.Addr().String())
+		if err := sl.proxy.Serve(listener); err != http.ErrServerClosed {
+			slog.Error("server error", "error", err)
+		}
+	}()
+	return nil
+}
+
+// Shutdown gracefully stops the server.
+func (sl *ServerLifecycle) Shutdown(ctx context.Context) {
+	if sl.proxy != nil {
+		if err := sl.proxy.Shutdown(ctx); err != nil {
+			slog.Error("shutdown error", "error", err)
+		} else {
+			slog.Info("server shut down")
+		}
+	}
+}
+
+// Stop signals background tasks to stop and waits for server goroutines to finish.
+func (sl *ServerLifecycle) Stop() {
+	sl.taskManager.Stop()
+	sl.wg.Wait()
+}
 
 // BackgroundTaskManager manages background goroutines for the proxy server.
 // It holds the stop signal and WaitGroup, and provides methods to start
