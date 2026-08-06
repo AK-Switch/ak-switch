@@ -129,8 +129,8 @@ func TestProviderRouter_Accessors(t *testing.T) {
 	if found == nil {
 		t.Fatal("Provider() returned nil for existing provider")
 	}
-	if found.Name != "accessor-test" {
-		t.Errorf("Name = %q, want %q", found.Name, "accessor-test")
+	if found.Name() != "accessor-test" {
+		t.Errorf("Name = %q, want %q", found.Name(), "accessor-test")
 	}
 
 	missing := pr.Provider("nonexistent")

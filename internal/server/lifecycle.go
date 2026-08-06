@@ -214,23 +214,23 @@ func ActiveHealthCheck(cfg *config.Config, proxy *ProxyEngine, metrics *akswitch
 			dur := time.Since(start)
 
 			// Update duration histogram
-			metrics.HealthCheckDuration.WithLabelValues(ps.Name).Observe(dur.Seconds())
+			metrics.HealthCheckDuration.WithLabelValues(ps.name).Observe(dur.Seconds())
 
 			if err == nil && resp.StatusCode < 500 {
 				_ = resp.Body.Close()
 				upCB.RecordSuccess()
 				ps.SetLastHealthCheck(true)
-				metrics.HealthCheckProbes.WithLabelValues(ps.Name, "ok").Inc()
+				metrics.HealthCheckProbes.WithLabelValues(ps.name, "ok").Inc()
 			} else {
 				if err == nil {
 					_ = resp.Body.Close()
 				}
 				upCB.RecordFailure()
 				ps.SetLastHealthCheck(false)
-				metrics.HealthCheckProbes.WithLabelValues(ps.Name, "fail").Inc()
+				metrics.HealthCheckProbes.WithLabelValues(ps.name, "fail").Inc()
 			}
 
-			metrics.UpstreamCBState.WithLabelValues(ps.Name).Set(float64(upCB.State()))
+			metrics.UpstreamCBState.WithLabelValues(ps.name).Set(float64(upCB.State()))
 		}
 	}
 }

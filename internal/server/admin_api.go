@@ -129,13 +129,13 @@ func (api *AdminAPI) configHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		keys := ps.Pool.Keys()
+		keys := ps.pool.Keys()
 		maskedKeys := make([]string, len(keys))
 		for i, k := range keys {
 			maskedKeys[i] = logentry.MaskKey(k)
 		}
 		respondJSON(w, http.StatusOK, config.ConfigPayload{
-			TargetBase: ps.Config.TargetBase,
+			TargetBase: ps.TargetBase(),
 			Keys:       maskedKeys,
 		})
 		return
@@ -154,10 +154,10 @@ func (api *AdminAPI) keysHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pool := ps.Pool
+	pool := ps.pool
 
 	if r.Method == http.MethodPost || r.Method == http.MethodDelete {
-		if !api.checkAdminToken(w, r, ps.Name) {
+		if !api.checkAdminToken(w, r, ps.Name()) {
 			return
 		}
 	}
@@ -252,7 +252,7 @@ func (api *AdminAPI) healthHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		upCB := ps.Proxy.upCB
+		upCB := ps.proxy.upCB
 
 		var cbState string
 		switch upCB.State() {
@@ -278,7 +278,7 @@ func (api *AdminAPI) healthHandler(w http.ResponseWriter, r *http.Request) {
 
 		ph := &providerHealth{
 			Status:            "ok",
-			Keys:              len(ps.Pool.Keys()),
+			Keys:              len(ps.pool.Keys()),
 			UpstreamCBState:   cbState,
 			LastHealthCheck:   lastCheckISO,
 			LastHealthCheckOK: lastCheckResult,
@@ -493,9 +493,9 @@ func (api *AdminAPI) statsHandler(w http.ResponseWriter, r *http.Request) {
 		if pName != "" && name != pName {
 			return
 		}
-		totalActive += ps.Pool.ActiveCount()
-		totalCooling += ps.Pool.CoolingCount()
-		totalDisabled += ps.Pool.DisabledCount()
+		totalActive += ps.pool.ActiveCount()
+		totalCooling += ps.pool.CoolingCount()
+		totalDisabled += ps.pool.DisabledCount()
 	})
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
@@ -521,14 +521,14 @@ func (api *AdminAPI) upstreamCBResetHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if !api.checkAdminToken(w, r, ps.Name) {
+	if !api.checkAdminToken(w, r, ps.Name()) {
 		return
 	}
 
-	ps.Proxy.upCB.Reset()
-	slog.Info("upstream circuit breaker reset", "provider", ps.Name)
+	ps.proxy.upCB.Reset()
+	slog.Info("upstream circuit breaker reset", "provider", ps.Name())
 	respondJSON(w, http.StatusOK, map[string]interface{}{
-		"provider": ps.Name,
+		"provider": ps.Name(),
 		"reset":    true,
 	})
 }
@@ -610,14 +610,14 @@ func (api *AdminAPI) handleRuntimeConfigGet(w http.ResponseWriter, r *http.Reque
 				return
 			}
 			respondJSON(w, http.StatusOK, map[string]interface{}{
-				"provider": ps.Name,
+				"provider": ps.Name(),
 				"key":      key,
 				"value":    val,
 			})
 			return
 		}
 		respondJSON(w, http.StatusOK, map[string]interface{}{
-			"provider": ps.Name,
+			"provider": ps.Name(),
 			"params":   params,
 		})
 		return
@@ -723,7 +723,7 @@ func (api *AdminAPI) handleRuntimeConfigSet(w http.ResponseWriter, r *http.Reque
 		if err := api.persistRuntimeConfigField(ps, body.Key, newValue); err != nil {
 			slog.Warn("failed to persist runtime config", "error", err)
 			respondJSON(w, http.StatusOK, map[string]interface{}{
-				"provider":  ps.Name,
+				"provider":  ps.Name(),
 				"key":       body.Key,
 				"value":     newValue,
 				"persisted": false,
@@ -735,7 +735,7 @@ func (api *AdminAPI) handleRuntimeConfigSet(w http.ResponseWriter, r *http.Reque
 	}
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
-		"provider":  ps.Name,
+		"provider":  ps.Name(),
 		"key":       body.Key,
 		"value":     newValue,
 		"persisted": persisted,
@@ -756,14 +756,14 @@ func (api *AdminAPI) setRuntimeConfigField(ps *ProviderState, key string, value 
 // getRuntimeParams returns all runtime-configurable parameters for a provider.
 func (api *AdminAPI) getRuntimeParams(ps *ProviderState) map[string]interface{} {
 	return map[string]interface{}{
-		"http_timeout_sec":      ps.Config.HTTPTimeoutSec,
-		"max_retries":           ps.Config.MaxRetries,
-		"cooldown_sec":          ps.Config.CooldownSec,
-		"backoff_cap_sec":       ps.Config.BackoffCapSec,
-		"backoff_multiplier":    ps.Config.BackoffMultiplier,
-		"cb_reset_sec":          ps.Config.CBResetSec,
-		"upstream_cb_threshold": ps.Config.UpstreamCBThreshold,
-		"log_level":             ps.Config.LogLevel,
+		"http_timeout_sec":      ps.HTTPTimeoutSec(),
+		"max_retries":           ps.MaxRetries(),
+		"cooldown_sec":          ps.CooldownSec(),
+		"backoff_cap_sec":       ps.BackoffCapSec(),
+		"backoff_multiplier":    ps.BackoffMultiplier(),
+		"cb_reset_sec":          ps.CBResetSec(),
+		"upstream_cb_threshold": ps.UpstreamCBThreshold(),
+		"log_level":             ps.LogLevel(),
 	}
 }
 
@@ -782,7 +782,7 @@ func (api *AdminAPI) keyOperationHandler(operation func(*keypool.KeyPool, *confi
 			respondJSON(w, http.StatusNotFound, map[string]string{"error": errMsg})
 			return
 		}
-		if !api.checkAdminToken(w, r, ps.Name) {
+		if !api.checkAdminToken(w, r, ps.Name()) {
 			return
 		}
 
@@ -791,12 +791,12 @@ func (api *AdminAPI) keyOperationHandler(operation func(*keypool.KeyPool, *confi
 			respondJSON(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		if idx >= len(ps.Pool.Keys()) {
+		if idx >= len(ps.pool.Keys()) {
 			respondJSON(w, http.StatusNotFound, map[string]string{"error": "key not found"})
 			return
 		}
 
-		if err := operation(ps.Pool, ps.Config, idx); err != nil {
+		if err := operation(ps.pool, ps.config, idx); err != nil {
 			respondJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 			return
 		}
@@ -815,11 +815,11 @@ func (api *AdminAPI) checkAdminToken(w http.ResponseWriter, r *http.Request, pro
 		return false
 	}
 	token := r.Header.Get("X-Admin-Token")
-	if ps.Config.AdminToken == "" {
+	if !ps.HasAdminToken() {
 		// No admin token configured for this provider — access allowed
 		return true
 	}
-	if ps.Config.AdminToken == token {
+	if ps.CheckAdminToken(token) {
 		return true
 	}
 	http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -836,9 +836,9 @@ func (api *AdminAPI) checkAnyAdminToken(w http.ResponseWriter, r *http.Request) 
 	hasAnyToken := false
 	for _, name := range names {
 		ps := api.pm.LookupProvider(name)
-		if ps.Config.AdminToken != "" {
+		if ps.HasAdminToken() {
 			hasAnyToken = true
-			if ps.Config.AdminToken == token {
+			if ps.CheckAdminToken(token) {
 				matched = true
 			}
 		}
@@ -904,10 +904,10 @@ func (api *AdminAPI) persistRuntimeConfigField(ps *ProviderState, key string, va
 		tc.Provider = make(map[string]*config.Config)
 	}
 
-	providerCfg, ok := tc.Provider[ps.Name]
+	providerCfg, ok := tc.Provider[ps.Name()]
 	if !ok {
 		providerCfg = &config.Config{}
-		tc.Provider[ps.Name] = providerCfg
+		tc.Provider[ps.Name()] = providerCfg
 	}
 
 	// Only modify the specific field
@@ -964,8 +964,8 @@ var runtimeConfigFields = []runtimeConfigField{
 			if err != nil || v < 1 {
 				return nil, fmt.Errorf("http_timeout_sec must be a positive integer")
 			}
-			ps.Proxy.client.Timeout = time.Duration(v) * time.Second
-			ps.Config.HTTPTimeoutSec = v
+			ps.proxy.client.Timeout = time.Duration(v) * time.Second
+			ps.config.HTTPTimeoutSec = v
 			return v, nil
 		},
 		persist: func(cfg *config.Config, val interface{}) {
@@ -980,7 +980,7 @@ var runtimeConfigFields = []runtimeConfigField{
 			if err != nil || v < 0 {
 				return nil, fmt.Errorf("max_retries must be a non-negative integer")
 			}
-			ps.Config.MaxRetries = v
+			ps.config.MaxRetries = v
 			return v, nil
 		},
 		persist: func(cfg *config.Config, val interface{}) {
@@ -995,11 +995,11 @@ var runtimeConfigFields = []runtimeConfigField{
 			if err != nil || v < 1 {
 				return nil, fmt.Errorf("cooldown_sec must be a positive integer")
 			}
-			ps.Config.CooldownSec = v
-			ps.Pool.ConfigureCBs(
+			ps.config.CooldownSec = v
+			ps.pool.ConfigureCBs(
 				time.Duration(v)*time.Second,
-				time.Duration(ps.Config.BackoffCapSec)*time.Second,
-				ps.Config.BackoffMultiplier,
+				time.Duration(ps.config.BackoffCapSec)*time.Second,
+				ps.config.BackoffMultiplier,
 			)
 			return v, nil
 		},
@@ -1015,11 +1015,11 @@ var runtimeConfigFields = []runtimeConfigField{
 			if err != nil || v < 1 {
 				return nil, fmt.Errorf("backoff_cap_sec must be a positive integer")
 			}
-			ps.Config.BackoffCapSec = v
-			ps.Pool.ConfigureCBs(
-				time.Duration(ps.Config.CooldownSec)*time.Second,
+			ps.config.BackoffCapSec = v
+			ps.pool.ConfigureCBs(
+				time.Duration(ps.config.CooldownSec)*time.Second,
 				time.Duration(v)*time.Second,
-				ps.Config.BackoffMultiplier,
+				ps.config.BackoffMultiplier,
 			)
 			return v, nil
 		},
@@ -1035,10 +1035,10 @@ var runtimeConfigFields = []runtimeConfigField{
 			if err != nil || v < 1.0 {
 				return nil, fmt.Errorf("backoff_multiplier must be a number >= 1.0")
 			}
-			ps.Config.BackoffMultiplier = v
-			ps.Pool.ConfigureCBs(
-				time.Duration(ps.Config.CooldownSec)*time.Second,
-				time.Duration(ps.Config.BackoffCapSec)*time.Second,
+			ps.config.BackoffMultiplier = v
+			ps.pool.ConfigureCBs(
+				time.Duration(ps.config.CooldownSec)*time.Second,
+				time.Duration(ps.config.BackoffCapSec)*time.Second,
 				v,
 			)
 			return v, nil
@@ -1055,8 +1055,8 @@ var runtimeConfigFields = []runtimeConfigField{
 			if err != nil || v < 1 {
 				return nil, fmt.Errorf("cb_reset_sec must be a positive integer")
 			}
-			ps.Proxy.upCB.SetResetTimeout(time.Duration(v) * time.Second)
-			ps.Config.CBResetSec = v
+			ps.proxy.upCB.SetResetTimeout(time.Duration(v) * time.Second)
+			ps.config.CBResetSec = v
 			return v, nil
 		},
 		persist: func(cfg *config.Config, val interface{}) {
@@ -1071,8 +1071,8 @@ var runtimeConfigFields = []runtimeConfigField{
 			if err != nil || v < 1 {
 				return nil, fmt.Errorf("upstream_cb_threshold must be a positive integer")
 			}
-			ps.Proxy.upCB.SetThreshold(v)
-			ps.Config.UpstreamCBThreshold = v
+			ps.proxy.upCB.SetThreshold(v)
+			ps.config.UpstreamCBThreshold = v
 			return v, nil
 		},
 		persist: func(cfg *config.Config, val interface{}) {
@@ -1090,7 +1090,7 @@ var runtimeConfigFields = []runtimeConfigField{
 			v := strings.TrimSpace(strings.ToLower(s))
 			switch v {
 			case "debug", "info", "warn", "error":
-				ps.Config.LogLevel = v
+				ps.config.LogLevel = v
 				return v, nil
 			}
 			return nil, fmt.Errorf("invalid log level, use: debug, info, warn, error")

@@ -93,7 +93,7 @@ func (pm *ProviderManager) ReloadConfig(providers map[string]*config.Config, log
 		}
 
 		if existing, ok := pm.providers[name]; ok {
-			oldPool := existing.Pool
+			oldPool := existing.pool
 			var disabledNames []string
 			for i := 0; i < oldPool.Len(); i++ {
 				if oldPool.IsDisabled(i) {
@@ -101,18 +101,18 @@ func (pm *ProviderManager) ReloadConfig(providers map[string]*config.Config, log
 					disabledNames = append(disabledNames, n)
 				}
 			}
-			existing.Config = cfg
-			existing.Pool = keypool.NewKeyPool(cfg.Keys, cfg.KeyNames)
-			existing.Pool.ConfigureCBs(
+			existing.config = cfg
+			existing.pool = keypool.NewKeyPool(cfg.Keys, cfg.KeyNames)
+			existing.pool.ConfigureCBs(
 				time.Duration(cfg.CooldownSec)*time.Second,
 				time.Duration(cfg.BackoffCapSec)*time.Second,
 				cfg.BackoffMultiplier,
 			)
 			for _, dn := range disabledNames {
-				for i := 0; i < existing.Pool.Len(); i++ {
-					n, _ := existing.Pool.Name(i)
+				for i := 0; i < existing.pool.Len(); i++ {
+					n, _ := existing.pool.Name(i)
 					if n == dn {
-						_ = existing.Pool.Disable(i)
+						_ = existing.pool.Disable(i)
 					}
 				}
 			}

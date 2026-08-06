@@ -120,7 +120,7 @@ func TestHandleRateLimited_SingleKeyNotExhausted(t *testing.T) {
 	w := httptest.NewRecorder()
 	resp := newHTTPResponse(http.StatusTooManyRequests, `{"error":"rate limit"}`)
 
-	result := px.handleRateLimited(w, ps, 0, resp, ps.Config, testStartTime(), "GET", "http://upstream/", nil)
+	result := px.handleRateLimited(w, ps, 0, resp, testStartTime(), "GET", "http://upstream/", nil)
 
 	if result {
 		t.Error("single key rate-limited should not return true")
@@ -134,15 +134,15 @@ func TestHandleRateLimited_DisabledKeyReturnsTrue(t *testing.T) {
 	// First call: puts key in Open/Cooling state (not yet disabled)
 	w1 := httptest.NewRecorder()
 	resp1 := newHTTPResponse(http.StatusTooManyRequests, `{"error":"rate limit"}`)
-	px.handleRateLimited(w1, ps, 0, resp1, ps.Config, testStartTime(), "GET", "http://upstream/", nil)
+	px.handleRateLimited(w1, ps, 0, resp1, testStartTime(), "GET", "http://upstream/", nil)
 
 	// Manually disable the key to simulate exhaustion
-	_ = ps.Pool.Disable(0)
+	_ = ps.pool.Disable(0)
 
 	// Second call: key is disabled, ActiveCount=0 → should return true with 503
 	w2 := httptest.NewRecorder()
 	resp2 := newHTTPResponse(http.StatusTooManyRequests, `{"error":"rate limit"}`)
-	result := px.handleRateLimited(w2, ps, 0, resp2, ps.Config, testStartTime(), "GET", "http://upstream/", nil)
+	result := px.handleRateLimited(w2, ps, 0, resp2, testStartTime(), "GET", "http://upstream/", nil)
 
 	if !result {
 		t.Error("exhausted provider should return true")
@@ -166,11 +166,11 @@ func TestHandleAuthRejected_DisablesKeyKeepsOthersActive(t *testing.T) {
 	if result {
 		t.Error("2-key pool with 1 auth-rejected should not return true (key-b still active)")
 	}
-	if ps.Pool.DisabledCount() != 1 {
-		t.Errorf("disabled count = %d, want 1", ps.Pool.DisabledCount())
+	if ps.pool.DisabledCount() != 1 {
+		t.Errorf("disabled count = %d, want 1", ps.pool.DisabledCount())
 	}
-	if ps.Pool.ActiveCount() != 1 {
-		t.Errorf("active count = %d, want 1", ps.Pool.ActiveCount())
+	if ps.pool.ActiveCount() != 1 {
+		t.Errorf("active count = %d, want 1", ps.pool.ActiveCount())
 	}
 }
 
@@ -178,7 +178,7 @@ func TestHandleAuthRejected_AllKeysInvalidReturns503(t *testing.T) {
 	ps := newTestProviderState(t, "test", []string{"key-a", "key-b"})
 	px, _, _ := newProxyExecutor(t)
 
-	for i := range ps.Pool.Keys() {
+	for i := range ps.pool.Keys() {
 		w := httptest.NewRecorder()
 		resp := newHTTPResponse(http.StatusUnauthorized, `{"error":"invalid key"}`)
 		px.handleAuthRejected(w, ps, i, resp, testStartTime(), "GET", "http://upstream/", nil)

@@ -2,7 +2,6 @@ package server
 
 import (
 	"akswitch/internal/circuitbreaker"
-	"akswitch/internal/config"
 	akswitchmetrics "akswitch/internal/metrics"
 	"bufio"
 	"bytes"
@@ -37,10 +36,9 @@ func NewProxyExecutor(metrics *akswitchmetrics.Metrics, calibrator *tracker.Cali
 // Execute runs the full proxy request lifecycle for a single provider.
 // It handles key selection, upstream request, response dispatch, and retries.
 func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *ProviderState) {
-	cfg := ps.Config
-	pool := ps.Pool
-	client := ps.Proxy.client
-	upCB := ps.Proxy.upCB
+	pool := ps.pool
+	client := ps.proxy.client
+	upCB := ps.proxy.upCB
 
 	start := time.Now()
 
@@ -51,7 +49,7 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 	}
 
 	// Build target URL
-	target := buildTargetURL(cfg, r.URL.Path, r.URL.RawQuery)
+	target := buildTargetURL(ps.config, r.URL.Path, r.URL.RawQuery)
 
 	if auth := r.Header.Get("Authorization"); auth != "" {
 		maskedAuth := func() string {
@@ -68,14 +66,14 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 			}
 			bodyPreview = MaskSensitiveData(preview, 1024)
 		}
-		slog.Debug("proxy request debug", "provider", ps.Name, "method", r.Method, "path", r.URL.Path, "auth", maskedAuth, "body_size", len(bodyBytes), "body_preview", bodyPreview)
+		slog.Debug("proxy request debug", "provider", ps.Name(), "method", r.Method, "path", r.URL.Path, "auth", maskedAuth, "body_size", len(bodyBytes), "body_preview", bodyPreview)
 	}
 
 	pool.AdvanceCounter()
-	for round := 0; round < cfg.MaxRetries; round++ {
+	for round := 0; round < ps.MaxRetries(); round++ {
 
 		if !upCB.Allow() {
-			slog.Warn("upstream circuit breaker open, backing off", "provider", ps.Name, "round", round, "max", cfg.MaxRetries)
+			slog.Warn("upstream circuit breaker open, backing off", "provider", ps.Name(), "round", round, "max", ps.MaxRetries())
 			time.Sleep(time.Second)
 			continue
 		}
@@ -86,7 +84,7 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 				px.writeAllKeysExhausted(w, ps, r.Method, start)
 				return
 			}
-			slog.Warn("no available keys this round, all cooling", "provider", ps.Name, "round", round, "max", cfg.MaxRetries)
+			slog.Warn("no available keys this round, all cooling", "provider", ps.Name(), "round", round, "max", ps.MaxRetries())
 			time.Sleep(time.Second)
 			continue
 		}
@@ -110,10 +108,10 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 				pool.Release(idx)
 				switch categorizeError(0, err) {
 				case CatClientAbort:
-					slog.Debug("client aborted request", "provider", ps.Name, "key_index", idx, "key_name", keyName, "error", err)
+					slog.Debug("client aborted request", "provider", ps.Name(), "key_index", idx, "key_name", keyName, "error", err)
 					return
 				default:
-					slog.Warn("key network error", "provider", ps.Name, "key_index", idx, "key_name", keyName, "error", err)
+					slog.Warn("key network error", "provider", ps.Name(), "key_index", idx, "key_name", keyName, "error", err)
 					px.metrics.UpstreamErrors.WithLabelValues("network").Inc()
 					upCB.RecordFailure()
 					continue
@@ -123,7 +121,7 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 			// ── Response status dispatch ──
 			switch {
 			case resp.StatusCode == http.StatusTooManyRequests:
-				if px.handleRateLimited(w, ps, idx, resp, cfg, start, r.Method, target, bodyBytes) {
+				if px.handleRateLimited(w, ps, idx, resp, start, r.Method, target, bodyBytes) {
 					return
 				}
 				continue
@@ -153,16 +151,16 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 		}
 	}
 
-	writeProxyError(w, http.StatusServiceUnavailable, ErrorExhaustedRetries, fmt.Sprintf("%s 重试已耗尽，所有 Key 无响应", ps.Name))
+	writeProxyError(w, http.StatusServiceUnavailable, ErrorExhaustedRetries, fmt.Sprintf("%s 重试已耗尽，所有 Key 无响应", ps.Name()))
 
-	px.metrics.RetryCount.WithLabelValues(ps.Name).Add(float64(cfg.MaxRetries))
+	px.metrics.RetryCount.WithLabelValues(ps.Name()).Add(float64(ps.MaxRetries()))
 	slog.Warn("proxy retry exhausted",
-		"provider", ps.Name,
+		"provider", ps.Name(),
 		"method", r.Method,
 		"url", target,
 		"status", 503,
-		"retry", cfg.MaxRetries,
-		"rounds", cfg.MaxRetries,
+		"retry", ps.MaxRetries(),
+		"rounds", ps.MaxRetries(),
 		"duration_ms", time.Since(start).Milliseconds(),
 	)
 	px.recordProxyMetrics(r.Method, "5xx", "", start)
@@ -174,9 +172,9 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 // It records the failure, applies cooldown (respecting Retry-After headers),
 // and returns true if all keys are exhausted (caller should abort).
 // When returning true, the error response has already been written to w.
-func (px *ProxyExecutor) handleRateLimited(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, cfg *config.Config, start time.Time, method, target string, bodyBytes []byte) bool {
+func (px *ProxyExecutor) handleRateLimited(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, method, target string, bodyBytes []byte) bool {
 	defer func() { _ = resp.Body.Close() }()
-	pool := ps.Pool
+	pool := ps.pool
 	keyName, _ := pool.Name(idx)
 
 	body, _ := io.ReadAll(resp.Body)
@@ -191,11 +189,11 @@ func (px *ProxyExecutor) handleRateLimited(w http.ResponseWriter, ps *ProviderSt
 		}
 	}
 	_ = pool.Cooldown(idx, cooldown)
-	slog.Warn("key rate limited", "provider", ps.Name, "key_index", idx, "key_name", keyName, "status", resp.StatusCode, "cb_state", fmt.Sprintf("%d", pool.CB(idx).State()), "cb_retry", pool.CB(idx).Attempt(), "body_preview", MaskSensitiveData(string(body), 1024))
+	slog.Warn("key rate limited", "provider", ps.Name(), "key_index", idx, "key_name", keyName, "status", resp.StatusCode, "cb_state", fmt.Sprintf("%d", pool.CB(idx).State()), "cb_retry", pool.CB(idx).Attempt(), "body_preview", MaskSensitiveData(string(body), 1024))
 	px.metrics.UpstreamErrors.WithLabelValues("rate_limited").Inc()
 
 	if pool.CB(idx).State() == circuitbreaker.Permanent {
-		slog.Warn("key quota exhausted, disabling permanently", "provider", ps.Name, "key_index", idx, "key_name", keyName)
+		slog.Warn("key quota exhausted, disabling permanently", "provider", ps.Name(), "key_index", idx, "key_name", keyName)
 		_ = pool.Disable(idx)
 		if pool.ActiveCount() == 0 {
 			return px.writeAllKeysExhausted(w, ps, method, start)
@@ -209,7 +207,7 @@ func (px *ProxyExecutor) handleRateLimited(w http.ResponseWriter, ps *ProviderSt
 // When returning true, the error response has already been written to w.
 func (px *ProxyExecutor) handleAuthRejected(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, method, target string, bodyBytes []byte) bool {
 	defer func() { _ = resp.Body.Close() }()
-	pool := ps.Pool
+	pool := ps.pool
 	keyName, _ := pool.Name(idx)
 
 	body, _ := io.ReadAll(resp.Body)
@@ -217,12 +215,12 @@ func (px *ProxyExecutor) handleAuthRejected(w http.ResponseWriter, ps *ProviderS
 	if pool.RecordAuthFailure(idx) {
 		_ = pool.Disable(idx)
 		ps.PersistKeys()
-		slog.Warn("key permanently disabled", "provider", ps.Name, "key_index", idx, "key_name", keyName, "status", resp.StatusCode, "body_preview", MaskSensitiveData(string(body), 1024))
+		slog.Warn("key permanently disabled", "provider", ps.Name(), "key_index", idx, "key_name", keyName, "status", resp.StatusCode, "body_preview", MaskSensitiveData(string(body), 1024))
 	} else {
-		slog.Warn("key auth failure", "provider", ps.Name, "key_index", idx, "key_name", keyName, "status", resp.StatusCode, "fail_count", pool.CB(idx).AuthFailCount())
+		slog.Warn("key auth failure", "provider", ps.Name(), "key_index", idx, "key_name", keyName, "status", resp.StatusCode, "fail_count", pool.CB(idx).AuthFailCount())
 	}
 	if pool.ActiveCount() == 0 {
-		writeProxyError(w, http.StatusServiceUnavailable, ErrorAllKeysInvalid, fmt.Sprintf("%s 所有 Key 已失效或吊销", ps.Name))
+		writeProxyError(w, http.StatusServiceUnavailable, ErrorAllKeysInvalid, fmt.Sprintf("%s 所有 Key 已失效或吊销", ps.Name()))
 		px.recordProxyMetrics(method, "5xx", "", start)
 		return true
 	}
@@ -234,27 +232,27 @@ func (px *ProxyExecutor) handleAuthRejected(w http.ResponseWriter, ps *ProviderS
 func (px *ProxyExecutor) handleServerError(ps *ProviderState, idx int, resp *http.Response, attempt int) {
 	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(resp.Body)
-	pool := ps.Pool
+	pool := ps.pool
 	keyName, _ := pool.Name(idx)
-	slog.Warn("upstream server error", "provider", ps.Name, "key_index", idx, "key_name", keyName, "status", resp.StatusCode, "body_preview", MaskSensitiveData(string(body), 1024))
+	slog.Warn("upstream server error", "provider", ps.Name(), "key_index", idx, "key_name", keyName, "status", resp.StatusCode, "body_preview", MaskSensitiveData(string(body), 1024))
 	px.metrics.UpstreamErrors.WithLabelValues("server_error").Inc()
-	ps.Proxy.upCB.RecordFailure()
+	ps.proxy.upCB.RecordFailure()
 }
 
 // handleNonRetryable copies a non-retryable 4xx response through to the client
 // without further retry attempts.
 func (px *ProxyExecutor) handleNonRetryable(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, method, target string, bodyBytes []byte, attempt int) {
 	defer func() { _ = resp.Body.Close() }()
-	keyName, _ := ps.Pool.Name(idx)
+	keyName, _ := ps.pool.Name(idx)
 	copyHeaders(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, resp.Body)
 
-	slog.Warn("non-retryable client error", "provider", ps.Name, "method", method, "url", target, "status", resp.StatusCode, "key_name", keyName)
+	slog.Warn("non-retryable client error", "provider", ps.Name(), "method", method, "url", target, "status", resp.StatusCode, "key_name", keyName)
 	slog.Debug("proxy response debug", "status", resp.StatusCode, "duration_ms", time.Since(start).Seconds()*1000, "retries", attempt+1)
 	px.recordProxyMetrics(method, "4xx", fmt.Sprintf("%d", idx), start)
 	if attempt > 0 {
-		px.metrics.RetryCount.WithLabelValues(ps.Name).Add(float64(attempt))
+		px.metrics.RetryCount.WithLabelValues(ps.Name()).Add(float64(attempt))
 	}
 }
 
@@ -262,9 +260,9 @@ func (px *ProxyExecutor) handleNonRetryable(w http.ResponseWriter, ps *ProviderS
 // for SSE and chunked responses. For non-streaming responses, it extracts
 // token usage from the response body and records it in the log entry.
 func (px *ProxyExecutor) handleSuccess(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, method, target string, bodyBytes []byte, attempt int) {
-	pool := ps.Pool
+	pool := ps.pool
 	keyName, _ := pool.Name(idx)
-	upCB := ps.Proxy.upCB
+	upCB := ps.proxy.upCB
 
 	pool.RecordSuccess(idx)
 	upCB.RecordSuccess()
@@ -311,17 +309,17 @@ func (px *ProxyExecutor) handleSuccess(w http.ResponseWriter, ps *ProviderState,
 
 	pool.IncrementRequestCount(idx)
 	if inputTokens > 0 {
-		px.metrics.TokenUsage.WithLabelValues(ps.Name, "input").Add(float64(inputTokens))
+		px.metrics.TokenUsage.WithLabelValues(ps.Name(), "input").Add(float64(inputTokens))
 	}
 	if outputTokens > 0 {
-		px.metrics.TokenUsage.WithLabelValues(ps.Name, "output").Add(float64(outputTokens))
+		px.metrics.TokenUsage.WithLabelValues(ps.Name(), "output").Add(float64(outputTokens))
 	}
 	if attempt > 0 {
-		px.metrics.RetryCount.WithLabelValues(ps.Name).Add(float64(attempt))
+		px.metrics.RetryCount.WithLabelValues(ps.Name()).Add(float64(attempt))
 	}
 	durationMs := time.Since(start).Milliseconds()
 	slog.Info("proxy success",
-		"provider", ps.Name,
+		"provider", ps.Name(),
 		"method", method,
 		"url", target,
 		"status", resp.StatusCode,
@@ -349,7 +347,7 @@ func (px *ProxyExecutor) recordProxyMetrics(method, statusClass, keyIndex string
 
 // writeAllKeysExhausted writes the "all keys exhausted" error response and records metrics.
 func (px *ProxyExecutor) writeAllKeysExhausted(w http.ResponseWriter, ps *ProviderState, method string, start time.Time) bool {
-	writeProxyError(w, http.StatusServiceUnavailable, ErrorAllKeysInvalid, fmt.Sprintf("%s 所有 API Key 已熔断，请稍后重试", ps.Name))
+	writeProxyError(w, http.StatusServiceUnavailable, ErrorAllKeysInvalid, fmt.Sprintf("%s 所有 API Key 已熔断，请稍后重试", ps.Name()))
 	px.recordProxyMetrics(method, "5xx", "", start)
 	return true
 }

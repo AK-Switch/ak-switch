@@ -19,10 +19,10 @@ import (
 )
 
 type ProviderState struct {
-	Name          string
-	Config        *config.Config
-	Pool          *keypool.KeyPool
-	Proxy         *ProxyEngine
+	name          string
+	config        *config.Config
+	pool          *keypool.KeyPool
+	proxy         *ProxyEngine
 	healthMu      sync.RWMutex
 	lastCheckTime time.Time
 	lastCheckOK   bool
@@ -32,8 +32,8 @@ type ProviderState struct {
 
 func NewProviderState(name string, cfg *config.Config, pool *keypool.KeyPool, dash, keysFile string) *ProviderState {
 	return &ProviderState{
-		Name: name, Config: cfg, Pool: pool,
-		Proxy:         NewProxyEngine(cfg, pool),
+		name: name, config: cfg, pool: pool,
+		proxy:        NewProxyEngine(cfg, pool),
 		dashboardHTML: dash, keysFile: keysFile,
 	}
 }
@@ -50,15 +50,33 @@ func (ps *ProviderState) SetLastHealthCheck(ok bool) {
 	ps.lastCheckOK = ok
 }
 func (ps *ProviderState) PersistKeys() {
-	keys := ps.Pool.Keys()
+	keys := ps.pool.Keys()
 	entries := make([]keypool.KeyEntry, len(keys))
 	for i := range keys {
-		n, _ := ps.Pool.Name(i)
-		entries[i] = keypool.KeyEntry{Key: keys[i], Name: n, Disabled: ps.Pool.IsDisabled(i)}
+		n, _ := ps.pool.Name(i)
+		entries[i] = keypool.KeyEntry{Key: keys[i], Name: n, Disabled: ps.pool.IsDisabled(i)}
 	}
-	if err := keypool.SaveKeys(ps.Name, &keypool.KeyStore{Keys: entries}); err != nil {
-		slog.Error("persist keys failed", "provider", ps.Name, "error", err)
+	if err := keypool.SaveKeys(ps.name, &keypool.KeyStore{Keys: entries}); err != nil {
+		slog.Error("persist keys failed", "provider", ps.name, "error", err)
 	}
+}
+
+func (ps *ProviderState) Name() string                { return ps.name }
+func (ps *ProviderState) HTTPTimeoutSec() int             { return ps.config.HTTPTimeoutSec }
+func (ps *ProviderState) MaxRetries() int             { return ps.config.MaxRetries }
+func (ps *ProviderState) CooldownSec() int            { return ps.config.CooldownSec }
+func (ps *ProviderState) BackoffCapSec() int          { return ps.config.BackoffCapSec }
+func (ps *ProviderState) BackoffMultiplier() float64  { return ps.config.BackoffMultiplier }
+func (ps *ProviderState) CBResetSec() int             { return ps.config.CBResetSec }
+func (ps *ProviderState) UpstreamCBThreshold() int    { return ps.config.UpstreamCBThreshold }
+func (ps *ProviderState) LogLevel() string            { return ps.config.LogLevel }
+func (ps *ProviderState) GenaiModel() string          { return ps.config.GenaiModel }
+func (ps *ProviderState) CalibrationIntervalSec() int { return ps.config.CalibrationIntervalSec }
+func (ps *ProviderState) TargetBase() string         { return ps.config.TargetBase }
+
+func (ps *ProviderState) HasAdminToken() bool         { return ps.config.AdminToken != "" }
+func (ps *ProviderState) CheckAdminToken(token string) bool {
+	return ps.config.AdminToken != "" && ps.config.AdminToken == token
 }
 
 type ProviderRouter struct {
@@ -137,11 +155,11 @@ func (pr *ProviderRouter) LogManager() *LogManager           { return pr.logMana
 func (pr *ProviderRouter) StartBackgroundTasks() {
 	pr.pm.ForEach(func(name string, ps *ProviderState) {
 		p := ps
-		pr.taskManager.StartKeyPoolMetrics(p.Pool, p.Name)
-		pr.taskManager.StartHealthCheck(p.Config, p.Proxy, p)
-		if p.Config.GenaiModel != "" {
-			interval := time.Duration(p.Config.CalibrationIntervalSec) * time.Second
-			pr.taskManager.StartCalibrator(pr.calibrator, p.Pool, p.Config.TargetBase, p.Config.GenaiModel, interval)
+		pr.taskManager.StartKeyPoolMetrics(p.pool, p.Name())
+		pr.taskManager.StartHealthCheck(p.config, p.proxy, p)
+		if p.config.GenaiModel != "" {
+			interval := time.Duration(p.config.CalibrationIntervalSec) * time.Second
+			pr.taskManager.StartCalibrator(pr.calibrator, p.pool, p.config.TargetBase, p.config.GenaiModel, interval)
 		}
 	})
 	pr.taskManager.StartUptimeTicker(time.Now())
