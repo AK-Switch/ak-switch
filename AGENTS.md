@@ -1,108 +1,101 @@
 # AK-Switch — AGENTS.md
 
-API Key 智能轮转代理（Go 1.26）。单 provider 内多 Key 轮询、429 退避、401/403 永久禁用、两层熔断（Key 级 + 上游级）、Token 用量追踪。与 ccswitch 互补（provider 级路由 vs key 级轮转）。
+AK-Switch 是一个 AI API Key 代理网关（Go 1.26 + Cobra），为多个 LLM provider 提供统一的 API 接入层，内置两层熔断器、Key 轮询和 Prometheus 指标。单可执行文件，支持 Docker 部署。
 
 ## Dev Environment Tips
 
-| Command | Purpose |
-|---------|---------|
-| `go build ./cmd/akswitch/` | Build binary |
-| `go install ./cmd/akswitch/` | Install to GOPATH/bin |
-| `make test-unit` | Run unit tests |
-| `make test-integration` | Run integration tests (race detector) |
-| `make test-e2e` | Run E2E tests (Windows only) |
-| `make lint` | Run golangci-lint |
-| `make vet` | Run go vet |
-| `make fmt` | Format with gofmt |
-| `make check` | Lint + vet + fmt |
-
-**Go 环境**: 需要 Go 1.26+。通过 `go env` 验证版本。
+- 安装依赖: `go mod download`
+- 构建: `make build`（输出 `bin/akswitch`）
+- Docker 本地运行: `docker compose up -d`（需要 `deployments/docker-compose.yml`）
+- Go 1.26 必须安装。验证: `go version`
 
 ## Build & Test
 
-| Scope | Command |
-|-------|---------|
-| Build | `go build ./cmd/akswitch/` |
-| Unit tests | `go test -tags=unit -count=1 -short ./internal/...` |
-| Single test | `go test -tags=unit -count=1 ./internal/server/ -run TestName` |
-| Integration | `go test -tags=integration -count=1 -race ./test/integration/` |
-| E2E | `go test -tags=e2e -count=1 -timeout=5m -race ./test/integration/` |
-| Lint | `golangci-lint run ./...` |
-| Vet | `go vet ./...` |
-| Format | `go fmt ./...` |
+| 命令 | 用途 |
+|------|------|
+| `make build` | 编译二进制 |
+| `make fmt` | 格式化源码 (`go fmt`) |
+| `make lint` | golangci-lint |
+| `make vet` | `go vet ./...` |
+| `make check` | lint + vet + fmt（提交前必须执行） |
+| `make test-unit` | 单元测试 (`-tags=unit`) |
+| `make test-integration` | 集成测试 (`-tags=integration`, 需要 Docker) |
+| `make test-e2e` | E2E 测试 (`-tags=e2e`, 仅 Windows) |
+| `make test-all` | 全量测试 |
+
+单包测试: `go test -tags=unit -count=1 ./internal/server/`
+单测试: `go test -tags=unit -count=1 -run TestName ./internal/server/`
 
 ## Project Structure
 
-| Directory | Purpose |
-|-----------|---------|
-| `cmd/akswitch/` | CLI 入口（main.go + dashboard HTML） |
-| `internal/server/` | 核心：HTTP 代理引擎、Admin API、ProviderState、生命周期 |
-| `internal/circuitbreaker/` | 两层熔断：Key 级 + 上游级（UpstreamCB） |
-| `internal/keypool/` | API Key 池：轮询、RPM 计数、冷却、持久化 |
-| `internal/config/` | TOML 配置加载与热重载 |
-| `internal/metrics/` | Prometheus 指标 |
-| `internal/tokenestimator/` | Token 估算（tiktoken）+ 校准 |
-| `internal/tracker/` | 请求追踪与校准器 |
-| `internal/cli/` | Cobra CLI 子命令 |
-| `internal/logentry/` | 日志条目结构 |
-| `test/integration/` | 集成与 E2E 测试 |
-| `docs/superpowers/` | 设计文档（specs/ + plans/） |
-| `deployments/` | 部署配置（Windows 服务等） |
-| `web/` | Dashboard 前端资源 |
+- `cmd/akswitch/` — 入口 (main.go + 嵌入 dashboard.html)
+- `internal/cli/` — Cobra CLI 命令 (key, provider, start, stop, reload, config, status)
+- `internal/server/` — HTTP 服务器、反向代理、Admin API、路由、Provider 管理
+- `internal/config/` — TOML 配置加载、默认值合并、运行时配置热更新
+- `internal/circuitbreaker/` — 两层熔断器 (KeyCircuitBreaker + UpstreamCircuitBreaker)
+- `internal/keypool/` — Key 池管理、OS Keyring 持久化、存储抽象
+- `internal/metrics/` — Prometheus 指标
+- `internal/tracker/` — Token 使用量校准
+- `internal/tokenestimator/` — Token 估算
+- `internal/logentry/` — 日志条目类型
+- `test/integration/` — 集成/E2E 测试
+- `docs/` — 架构文档、ADR、设计文档
+- `deployments/` — Docker Compose、Grafana、Prometheus 配置
+- `web/` — 前端页面模板
 
 ## Code Style & Conventions
 
-- **格式化**: `gofmt` 风格，tab 缩进。运行 `make fmt` 或 `go fmt ./...`
-- **测试标签**: 单元测试用 `//go:build unit`，集成用 `integration`，E2E 用 `e2e`
-- **导入分组**: 标准库 → 第三方 → 本地包，每组间空行
-- **错误处理**: 始终检查 error，用 `fmt.Errorf("context: %w", err)` 包装
-- **日志**: `slog` 结构化日志，包含 provider/key 等关键字段
-- **文件大小**: `internal/server/*.go` 控制在 ~400 行以下。超过时拆分
-- **命名**: Go 标准约定。`ProviderState` 方法 API 用大写导出，内部字段小写
+- Tab 缩进（项目强制，gofmt 已配置）
+- 遵循 Effective Go + Go Code Review Comments
+- 错误包装: `fmt.Errorf("函数名: %w", err)`
+- 日志: `slog` (结构化日志)
+- Table-driven tests 优先
+- 导入: 标准库 → 项目内部包 → 第三方包，按字母序排列
 
-## Architecture
+### ProviderState 封装模式（重要）
 
-```
-HTTP Request
-  → ProviderRouter (路径路由: /{provider}/...)
-    → ProxyExecutor.Execute()
-      → KeyPool（Key 选择、RPM 感知）
-        → CircuitBreaker（Key 级熔断 + 冷却）
-      → UpstreamCircuitBreaker（上游级熔断）
-      → HTTP Client → 上游 API
-    → Admin API（/admin/* 运行时管理）
-      → Runtime Config（热重载，descriptor table 模式）
-      → Key 持久化（OS Keyring / 加密文件）
+`ProviderState` 所有字段均为私有，通过 getter/setter 方法访问：
+
+```go
+// ✅ 正确 — 使用 getter
+timeout := ps.HTTPTimeoutSec()
+ps.SetMaxRetries(3)
+
+// ❌ 错误 — 直接访问字段（字段私有，编译不通过）
+// ps.config.MaxRetries = 3
 ```
 
-**关键类型**: `ProviderState` 封装 provider 运行时状态（name/config/pool/proxy），通过方法 API 暴露。修改 `internal/server/router.go` 了解完整方法列表。
+新增配置字段时，同步在 `ProviderState` 上添加 getter 和 setter。
+
+## Architecture Notes
+
+```
+请求 → UpstreamCircuitBreaker → KeyPool → KeyCircuitBreaker → 上游
+```
+
+- **两层熔断器**: UpstreamCB 处理 502/503，KeyCB 处理 429/401/403
+- **Key 持久化三级策略**: OS Keyring → 加密文件 → 明文 fallback
+- **运行时配置热更新**: 通过 Admin API 修改配置，descriptor table 模式，无需重启
+- **Config 结构**: `Config` 内嵌 `ProviderConfig`（启动配置）+ 独立 `RuntimeConfig`（运行时配置）
+- 详细架构见 [docs/architecture.md](./docs/architecture.md)
 
 ## Boundaries
 
-### Always
-- 在 `internal/server/` 内修改代理逻辑、Admin API
-- 在 `internal/` 内添加新包
-- 在 `cmd/akswitch/` 内修改 CLI 命令
-- 在 `docs/superpowers/specs/` 添加设计文档，`docs/superpowers/plans/` 添加实施计划
-
-### Ask First
-- 修改 `internal/config/` 配置结构（影响 TOML 序列化与热重载）
-- 修改 `internal/circuitbreaker/` 熔断逻辑（影响稳定性）
-- 修改 Key 持久化方式（`internal/keypool/keyring.go`）
-- 删除或重命名公共方法（破坏 API 兼容性）
-
-### Never
-- 将 API Key 明文写入日志（使用 `MaskSensitiveData`）
-- 在非 E2E 测试中硬编码真实 Key
-- 直接暴露 `AdminToken` 原始值（仅提供 `HasAdminToken()` / `CheckAdminToken()`）
-- 修改 `vendor/` 目录（无 vendor 目录，用 go modules）
-- 在代理路径中做同步阻塞操作（影响吞吐量）
+- ✅ Always: 通过 `ProviderState` getter/setter 访问 Provider 状态，不直接操作字段
+- ✅ Always: 提交前执行 `make check && make test-unit`
+- ✅ Always: 新增代码附带 table-driven test
+- ⚠️ Ask first: 修改 `internal/config/` 结构体定义（影响 TOML 解析和 API 契约）
+- ⚠️ Ask first: 修改熔断器状态机逻辑（影响故障恢复行为）
+- ⚠️ Ask first: 修改 Dockerfile 基础镜像或暴露端口
+- 🚫 Never: 直接访问 `ProviderState` 私有字段
+- 🚫 Never: 在 `internal/` 下引入外部框架（保持纯 Go stdlib + 少量已审计依赖）
+- 🚫 Never: 提交包含真实 API Key 的 `keys.json` 或 `.env` 文件
+- 🚫 Never: 在单元测试中使用 `panic()` 作为错误处理
 
 ## Common Pitfalls
 
-- **Windows 路径**: E2E 测试仅在 `windows-latest` 运行。集成测试用 `-race`，在 Linux CI 上执行
-- **测试标签**: 单元测试必须带 `//go:build unit` 标签，否则 CI 的 unit job 不会运行它们
-- **gofmt 后再提交**: 项目强制 gofmt，提交前运行 `make fmt`
-- **ProviderState 字段**: 所有字段已小写化（`name`, `config`, `pool`, `proxy`），外部必须通过方法访问。直接访问小写字段会编译失败
-- **配置热重载**: 运行时修改通过 descriptor table 模式，见 `admin_api.go` 的 `runtimeConfigField` 表
-- **CircuitBreaker 范围**: Key 级 CB 在 `internal/circuitbreaker/key.go`，上游级 CB 在 `internal/circuitbreaker/upstream.go`，不要混用
+- **构建标签**: 单元测试用 `-tags=unit`，集成测试用 `-tags=integration`。裸跑 `go test` 可能跳过有 `//go:build` 约束的测试文件
+- **E2E 仅限 Windows**: E2E 测试依赖 Windows 平台特性，Linux CI 上只跑 unit + integration
+- **Key 持久化不自动**: `PersistKeys()` 需手动调用，修改 Key 池后不持久化则重启丢失
+- **Makefile 用 Tab**: 编辑 Makefile 时确保用 Tab 而非空格缩进（golangci-lint 不检查 Makefile，但 `make` 会报错）
+- **Config 字段分两组**: 启动配置在 `ProviderConfig`（TOML 解析），运行时配置在 `RuntimeConfig`（Admin API 热更新）。改配置字段前先确认属于哪组
