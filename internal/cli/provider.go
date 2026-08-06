@@ -546,7 +546,11 @@ Example:
 							stats["total_requests"], stats["successful_requests"], stats["failed_requests"])
 					}
 				}
+			} else {
+				fmt.Println("  Status:  not running")
 			}
+		} else {
+			fmt.Println("  Status:  not running")
 		}
 
 		// Config section
