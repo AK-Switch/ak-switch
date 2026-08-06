@@ -252,7 +252,7 @@ func (api *AdminAPI) healthHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		var upCB circuitbreaker.CircuitBreaker = ps.UpstreamCB()
+		var upCB = ps.UpstreamCB()
 
 		var cbState string
 		switch upCB.State() {
