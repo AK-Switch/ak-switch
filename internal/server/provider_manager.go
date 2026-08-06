@@ -103,7 +103,7 @@ func (pm *ProviderManager) ReloadConfig(providers map[string]*config.Config, log
 			}
 			existing.config = cfg
 			existing.pool = keypool.NewKeyPool(cfg.Keys, cfg.KeyNames)
-			existing.pool.ConfigureCBs(
+			existing.ConfigurePoolCBs(
 				time.Duration(cfg.CooldownSec)*time.Second,
 				time.Duration(cfg.BackoffCapSec)*time.Second,
 				cfg.BackoffMultiplier,

@@ -390,11 +390,11 @@ func TestRuntimeConfigField_Apply(t *testing.T) {
 		check   func(t *testing.T, ps *ProviderState)
 	}{
 		{name: "http_timeout_sec valid", key: "http_timeout_sec", value: 30, wantErr: false,
-			check: func(t *testing.T, ps *ProviderState) {
-				if got := ps.proxy.client.Timeout; got != 30*time.Second {
-					t.Errorf("Timeout = %v, want 30s", got)
-				}
-			}},
+		check: func(t *testing.T, ps *ProviderState) {
+			if got := ps.ProxyClientTimeout(); got != 30*time.Second {
+				t.Errorf("Timeout = %v, want 30s", got)
+			}
+		}},
 		{name: "http_timeout_sec invalid zero", key: "http_timeout_sec", value: 0, wantErr: true},
 		{name: "max_retries valid", key: "max_retries", value: 3, wantErr: false,
 			check: func(t *testing.T, ps *ProviderState) {

@@ -129,7 +129,7 @@ func (api *AdminAPI) configHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		keys := ps.pool.Keys()
+		keys := ps.PoolKeys()
 		maskedKeys := make([]string, len(keys))
 		for i, k := range keys {
 			maskedKeys[i] = logentry.MaskKey(k)
@@ -252,7 +252,7 @@ func (api *AdminAPI) healthHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		upCB := ps.proxy.upCB
+		var upCB circuitbreaker.CircuitBreaker = ps.UpstreamCB()
 
 		var cbState string
 		switch upCB.State() {
@@ -278,7 +278,7 @@ func (api *AdminAPI) healthHandler(w http.ResponseWriter, r *http.Request) {
 
 		ph := &providerHealth{
 			Status:            "ok",
-			Keys:              len(ps.pool.Keys()),
+			Keys:              ps.PoolLen(),
 			UpstreamCBState:   cbState,
 			LastHealthCheck:   lastCheckISO,
 			LastHealthCheckOK: lastCheckResult,
@@ -493,9 +493,9 @@ func (api *AdminAPI) statsHandler(w http.ResponseWriter, r *http.Request) {
 		if pName != "" && name != pName {
 			return
 		}
-		totalActive += ps.pool.ActiveCount()
-		totalCooling += ps.pool.CoolingCount()
-		totalDisabled += ps.pool.DisabledCount()
+		totalActive += ps.PoolActiveCount()
+		totalCooling += ps.PoolCoolingCount()
+		totalDisabled += ps.PoolDisabledCount()
 	})
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
@@ -525,7 +525,7 @@ func (api *AdminAPI) upstreamCBResetHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	ps.proxy.upCB.Reset()
+	ps.ResetUpstreamCB()
 	slog.Info("upstream circuit breaker reset", "provider", ps.Name())
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"provider": ps.Name(),
@@ -791,7 +791,7 @@ func (api *AdminAPI) keyOperationHandler(operation func(*keypool.KeyPool, *confi
 			respondJSON(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		if idx >= len(ps.pool.Keys()) {
+		if idx >= ps.PoolLen() {
 			respondJSON(w, http.StatusNotFound, map[string]string{"error": "key not found"})
 			return
 		}
@@ -964,7 +964,7 @@ var runtimeConfigFields = []runtimeConfigField{
 			if err != nil || v < 1 {
 				return nil, fmt.Errorf("http_timeout_sec must be a positive integer")
 			}
-			ps.proxy.client.Timeout = time.Duration(v) * time.Second
+			ps.SetProxyTimeout(time.Duration(v) * time.Second)
 			ps.SetHTTPTimeoutSec(v)
 			return v, nil
 		},
@@ -996,7 +996,7 @@ var runtimeConfigFields = []runtimeConfigField{
 				return nil, fmt.Errorf("cooldown_sec must be a positive integer")
 			}
 			ps.SetCooldownSec(v)
-			ps.pool.ConfigureCBs(
+			ps.ConfigurePoolCBs(
 				time.Duration(v)*time.Second,
 				time.Duration(ps.config.BackoffCapSec)*time.Second,
 				ps.config.BackoffMultiplier,
@@ -1016,7 +1016,7 @@ var runtimeConfigFields = []runtimeConfigField{
 				return nil, fmt.Errorf("backoff_cap_sec must be a positive integer")
 			}
 			ps.SetBackoffCapSec(v)
-			ps.pool.ConfigureCBs(
+			ps.ConfigurePoolCBs(
 				time.Duration(ps.config.CooldownSec)*time.Second,
 				time.Duration(v)*time.Second,
 				ps.config.BackoffMultiplier,
@@ -1036,7 +1036,7 @@ var runtimeConfigFields = []runtimeConfigField{
 				return nil, fmt.Errorf("backoff_multiplier must be a number >= 1.0")
 			}
 			ps.SetBackoffMultiplier(v)
-			ps.pool.ConfigureCBs(
+			ps.ConfigurePoolCBs(
 				time.Duration(ps.config.CooldownSec)*time.Second,
 				time.Duration(ps.config.BackoffCapSec)*time.Second,
 				v,
@@ -1055,7 +1055,7 @@ var runtimeConfigFields = []runtimeConfigField{
 			if err != nil || v < 1 {
 				return nil, fmt.Errorf("cb_reset_sec must be a positive integer")
 			}
-			ps.proxy.upCB.SetResetTimeout(time.Duration(v) * time.Second)
+			ps.SetUpstreamCBResetTimeout(v)
 			ps.SetCBResetSec(v)
 			return v, nil
 		},
@@ -1071,7 +1071,7 @@ var runtimeConfigFields = []runtimeConfigField{
 			if err != nil || v < 1 {
 				return nil, fmt.Errorf("upstream_cb_threshold must be a positive integer")
 			}
-			ps.proxy.upCB.SetThreshold(v)
+			ps.SetUpstreamCBThreshold(v)
 			ps.SetUpstreamCBThreshold(v)
 			return v, nil
 		},

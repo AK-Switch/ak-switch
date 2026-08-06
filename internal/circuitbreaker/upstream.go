@@ -133,3 +133,8 @@ func (u *UpstreamCircuitBreaker) Reset() {
 	u.state = Closed
 	u.halfOpenProbed = false
 }
+
+// AuthFailCount returns 0 — upstream CB does not track auth failures.
+// This method satisfies the CircuitBreaker interface for callers that
+// aggregate auth-failure counts across key and upstream CBs.
+func (u *UpstreamCircuitBreaker) AuthFailCount() int { return 0 }

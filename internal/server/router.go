@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"akswitch/internal/circuitbreaker"
 	"akswitch/internal/config"
 	"akswitch/internal/keypool"
 
@@ -76,11 +77,42 @@ func (ps *ProviderState) SetCooldownSec(v int)                { ps.config.Cooldo
 func (ps *ProviderState) SetBackoffCapSec(v int)              { ps.config.BackoffCapSec = v }
 func (ps *ProviderState) SetBackoffMultiplier(v float64)      { ps.config.BackoffMultiplier = v }
 func (ps *ProviderState) SetCBResetSec(v int)                 { ps.config.CBResetSec = v }
-func (ps *ProviderState) SetUpstreamCBThreshold(v int)        { ps.config.UpstreamCBThreshold = v }
+func (ps *ProviderState) SetUpstreamCBThreshold(n int) {
+	ps.config.UpstreamCBThreshold = n
+	ps.proxy.upCB.SetThreshold(n)
+}
 func (ps *ProviderState) SetLogLevel(v string)                { ps.config.LogLevel = v }
 func (ps *ProviderState) GenaiModel() string          { return ps.config.GenaiModel }
 func (ps *ProviderState) CalibrationIntervalSec() int { return ps.config.CalibrationIntervalSec }
 func (ps *ProviderState) TargetBase() string         { return ps.config.TargetBase }
+
+// Pool proxy methods — forward to ps.pool
+func (ps *ProviderState) PoolKeys() []string                          { return ps.pool.Keys() }
+func (ps *ProviderState) PoolActiveCount() int                        { return ps.pool.ActiveCount() }
+func (ps *ProviderState) PoolCoolingCount() int                       { return ps.pool.CoolingCount() }
+func (ps *ProviderState) PoolDisabledCount() int                      { return ps.pool.DisabledCount() }
+func (ps *ProviderState) PoolName(i int) (string, error)              { return ps.pool.Name(i) }
+func (ps *ProviderState) PoolKeyStatusLabel(i int, now time.Time) string { return ps.pool.KeyStatusLabel(i, now) }
+func (ps *ProviderState) PoolRequestsInLastMinute(i int) int               { return ps.pool.RequestsInLastMinute(i) }
+func (ps *ProviderState) PoolCleanupOldRequests(i int)                      { ps.pool.CleanupOldRequests(i) }
+func (ps *ProviderState) PoolCB(i int) circuitbreaker.CircuitBreaker        { return ps.pool.CB(i) }
+func (ps *ProviderState) PoolIsDisabled(i int) bool                   { return ps.pool.IsDisabled(i) }
+func (ps *ProviderState) PoolLen() int                                { return ps.pool.Len() }
+func (ps *ProviderState) ConfigurePoolCBs(base, backoffCap time.Duration, multiplier float64) {
+	ps.pool.ConfigureCBs(base, backoffCap, multiplier)
+}
+
+// Proxy proxy methods — forward to ps.proxy
+func (ps *ProviderState) SetProxyTimeout(d time.Duration)          { ps.proxy.client.Timeout = d }
+func (ps *ProviderState) ProxyClientTimeout() time.Duration        { return ps.proxy.client.Timeout }
+func (ps *ProviderState) ResetUpstreamCB()                         { ps.proxy.upCB.Reset() }
+func (ps *ProviderState) RecordUpstreamFailure()                   { ps.proxy.upCB.RecordFailure() }
+func (ps *ProviderState) RecordUpstreamSuccess()                   { ps.proxy.upCB.RecordSuccess() }
+func (ps *ProviderState) UpstreamCBAllow() bool                    { return ps.proxy.upCB.Allow() }
+func (ps *ProviderState) SetUpstreamCBResetTimeout(sec int)        { ps.proxy.upCB.SetResetTimeout(time.Duration(sec) * time.Second) }
+
+func (ps *ProviderState) UpstreamCBState() circuitbreaker.State    { return ps.proxy.upCB.State() }
+func (ps *ProviderState) UpstreamCB() circuitbreaker.CircuitBreaker { return ps.proxy.upCB }
 
 func (ps *ProviderState) HasAdminToken() bool         { return ps.config.AdminToken != "" }
 func (ps *ProviderState) CheckAdminToken(token string) bool {
