@@ -138,7 +138,7 @@ func (ps *ProviderState) ConfigurePoolCBs(base, backoffCap time.Duration, multip
 	ps.pool.ConfigureCBs(base, backoffCap, multiplier)
 }
 
-// Proxy proxy methods — forward to ps.proxy
+// Proxy proxy methods — forward to ps.client
 func (ps *ProviderState) SetProxyTimeout(d time.Duration)          { ps.client.Timeout = d }
 func (ps *ProviderState) ProxyClientTimeout() time.Duration        { return ps.client.Timeout }
 func (ps *ProviderState) ResetUpstreamCB()                         { ps.upCB.Reset() }

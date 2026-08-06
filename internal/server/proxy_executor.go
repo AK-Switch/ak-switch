@@ -1,8 +1,6 @@
 package server
 
 import (
-	"akswitch/internal/circuitbreaker"
-	akswitchmetrics "akswitch/internal/metrics"
 	"bufio"
 	"bytes"
 	"fmt"
@@ -13,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"akswitch/internal/circuitbreaker"
+	akswitchmetrics "akswitch/internal/metrics"
 	"akswitch/internal/tokenestimator"
 	"akswitch/internal/tracker"
 )
