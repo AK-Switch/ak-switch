@@ -291,7 +291,7 @@ func (p *KeyPool) IsDisabled(idx int) bool {
 }
 // ConfigureCBs replaces all per-key circuit breakers with new ones configured
 // with the given base cooldown, backoff cap, and multiplier.
-// Called by NewProxyEngine to synchronize breaker parameters with config.
+// Called by NewProviderState to synchronize breaker parameters with config.
 func (p *KeyPool) ConfigureCBs(base, backoffCap time.Duration, multiplier float64) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
