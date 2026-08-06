@@ -30,7 +30,4 @@ type CircuitBreaker interface {
 
 	// State returns the current circuit breaker state.
 	State() State
-
-	// AuthFailCount returns the number of consecutive auth failures (key-specific).
-	AuthFailCount() int
 }

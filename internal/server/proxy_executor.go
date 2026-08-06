@@ -217,7 +217,7 @@ func (px *ProxyExecutor) handleAuthRejected(w http.ResponseWriter, ps *ProviderS
 		ps.PersistKeys()
 		slog.Warn("key permanently disabled", "provider", ps.Name(), "key_index", idx, "key_name", keyName, "status", resp.StatusCode, "body_preview", MaskSensitiveData(string(body), 1024))
 	} else {
-		slog.Warn("key auth failure", "provider", ps.Name(), "key_index", idx, "key_name", keyName, "status", resp.StatusCode, "fail_count", ps.pool.CB(idx).AuthFailCount())
+		slog.Warn("key auth failure", "provider", ps.Name(), "key_index", idx, "key_name", keyName, "status", resp.StatusCode, "fail_count", ps.PoolAuthFailCount(idx))
 	}
 	if ps.PoolActiveCount() == 0 {
 		writeProxyError(w, http.StatusServiceUnavailable, ErrorAllKeysInvalid, fmt.Sprintf("%s 所有 Key 已失效或吊销", ps.Name()))

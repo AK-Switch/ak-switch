@@ -1071,7 +1071,7 @@ var runtimeConfigFields = []runtimeConfigField{
 			if err != nil || v < 1 {
 				return nil, fmt.Errorf("upstream_cb_threshold must be a positive integer")
 			}
-			ps.SetUpstreamCBThreshold(v)
+			ps.SetUpstreamProxyCBThreshold(v)
 			ps.SetUpstreamCBThreshold(v)
 			return v, nil
 		},

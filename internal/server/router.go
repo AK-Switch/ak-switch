@@ -77,10 +77,7 @@ func (ps *ProviderState) SetCooldownSec(v int)                { ps.config.Cooldo
 func (ps *ProviderState) SetBackoffCapSec(v int)              { ps.config.BackoffCapSec = v }
 func (ps *ProviderState) SetBackoffMultiplier(v float64)      { ps.config.BackoffMultiplier = v }
 func (ps *ProviderState) SetCBResetSec(v int)                 { ps.config.CBResetSec = v }
-func (ps *ProviderState) SetUpstreamCBThreshold(n int) {
-	ps.config.UpstreamCBThreshold = n
-	ps.proxy.upCB.SetThreshold(n)
-}
+func (ps *ProviderState) SetUpstreamCBThreshold(n int) { ps.config.UpstreamCBThreshold = n }
 func (ps *ProviderState) SetLogLevel(v string)                { ps.config.LogLevel = v }
 func (ps *ProviderState) GenaiModel() string          { return ps.config.GenaiModel }
 func (ps *ProviderState) CalibrationIntervalSec() int { return ps.config.CalibrationIntervalSec }
@@ -98,6 +95,7 @@ func (ps *ProviderState) PoolCleanupOldRequests(i int)                      { ps
 func (ps *ProviderState) PoolCB(i int) circuitbreaker.CircuitBreaker        { return ps.pool.CB(i) }
 func (ps *ProviderState) PoolIsDisabled(i int) bool                   { return ps.pool.IsDisabled(i) }
 func (ps *ProviderState) PoolLen() int                                { return ps.pool.Len() }
+func (ps *ProviderState) PoolAuthFailCount(idx int) int               { return ps.pool.CB(idx).AuthFailCount() }
 func (ps *ProviderState) ConfigurePoolCBs(base, backoffCap time.Duration, multiplier float64) {
 	ps.pool.ConfigureCBs(base, backoffCap, multiplier)
 }
@@ -113,6 +111,8 @@ func (ps *ProviderState) SetUpstreamCBResetTimeout(sec int)        { ps.proxy.up
 
 func (ps *ProviderState) UpstreamCBState() circuitbreaker.State    { return ps.proxy.upCB.State() }
 func (ps *ProviderState) UpstreamCB() circuitbreaker.CircuitBreaker { return ps.proxy.upCB }
+
+func (ps *ProviderState) SetUpstreamProxyCBThreshold(n int) { ps.proxy.upCB.SetThreshold(n) }
 
 func (ps *ProviderState) HasAdminToken() bool         { return ps.config.AdminToken != "" }
 func (ps *ProviderState) CheckAdminToken(token string) bool {
