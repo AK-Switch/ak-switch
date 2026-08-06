@@ -357,6 +357,111 @@ func TestHandleRuntimeConfigSet_ProviderAllInvalidKey(t *testing.T) {
 	}
 }
 
+// ── Runtime Config Field Apply ──────────────────────────
+
+func TestRuntimeConfigField_Apply(t *testing.T) {
+	pr := newTestRouterWithKeys(t, []string{"sk-key-0"})
+	ps := pr.Provider("test")
+
+	origTimeout := ps.Config.HTTPTimeoutSec
+	origRetries := ps.Config.MaxRetries
+	origCooldown := ps.Config.CooldownSec
+	origBackoffCap := ps.Config.BackoffCapSec
+	origBackoffMult := ps.Config.BackoffMultiplier
+	origCBReset := ps.Config.CBResetSec
+	origUpThreshold := ps.Config.UpstreamCBThreshold
+	origLogLevel := ps.Config.LogLevel
+	defer func() {
+		ps.Config.HTTPTimeoutSec = origTimeout
+		ps.Config.MaxRetries = origRetries
+		ps.Config.CooldownSec = origCooldown
+		ps.Config.BackoffCapSec = origBackoffCap
+		ps.Config.BackoffMultiplier = origBackoffMult
+		ps.Config.CBResetSec = origCBReset
+		ps.Config.UpstreamCBThreshold = origUpThreshold
+		ps.Config.LogLevel = origLogLevel
+	}()
+
+	tests := []struct {
+		name    string
+		key     string
+		value   interface{}
+		wantErr bool
+		check   func(t *testing.T, ps *ProviderState)
+	}{
+		{name: "http_timeout_sec valid", key: "http_timeout_sec", value: 30, wantErr: false,
+			check: func(t *testing.T, ps *ProviderState) {
+				if got := ps.Proxy.client.Timeout; got != 30*time.Second {
+					t.Errorf("Timeout = %v, want 30s", got)
+				}
+			}},
+		{name: "http_timeout_sec invalid zero", key: "http_timeout_sec", value: 0, wantErr: true},
+		{name: "max_retries valid", key: "max_retries", value: 3, wantErr: false,
+			check: func(t *testing.T, ps *ProviderState) {
+				if ps.Config.MaxRetries != 3 {
+					t.Errorf("MaxRetries = %d, want 3", ps.Config.MaxRetries)
+				}
+			}},
+		{name: "max_retries zero", key: "max_retries", value: 0, wantErr: false},
+		{name: "cooldown_sec valid", key: "cooldown_sec", value: 60, wantErr: false,
+			check: func(t *testing.T, ps *ProviderState) {
+				if ps.Config.CooldownSec != 60 {
+					t.Errorf("CooldownSec = %d, want 60", ps.Config.CooldownSec)
+				}
+			}},
+		{name: "backoff_cap_sec valid", key: "backoff_cap_sec", value: 120, wantErr: false,
+			check: func(t *testing.T, ps *ProviderState) {
+				if ps.Config.BackoffCapSec != 120 {
+					t.Errorf("BackoffCapSec = %d, want 120", ps.Config.BackoffCapSec)
+				}
+			}},
+		{name: "backoff_multiplier valid", key: "backoff_multiplier", value: 3.0, wantErr: false,
+			check: func(t *testing.T, ps *ProviderState) {
+				if ps.Config.BackoffMultiplier != 3.0 {
+					t.Errorf("BackoffMultiplier = %f, want 3.0", ps.Config.BackoffMultiplier)
+				}
+			}},
+		{name: "backoff_multiplier invalid", key: "backoff_multiplier", value: 0, wantErr: true},
+		{name: "cb_reset_sec valid", key: "cb_reset_sec", value: 45, wantErr: false,
+			check: func(t *testing.T, ps *ProviderState) {
+				if ps.Config.CBResetSec != 45 {
+					t.Errorf("CBResetSec = %d, want 45", ps.Config.CBResetSec)
+				}
+			}},
+		{name: "upstream_cb_threshold valid", key: "upstream_cb_threshold", value: 10, wantErr: false,
+			check: func(t *testing.T, ps *ProviderState) {
+				if ps.Config.UpstreamCBThreshold != 10 {
+					t.Errorf("UpstreamCBThreshold = %d, want 10", ps.Config.UpstreamCBThreshold)
+				}
+			}},
+		{name: "log_level valid debug", key: "log_level", value: "debug", wantErr: false,
+			check: func(t *testing.T, ps *ProviderState) {
+				if ps.Config.LogLevel != "debug" {
+					t.Errorf("LogLevel = %q, want debug", ps.Config.LogLevel)
+				}
+			}},
+		{name: "unknown key", key: "nonexistent", value: "x", wantErr: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := pr.api.setRuntimeConfigField(ps, tc.key, tc.value)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got nil (value=%v)", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tc.check != nil {
+				tc.check(t, ps)
+			}
+		})
+	}
+}
+
 // ── Helpers ────────────────────────────────────────────
 
 // newTestRouterWithKeys creates a ProviderRouter with a single provider named "test"
