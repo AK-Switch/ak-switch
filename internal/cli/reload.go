@@ -20,7 +20,7 @@ func triggerReload() bool {
 		return false
 	}
 
-	resp, err := client.Get("/api/reload")
+	resp, err := client.Post("/api/reload", "application/json", nil)
 	if err != nil {
 		return false
 	}

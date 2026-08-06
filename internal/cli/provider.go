@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -14,8 +15,6 @@ import (
 	"akswitch/internal/config"
 	"akswitch/internal/keypool"
 	"akswitch/internal/logentry"
-
-	"net/url"
 
 	"github.com/spf13/cobra"
 )
