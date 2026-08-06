@@ -965,7 +965,7 @@ var runtimeConfigFields = []runtimeConfigField{
 				return nil, fmt.Errorf("http_timeout_sec must be a positive integer")
 			}
 			ps.proxy.client.Timeout = time.Duration(v) * time.Second
-			ps.config.HTTPTimeoutSec = v
+			ps.SetHTTPTimeoutSec(v)
 			return v, nil
 		},
 		persist: func(cfg *config.Config, val interface{}) {
@@ -980,7 +980,7 @@ var runtimeConfigFields = []runtimeConfigField{
 			if err != nil || v < 0 {
 				return nil, fmt.Errorf("max_retries must be a non-negative integer")
 			}
-			ps.config.MaxRetries = v
+			ps.SetMaxRetries(v)
 			return v, nil
 		},
 		persist: func(cfg *config.Config, val interface{}) {
@@ -995,7 +995,7 @@ var runtimeConfigFields = []runtimeConfigField{
 			if err != nil || v < 1 {
 				return nil, fmt.Errorf("cooldown_sec must be a positive integer")
 			}
-			ps.config.CooldownSec = v
+			ps.SetCooldownSec(v)
 			ps.pool.ConfigureCBs(
 				time.Duration(v)*time.Second,
 				time.Duration(ps.config.BackoffCapSec)*time.Second,
@@ -1015,7 +1015,7 @@ var runtimeConfigFields = []runtimeConfigField{
 			if err != nil || v < 1 {
 				return nil, fmt.Errorf("backoff_cap_sec must be a positive integer")
 			}
-			ps.config.BackoffCapSec = v
+			ps.SetBackoffCapSec(v)
 			ps.pool.ConfigureCBs(
 				time.Duration(ps.config.CooldownSec)*time.Second,
 				time.Duration(v)*time.Second,
@@ -1035,7 +1035,7 @@ var runtimeConfigFields = []runtimeConfigField{
 			if err != nil || v < 1.0 {
 				return nil, fmt.Errorf("backoff_multiplier must be a number >= 1.0")
 			}
-			ps.config.BackoffMultiplier = v
+			ps.SetBackoffMultiplier(v)
 			ps.pool.ConfigureCBs(
 				time.Duration(ps.config.CooldownSec)*time.Second,
 				time.Duration(ps.config.BackoffCapSec)*time.Second,
@@ -1056,7 +1056,7 @@ var runtimeConfigFields = []runtimeConfigField{
 				return nil, fmt.Errorf("cb_reset_sec must be a positive integer")
 			}
 			ps.proxy.upCB.SetResetTimeout(time.Duration(v) * time.Second)
-			ps.config.CBResetSec = v
+			ps.SetCBResetSec(v)
 			return v, nil
 		},
 		persist: func(cfg *config.Config, val interface{}) {
@@ -1072,7 +1072,7 @@ var runtimeConfigFields = []runtimeConfigField{
 				return nil, fmt.Errorf("upstream_cb_threshold must be a positive integer")
 			}
 			ps.proxy.upCB.SetThreshold(v)
-			ps.config.UpstreamCBThreshold = v
+			ps.SetUpstreamCBThreshold(v)
 			return v, nil
 		},
 		persist: func(cfg *config.Config, val interface{}) {
@@ -1090,7 +1090,7 @@ var runtimeConfigFields = []runtimeConfigField{
 			v := strings.TrimSpace(strings.ToLower(s))
 			switch v {
 			case "debug", "info", "warn", "error":
-				ps.config.LogLevel = v
+				ps.SetLogLevel(v)
 				return v, nil
 			}
 			return nil, fmt.Errorf("invalid log level, use: debug, info, warn, error")

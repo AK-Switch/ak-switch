@@ -70,6 +70,14 @@ func (ps *ProviderState) BackoffMultiplier() float64  { return ps.config.Backoff
 func (ps *ProviderState) CBResetSec() int             { return ps.config.CBResetSec }
 func (ps *ProviderState) UpstreamCBThreshold() int    { return ps.config.UpstreamCBThreshold }
 func (ps *ProviderState) LogLevel() string            { return ps.config.LogLevel }
+func (ps *ProviderState) SetHTTPTimeoutSec(v int)   { ps.config.HTTPTimeoutSec = v }
+func (ps *ProviderState) SetMaxRetries(v int)                 { ps.config.MaxRetries = v }
+func (ps *ProviderState) SetCooldownSec(v int)                { ps.config.CooldownSec = v }
+func (ps *ProviderState) SetBackoffCapSec(v int)              { ps.config.BackoffCapSec = v }
+func (ps *ProviderState) SetBackoffMultiplier(v float64)      { ps.config.BackoffMultiplier = v }
+func (ps *ProviderState) SetCBResetSec(v int)                 { ps.config.CBResetSec = v }
+func (ps *ProviderState) SetUpstreamCBThreshold(v int)        { ps.config.UpstreamCBThreshold = v }
+func (ps *ProviderState) SetLogLevel(v string)                { ps.config.LogLevel = v }
 func (ps *ProviderState) GenaiModel() string          { return ps.config.GenaiModel }
 func (ps *ProviderState) CalibrationIntervalSec() int { return ps.config.CalibrationIntervalSec }
 func (ps *ProviderState) TargetBase() string         { return ps.config.TargetBase }
