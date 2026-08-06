@@ -33,11 +33,45 @@ type ProviderState struct {
 }
 
 func NewProviderState(name string, cfg *config.Config, pool *keypool.KeyPool, dash, keysFile string) *ProviderState {
-	upCB := circuitbreaker.NewUpstreamCircuitBreaker(cfg.UpstreamCBThreshold,
-		time.Duration(cfg.CBResetSec)*time.Second)
+	backoffCapSec := cfg.BackoffCapSec
+	if backoffCapSec <= 0 {
+		backoffCapSec = 120
+	}
+	backoffMult := cfg.BackoffMultiplier
+	if backoffMult <= 0 {
+		backoffMult = 2
+	}
+	upstreamThreshold := cfg.UpstreamCBThreshold
+	if upstreamThreshold <= 0 {
+		upstreamThreshold = 5
+	}
+	cbResetSec := cfg.CBResetSec
+	if cbResetSec <= 0 {
+		cbResetSec = 30
+	}
+	base := time.Duration(cfg.CooldownSec) * time.Second
+	cap_ := time.Duration(backoffCapSec) * time.Second
+	pool.ConfigureCBs(base, cap_, backoffMult)
+
+	upCB := circuitbreaker.NewUpstreamCircuitBreaker(
+		upstreamThreshold,
+		time.Duration(cbResetSec)*time.Second,
+	)
+
 	return &ProviderState{
 		name: name, config: cfg, pool: pool,
-		client:        &http.Client{Timeout: time.Duration(cfg.HTTPTimeoutSec) * time.Second},
+		client: &http.Client{
+			Timeout: time.Duration(cfg.HTTPTimeoutSec) * time.Second,
+			Transport: &http.Transport{
+				MaxIdleConns:        500,
+				MaxIdleConnsPerHost: 100,
+				IdleConnTimeout:     90 * time.Second,
+				ForceAttemptHTTP2:   true,
+			},
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
 		upCB:          upCB,
 		dashboardHTML: dash, keysFile: keysFile,
 	}
