@@ -179,23 +179,18 @@ var configListCmd = &cobra.Command{
 	Otherwise, shows the first (or only) provider.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client := &http.Client{Timeout: 5 * time.Second}
-		all, _ := cmd.Flags().GetBool("all")
-
-		baseURL := fmt.Sprintf("http://%s:%d/api/runtime-config", detectServerHost(), detectServerPort())
-		if len(args) > 0 {
-			baseURL += "?provider=" + url.QueryEscape(args[0])
-		}
-
-		req, err := http.NewRequest(http.MethodGet, baseURL, nil)
+		client, err := NewAdminClient(5*time.Second, "")
 		if err != nil {
 			return fmt.Errorf("server not reachable: %w", err)
 		}
-		if token, tokErr := loadAdminTokenFromConfig(); tokErr == nil && token != "" {
-			req.Header.Set("X-Admin-Token", token)
+		all, _ := cmd.Flags().GetBool("all")
+
+		path := "/api/runtime-config"
+		if len(args) > 0 {
+			path += "?provider=" + url.QueryEscape(args[0])
 		}
 
-		resp, err := client.Do(req)
+		resp, err := client.Get(path)
 		if err != nil {
 			return fmt.Errorf("server not reachable: %w", err)
 		}
@@ -269,13 +264,15 @@ var configGetCmd = &cobra.Command{
 	  akswitch config get log_level --all`,
 	Args: cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client := &http.Client{Timeout: 5 * time.Second}
+		client, err := NewAdminClient(5*time.Second, "")
+		if err != nil {
+			return fmt.Errorf("server not reachable: %w", err)
+		}
 		key := args[0]
 		all, _ := cmd.Flags().GetBool("all")
 
 		if all {
-			baseURL := fmt.Sprintf("http://%s:%d/api/runtime-config?provider=all", detectServerHost(), detectServerPort())
-			providers, err := doRuntimeConfigGet(client, baseURL)
+			providers, err := doRuntimeConfigGet(client, "?provider=all")
 			if err != nil {
 				return err
 			}
@@ -314,17 +311,9 @@ var configGetCmd = &cobra.Command{
 		if len(args) > 1 {
 			params.Set("provider", args[1])
 		}
-		baseURL := fmt.Sprintf("http://%s:%d/api/runtime-config?%s", detectServerHost(), detectServerPort(), params.Encode())
+		path := "/api/runtime-config?" + params.Encode()
 
-		req, err := http.NewRequest(http.MethodGet, baseURL, nil)
-		if err != nil {
-			return fmt.Errorf("server not reachable: %w", err)
-		}
-		if token, tokErr := loadAdminTokenFromConfig(); tokErr == nil && token != "" {
-			req.Header.Set("X-Admin-Token", token)
-		}
-
-		resp, err := client.Do(req)
+		resp, err := client.Get(path)
 		if err != nil {
 			return fmt.Errorf("server not reachable: %w", err)
 		}
@@ -384,7 +373,10 @@ var configSetCmd = &cobra.Command{
 	  akswitch config set log_level info --all --persist`,
 	Args: cobra.RangeArgs(2, 3),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client := &http.Client{Timeout: 5 * time.Second}
+		client, err := NewAdminClient(5*time.Second, "")
+		if err != nil {
+			return fmt.Errorf("server not reachable: %w", err)
+		}
 		key := args[0]
 		value := args[1]
 
@@ -401,7 +393,7 @@ var configSetCmd = &cobra.Command{
 			params.Set("persist", "true")
 		}
 
-		baseURL := fmt.Sprintf("http://%s:%d/api/runtime-config?%s", detectServerHost(), detectServerPort(), params.Encode())
+		path := "/api/runtime-config?" + params.Encode()
 
 		// Build payload using json.Marshal for proper escaping
 		payloadMap := map[string]interface{}{"key": key}
@@ -413,16 +405,7 @@ var configSetCmd = &cobra.Command{
 		payloadBytes, _ := json.Marshal(payloadMap)
 		payload := string(payloadBytes)
 
-		req, err := http.NewRequest(http.MethodPost, baseURL, strings.NewReader(payload))
-		if err != nil {
-			return fmt.Errorf("server not reachable: %w", err)
-		}
-		req.Header.Set("Content-Type", "application/json")
-		if token, tokErr := loadAdminTokenFromConfig(); tokErr == nil && token != "" {
-			req.Header.Set("X-Admin-Token", token)
-		}
-
-		resp, err := client.Do(req)
+		resp, err := client.Post(path, "application/json", strings.NewReader(payload))
 		if err != nil {
 			return fmt.Errorf("server not reachable: %w", err)
 		}
@@ -473,15 +456,12 @@ var configSetCmd = &cobra.Command{
 }
 
 // doRuntimeConfigGet sends a GET to the runtime-config endpoint and returns
-// the providers map (provider_name -> params_map). The URL must already
-// contain any query parameters (e.g. ?provider=all).
-func doRuntimeConfigGet(client *http.Client, baseURL string) (map[string]interface{}, error) {
-	req, err := http.NewRequest(http.MethodGet, baseURL, nil)
+// the providers map (provider_name -> params_map). The baseURL param contains
+// only the query string portion (e.g. "?provider=all").
+func doRuntimeConfigGet(client *AdminClient, baseURL string) (map[string]interface{}, error) {
+	req, err := http.NewRequest(http.MethodGet, client.baseURL+baseURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("server not reachable: %w", err)
-	}
-	if token, tokErr := loadAdminTokenFromConfig(); tokErr == nil && token != "" {
-		req.Header.Set("X-Admin-Token", token)
 	}
 
 	resp, err := client.Do(req)
