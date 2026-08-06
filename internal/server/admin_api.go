@@ -1058,3 +1058,172 @@ func (api *AdminAPI) persistRuntimeConfigFieldToDefault(key string, value interf
 
 	return config.SaveTomlConfig(tc, xdgPath)
 }
+
+// ── Runtime Config Field Descriptors ──────────────────────
+
+// runtimeConfigField describes a single runtime-configurable field.
+// Each field is defined once; apply, persist, and persistToDefault
+// are derived from the descriptor.
+type runtimeConfigField struct {
+	key     string
+	apply   func(ps *ProviderState, raw interface{}) (interface{}, error)
+	persist func(cfg *config.Config, val interface{})
+}
+
+// runtimeConfigFields is the single source of truth for all runtime
+// config fields. Adding a new field requires exactly one entry here.
+var runtimeConfigFields = []runtimeConfigField{
+	{
+		key: "http_timeout_sec",
+		apply: func(ps *ProviderState, raw interface{}) (interface{}, error) {
+			v, err := toInt(raw)
+			if err != nil || v < 1 {
+				return nil, fmt.Errorf("http_timeout_sec must be a positive integer")
+			}
+			ps.Proxy.client.Timeout = time.Duration(v) * time.Second
+			ps.Config.HTTPTimeoutSec = v
+			return v, nil
+		},
+		persist: func(cfg *config.Config, val interface{}) {
+			v, _ := toInt(val)
+			cfg.HTTPTimeoutSec = v
+		},
+	},
+	{
+		key: "max_retries",
+		apply: func(ps *ProviderState, raw interface{}) (interface{}, error) {
+			v, err := toInt(raw)
+			if err != nil || v < 0 {
+				return nil, fmt.Errorf("max_retries must be a non-negative integer")
+			}
+			ps.Config.MaxRetries = v
+			return v, nil
+		},
+		persist: func(cfg *config.Config, val interface{}) {
+			v, _ := toInt(val)
+			cfg.MaxRetries = v
+		},
+	},
+	{
+		key: "cooldown_sec",
+		apply: func(ps *ProviderState, raw interface{}) (interface{}, error) {
+			v, err := toInt(raw)
+			if err != nil || v < 1 {
+				return nil, fmt.Errorf("cooldown_sec must be a positive integer")
+			}
+			ps.Config.CooldownSec = v
+			ps.Pool.ConfigureCBs(
+				time.Duration(v)*time.Second,
+				time.Duration(ps.Config.BackoffCapSec)*time.Second,
+				ps.Config.BackoffMultiplier,
+			)
+			return v, nil
+		},
+		persist: func(cfg *config.Config, val interface{}) {
+			v, _ := toInt(val)
+			cfg.CooldownSec = v
+		},
+	},
+	{
+		key: "backoff_cap_sec",
+		apply: func(ps *ProviderState, raw interface{}) (interface{}, error) {
+			v, err := toInt(raw)
+			if err != nil || v < 1 {
+				return nil, fmt.Errorf("backoff_cap_sec must be a positive integer")
+			}
+			ps.Config.BackoffCapSec = v
+			ps.Pool.ConfigureCBs(
+				time.Duration(ps.Config.CooldownSec)*time.Second,
+				time.Duration(v)*time.Second,
+				ps.Config.BackoffMultiplier,
+			)
+			return v, nil
+		},
+		persist: func(cfg *config.Config, val interface{}) {
+			v, _ := toInt(val)
+			cfg.BackoffCapSec = v
+		},
+	},
+	{
+		key: "backoff_multiplier",
+		apply: func(ps *ProviderState, raw interface{}) (interface{}, error) {
+			v, err := toFloat64(raw)
+			if err != nil || v < 1.0 {
+				return nil, fmt.Errorf("backoff_multiplier must be a number >= 1.0")
+			}
+			ps.Config.BackoffMultiplier = v
+			ps.Pool.ConfigureCBs(
+				time.Duration(ps.Config.CooldownSec)*time.Second,
+				time.Duration(ps.Config.BackoffCapSec)*time.Second,
+				v,
+			)
+			return v, nil
+		},
+		persist: func(cfg *config.Config, val interface{}) {
+			v, _ := toFloat64(val)
+			cfg.BackoffMultiplier = v
+		},
+	},
+	{
+		key: "cb_reset_sec",
+		apply: func(ps *ProviderState, raw interface{}) (interface{}, error) {
+			v, err := toInt(raw)
+			if err != nil || v < 1 {
+				return nil, fmt.Errorf("cb_reset_sec must be a positive integer")
+			}
+			ps.Proxy.upCB.SetResetTimeout(time.Duration(v) * time.Second)
+			ps.Config.CBResetSec = v
+			return v, nil
+		},
+		persist: func(cfg *config.Config, val interface{}) {
+			v, _ := toInt(val)
+			cfg.CBResetSec = v
+		},
+	},
+	{
+		key: "upstream_cb_threshold",
+		apply: func(ps *ProviderState, raw interface{}) (interface{}, error) {
+			v, err := toInt(raw)
+			if err != nil || v < 1 {
+				return nil, fmt.Errorf("upstream_cb_threshold must be a positive integer")
+			}
+			ps.Proxy.upCB.SetThreshold(v)
+			ps.Config.UpstreamCBThreshold = v
+			return v, nil
+		},
+		persist: func(cfg *config.Config, val interface{}) {
+			v, _ := toInt(val)
+			cfg.UpstreamCBThreshold = v
+		},
+	},
+	{
+		key: "log_level",
+		apply: func(ps *ProviderState, raw interface{}) (interface{}, error) {
+			s, ok := raw.(string)
+			if !ok {
+				return nil, fmt.Errorf("log_level must be a string")
+			}
+			v := strings.TrimSpace(strings.ToLower(s))
+			switch v {
+			case "debug", "info", "warn", "error":
+				ps.Config.LogLevel = v
+				return v, nil
+			}
+			return nil, fmt.Errorf("invalid log level, use: debug, info, warn, error")
+		},
+		persist: func(cfg *config.Config, val interface{}) {
+			v, _ := val.(string)
+			cfg.LogLevel = v
+		},
+	},
+}
+
+// lookupRuntimeConfigField returns the descriptor for key, or nil.
+func lookupRuntimeConfigField(key string) *runtimeConfigField {
+	for i := range runtimeConfigFields {
+		if runtimeConfigFields[i].key == key {
+			return &runtimeConfigFields[i]
+		}
+	}
+	return nil
+}
