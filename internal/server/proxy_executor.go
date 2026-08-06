@@ -192,10 +192,10 @@ func (px *ProxyExecutor) handleRateLimited(w http.ResponseWriter, ps *ProviderSt
 	slog.Warn("key rate limited", "provider", ps.Name(), "key_index", idx, "key_name", keyName, "status", resp.StatusCode, "cb_state", fmt.Sprintf("%d", pool.CB(idx).State()), "cb_retry", pool.CB(idx).Attempt(), "body_preview", MaskSensitiveData(string(body), 1024))
 	px.metrics.UpstreamErrors.WithLabelValues("rate_limited").Inc()
 
-	if pool.CB(idx).State() == circuitbreaker.Permanent {
+	if ps.PoolCB(idx).State() == circuitbreaker.Permanent {
 		slog.Warn("key quota exhausted, disabling permanently", "provider", ps.Name(), "key_index", idx, "key_name", keyName)
 		_ = pool.Disable(idx)
-		if pool.ActiveCount() == 0 {
+		if ps.PoolActiveCount() == 0 {
 			return px.writeAllKeysExhausted(w, ps, method, start)
 		}
 	}
@@ -217,9 +217,9 @@ func (px *ProxyExecutor) handleAuthRejected(w http.ResponseWriter, ps *ProviderS
 		ps.PersistKeys()
 		slog.Warn("key permanently disabled", "provider", ps.Name(), "key_index", idx, "key_name", keyName, "status", resp.StatusCode, "body_preview", MaskSensitiveData(string(body), 1024))
 	} else {
-		slog.Warn("key auth failure", "provider", ps.Name(), "key_index", idx, "key_name", keyName, "status", resp.StatusCode, "fail_count", pool.CB(idx).AuthFailCount())
+		slog.Warn("key auth failure", "provider", ps.Name(), "key_index", idx, "key_name", keyName, "status", resp.StatusCode, "fail_count", ps.pool.CB(idx).AuthFailCount())
 	}
-	if pool.ActiveCount() == 0 {
+	if ps.PoolActiveCount() == 0 {
 		writeProxyError(w, http.StatusServiceUnavailable, ErrorAllKeysInvalid, fmt.Sprintf("%s 所有 Key 已失效或吊销", ps.Name()))
 		px.recordProxyMetrics(method, "5xx", "", start)
 		return true
@@ -236,14 +236,14 @@ func (px *ProxyExecutor) handleServerError(ps *ProviderState, idx int, resp *htt
 	keyName, _ := pool.Name(idx)
 	slog.Warn("upstream server error", "provider", ps.Name(), "key_index", idx, "key_name", keyName, "status", resp.StatusCode, "body_preview", MaskSensitiveData(string(body), 1024))
 	px.metrics.UpstreamErrors.WithLabelValues("server_error").Inc()
-	ps.proxy.upCB.RecordFailure()
+	ps.RecordUpstreamFailure()
 }
 
 // handleNonRetryable copies a non-retryable 4xx response through to the client
 // without further retry attempts.
 func (px *ProxyExecutor) handleNonRetryable(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, method, target string, bodyBytes []byte, attempt int) {
 	defer func() { _ = resp.Body.Close() }()
-	keyName, _ := ps.pool.Name(idx)
+	keyName, _ := ps.PoolName(idx)
 	copyHeaders(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, resp.Body)
@@ -262,10 +262,7 @@ func (px *ProxyExecutor) handleNonRetryable(w http.ResponseWriter, ps *ProviderS
 func (px *ProxyExecutor) handleSuccess(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, method, target string, bodyBytes []byte, attempt int) {
 	pool := ps.pool
 	keyName, _ := pool.Name(idx)
-	upCB := ps.proxy.upCB
-
-	pool.RecordSuccess(idx)
-	upCB.RecordSuccess()
+	ps.RecordUpstreamSuccess()
 
 	copyHeaders(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
