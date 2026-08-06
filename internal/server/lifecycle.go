@@ -137,11 +137,11 @@ func (m *BackgroundTaskManager) StartKeyPoolMetrics(pool *keypool.KeyPool, provi
 
 // StartHealthCheck periodically probes the upstream endpoint and updates
 // the upstream circuit breaker state based on the response.
-func (m *BackgroundTaskManager) StartHealthCheck(cfg *config.Config, proxy *ProxyEngine, ps *ProviderState) {
+func (m *BackgroundTaskManager) StartHealthCheck(cfg *config.Config, ps *ProviderState) {
 	m.wg.Add(1)
 	go func() {
 		defer m.wg.Done()
-		ActiveHealthCheck(cfg, proxy, m.metrics, ps, m.stop)
+		ActiveHealthCheck(cfg, ps, m.metrics, m.stop)
 	}()
 }
 
@@ -193,7 +193,7 @@ func RefreshKeyPoolMetrics(metrics *akswitchmetrics.Metrics, pool *keypool.KeyPo
 
 // ActiveHealthCheck periodically probes the upstream endpoint and updates
 // the upstream circuit breaker state based on the response.
-func ActiveHealthCheck(cfg *config.Config, proxy *ProxyEngine, metrics *akswitchmetrics.Metrics, ps *ProviderState, stop <-chan struct{}) {
+func ActiveHealthCheck(cfg *config.Config, ps *ProviderState, metrics *akswitchmetrics.Metrics, stop <-chan struct{}) {
 	ticker := time.NewTicker(time.Duration(cfg.HealthCheckIntervalSec) * time.Second)
 	defer ticker.Stop()
 
@@ -207,7 +207,7 @@ func ActiveHealthCheck(cfg *config.Config, proxy *ProxyEngine, metrics *akswitch
 			return
 		case <-ticker.C:
 			target := cfg.TargetBase + cfg.HealthCheckPath
-			upCB := proxy.upCB
+			upCB := ps.UpstreamCB()
 
 			start := time.Now()
 			resp, err := hcClient.Head(target)
