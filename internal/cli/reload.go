@@ -15,22 +15,12 @@ import (
 // triggerReload sends a reload request to the running server.
 // Returns true if the server accepted the signal, false if unreachable or auth failed.
 func triggerReload() bool {
-	port := detectServerPort()
-
-	client := &http.Client{Timeout: 3 * time.Second}
-	url := fmt.Sprintf("http://%s:%d/api/reload", detectServerHost(), port)
-	req, err := http.NewRequest(http.MethodPost, url, nil)
+	client, err := NewAdminClient(3*time.Second, "")
 	if err != nil {
 		return false
 	}
-	token, tokErr := loadAdminTokenFromConfig()
-	if tokErr != nil {
-		fmt.Fprintf(os.Stderr, "warning: failed to load admin token from config: %v\n", tokErr)
-	} else if token != "" {
-		req.Header.Set("X-Admin-Token", token)
-	}
 
-	resp, err := client.Do(req)
+	resp, err := client.Get("/api/reload")
 	if err != nil {
 		return false
 	}
