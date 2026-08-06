@@ -30,7 +30,7 @@ func TestKeyOperationHandler_Disable(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
 	}
-	if !pr.Provider("test").Pool.IsDisabled(0) {
+	if !pr.Provider("test").pool.IsDisabled(0) {
 		t.Error("key 0 should be disabled, but it is not")
 	}
 }
@@ -42,7 +42,7 @@ func TestKeyOperationHandler_Enable(t *testing.T) {
 	})
 
 	// First disable key 0
-	pr.Provider("test").Pool.Disable(0)
+	pr.Provider("test").pool.Disable(0)
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/api/keys/1/enable", nil)
@@ -52,7 +52,7 @@ func TestKeyOperationHandler_Enable(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
 	}
-	if pr.Provider("test").Pool.IsDisabled(0) {
+	if pr.Provider("test").pool.IsDisabled(0) {
 		t.Error("key 0 should be enabled, but it is disabled")
 	}
 }
@@ -87,8 +87,8 @@ func TestKeyOperationHandler_Delete(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
 	}
-	if pr.Provider("test").Pool.Len() != 1 {
-		t.Errorf("pool length = %d, want 1", pr.Provider("test").Pool.Len())
+	if pr.Provider("test").pool.Len() != 1 {
+		t.Errorf("pool length = %d, want 1", pr.Provider("test").pool.Len())
 	}
 }
 
@@ -304,12 +304,12 @@ func TestHandleRuntimeConfigSet_ProviderAll(t *testing.T) {
 
 	// Verify both providers' runtime config was updated
 	testPs := pr.Provider("test")
-	if testPs.Config.CooldownSec != 60 {
-		t.Errorf("test CooldownSec = %d, want 60", testPs.Config.CooldownSec)
+	if testPs.config.CooldownSec != 60 {
+		t.Errorf("test CooldownSec = %d, want 60", testPs.config.CooldownSec)
 	}
 	providerBPs := pr.Provider("provider-b")
-	if providerBPs.Config.CooldownSec != 60 {
-		t.Errorf("provider-b CooldownSec = %d, want 60", providerBPs.Config.CooldownSec)
+	if providerBPs.config.CooldownSec != 60 {
+		t.Errorf("provider-b CooldownSec = %d, want 60", providerBPs.config.CooldownSec)
 	}
 }
 
@@ -363,23 +363,23 @@ func TestRuntimeConfigField_Apply(t *testing.T) {
 	pr := newTestRouterWithKeys(t, []string{"sk-key-0"})
 	ps := pr.Provider("test")
 
-	origTimeout := ps.Config.HTTPTimeoutSec
-	origRetries := ps.Config.MaxRetries
-	origCooldown := ps.Config.CooldownSec
-	origBackoffCap := ps.Config.BackoffCapSec
-	origBackoffMult := ps.Config.BackoffMultiplier
-	origCBReset := ps.Config.CBResetSec
-	origUpThreshold := ps.Config.UpstreamCBThreshold
-	origLogLevel := ps.Config.LogLevel
+	origTimeout := ps.config.HTTPTimeoutSec
+	origRetries := ps.config.MaxRetries
+	origCooldown := ps.config.CooldownSec
+	origBackoffCap := ps.config.BackoffCapSec
+	origBackoffMult := ps.config.BackoffMultiplier
+	origCBReset := ps.config.CBResetSec
+	origUpThreshold := ps.config.UpstreamCBThreshold
+	origLogLevel := ps.config.LogLevel
 	defer func() {
-		ps.Config.HTTPTimeoutSec = origTimeout
-		ps.Config.MaxRetries = origRetries
-		ps.Config.CooldownSec = origCooldown
-		ps.Config.BackoffCapSec = origBackoffCap
-		ps.Config.BackoffMultiplier = origBackoffMult
-		ps.Config.CBResetSec = origCBReset
-		ps.Config.UpstreamCBThreshold = origUpThreshold
-		ps.Config.LogLevel = origLogLevel
+		ps.config.HTTPTimeoutSec = origTimeout
+		ps.config.MaxRetries = origRetries
+		ps.config.CooldownSec = origCooldown
+		ps.config.BackoffCapSec = origBackoffCap
+		ps.config.BackoffMultiplier = origBackoffMult
+		ps.config.CBResetSec = origCBReset
+		ps.config.UpstreamCBThreshold = origUpThreshold
+		ps.config.LogLevel = origLogLevel
 	}()
 
 	tests := []struct {
@@ -391,53 +391,53 @@ func TestRuntimeConfigField_Apply(t *testing.T) {
 	}{
 		{name: "http_timeout_sec valid", key: "http_timeout_sec", value: 30, wantErr: false,
 			check: func(t *testing.T, ps *ProviderState) {
-				if got := ps.Proxy.client.Timeout; got != 30*time.Second {
+				if got := ps.proxy.client.Timeout; got != 30*time.Second {
 					t.Errorf("Timeout = %v, want 30s", got)
 				}
 			}},
 		{name: "http_timeout_sec invalid zero", key: "http_timeout_sec", value: 0, wantErr: true},
 		{name: "max_retries valid", key: "max_retries", value: 3, wantErr: false,
 			check: func(t *testing.T, ps *ProviderState) {
-				if ps.Config.MaxRetries != 3 {
-					t.Errorf("MaxRetries = %d, want 3", ps.Config.MaxRetries)
+				if ps.config.MaxRetries != 3 {
+					t.Errorf("MaxRetries = %d, want 3", ps.config.MaxRetries)
 				}
 			}},
 		{name: "max_retries zero", key: "max_retries", value: 0, wantErr: false},
 		{name: "cooldown_sec valid", key: "cooldown_sec", value: 60, wantErr: false,
 			check: func(t *testing.T, ps *ProviderState) {
-				if ps.Config.CooldownSec != 60 {
-					t.Errorf("CooldownSec = %d, want 60", ps.Config.CooldownSec)
+				if ps.config.CooldownSec != 60 {
+					t.Errorf("CooldownSec = %d, want 60", ps.config.CooldownSec)
 				}
 			}},
 		{name: "backoff_cap_sec valid", key: "backoff_cap_sec", value: 120, wantErr: false,
 			check: func(t *testing.T, ps *ProviderState) {
-				if ps.Config.BackoffCapSec != 120 {
-					t.Errorf("BackoffCapSec = %d, want 120", ps.Config.BackoffCapSec)
+				if ps.config.BackoffCapSec != 120 {
+					t.Errorf("BackoffCapSec = %d, want 120", ps.config.BackoffCapSec)
 				}
 			}},
 		{name: "backoff_multiplier valid", key: "backoff_multiplier", value: 3.0, wantErr: false,
 			check: func(t *testing.T, ps *ProviderState) {
-				if ps.Config.BackoffMultiplier != 3.0 {
-					t.Errorf("BackoffMultiplier = %f, want 3.0", ps.Config.BackoffMultiplier)
+				if ps.config.BackoffMultiplier != 3.0 {
+					t.Errorf("BackoffMultiplier = %f, want 3.0", ps.config.BackoffMultiplier)
 				}
 			}},
 		{name: "backoff_multiplier invalid", key: "backoff_multiplier", value: 0, wantErr: true},
 		{name: "cb_reset_sec valid", key: "cb_reset_sec", value: 45, wantErr: false,
 			check: func(t *testing.T, ps *ProviderState) {
-				if ps.Config.CBResetSec != 45 {
-					t.Errorf("CBResetSec = %d, want 45", ps.Config.CBResetSec)
+				if ps.config.CBResetSec != 45 {
+					t.Errorf("CBResetSec = %d, want 45", ps.config.CBResetSec)
 				}
 			}},
 		{name: "upstream_cb_threshold valid", key: "upstream_cb_threshold", value: 10, wantErr: false,
 			check: func(t *testing.T, ps *ProviderState) {
-				if ps.Config.UpstreamCBThreshold != 10 {
-					t.Errorf("UpstreamCBThreshold = %d, want 10", ps.Config.UpstreamCBThreshold)
+				if ps.config.UpstreamCBThreshold != 10 {
+					t.Errorf("UpstreamCBThreshold = %d, want 10", ps.config.UpstreamCBThreshold)
 				}
 			}},
 		{name: "log_level valid debug", key: "log_level", value: "debug", wantErr: false,
 			check: func(t *testing.T, ps *ProviderState) {
-				if ps.Config.LogLevel != "debug" {
-					t.Errorf("LogLevel = %q, want debug", ps.Config.LogLevel)
+				if ps.config.LogLevel != "debug" {
+					t.Errorf("LogLevel = %q, want debug", ps.config.LogLevel)
 				}
 			}},
 		{name: "unknown key", key: "nonexistent", value: "x", wantErr: true},
