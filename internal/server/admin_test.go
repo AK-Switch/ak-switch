@@ -372,14 +372,14 @@ func TestRuntimeConfigField_Apply(t *testing.T) {
 	origUpThreshold := ps.config.UpstreamCBThreshold
 	origLogLevel := ps.config.LogLevel
 	defer func() {
-		ps.config.HTTPTimeoutSec = origTimeout
-		ps.config.MaxRetries = origRetries
-		ps.config.CooldownSec = origCooldown
-		ps.config.BackoffCapSec = origBackoffCap
-		ps.config.BackoffMultiplier = origBackoffMult
-		ps.config.CBResetSec = origCBReset
-		ps.config.UpstreamCBThreshold = origUpThreshold
-		ps.config.LogLevel = origLogLevel
+		ps.SetHTTPTimeoutSec(origTimeout)
+		ps.SetMaxRetries(origRetries)
+		ps.SetCooldownSec(origCooldown)
+		ps.SetBackoffCapSec(origBackoffCap)
+		ps.SetBackoffMultiplier(origBackoffMult)
+		ps.SetCBResetSec(origCBReset)
+		ps.SetUpstreamCBThreshold(origUpThreshold)
+		ps.SetLogLevel(origLogLevel)
 	}()
 
 	tests := []struct {
