@@ -15,6 +15,8 @@ import (
 	"akswitch/internal/keypool"
 	"akswitch/internal/logentry"
 
+	"net/url"
+
 	"github.com/spf13/cobra"
 )
 
@@ -504,60 +506,47 @@ Example:
 		fmt.Printf("Provider: %s%s\n", name, defaultMark)
 
 		// Runtime status (try server)
-		client := &http.Client{Timeout: 3 * time.Second}
-		port := detectServerPort()
-		host := detectServerHost()
-		healthURL := fmt.Sprintf("http://%s:%d/health", host, port)
-		healthReq, err := http.NewRequest(http.MethodGet, healthURL, nil)
-		if err == nil {
-			if token, tokErr := loadAdminTokenFromConfig(); tokErr == nil && token != "" {
-				healthReq.Header.Set("X-Admin-Token", token)
-			}
-		}
-		healthResp, err := client.Do(healthReq)
-		if err == nil {
-			body, _ := io.ReadAll(healthResp.Body)
-			_ = healthResp.Body.Close()
-			if healthResp.StatusCode == http.StatusOK {
-				var healthData map[string]interface{}
-				if json.Unmarshal(body, &healthData) == nil {
-					if details, ok := healthData["details"]; ok {
-						if det, ok2 := details.(map[string]interface{}); ok2 {
-							if info, ok3 := det[name]; ok3 {
-								if inf, ok4 := info.(map[string]interface{}); ok4 {
-									cbState := "unknown"
-									if cs, ok5 := inf["upstream_cb_state"]; ok5 {
-										cbState = fmt.Sprintf("%v", cs)
+		client, clientErr := NewAdminClient(3*time.Second, "")
+		if clientErr == nil {
+			healthPath := "/health?provider=" + url.QueryEscape(name)
+			healthReq, _ := http.NewRequest(http.MethodGet, client.baseURL+healthPath, nil)
+			healthResp, herr := client.Do(healthReq)
+			if herr == nil {
+				body, _ := io.ReadAll(healthResp.Body)
+				_ = healthResp.Body.Close()
+				if healthResp.StatusCode == http.StatusOK {
+					var healthData map[string]interface{}
+					if json.Unmarshal(body, &healthData) == nil {
+						if details, ok := healthData["details"]; ok {
+							if det, ok2 := details.(map[string]interface{}); ok2 {
+								if info, ok3 := det[name]; ok3 {
+									if inf, ok4 := info.(map[string]interface{}); ok4 {
+										cbState := "unknown"
+										if cs, ok5 := inf["upstream_cb_state"]; ok5 {
+											cbState = fmt.Sprintf("%v", cs)
+										}
+										fmt.Printf("  Status:  running  →  %s\n", client.baseURL)
+										fmt.Printf("  CB:      %s\n", cbState)
 									}
-									fmt.Printf("  Status:  running  →  http://%s:%d\n", host, port)
-									fmt.Printf("  CB:      %s\n", cbState)
 								}
 							}
 						}
 					}
 				}
-			}
 
-			// Stats
-			statsURL := fmt.Sprintf("http://%s:%d/api/stats", host, port)
-			statsReq, err := http.NewRequest(http.MethodGet, statsURL, nil)
-			if err == nil {
-				if token, tokErr := loadAdminTokenFromConfig(); tokErr == nil && token != "" {
-					statsReq.Header.Set("X-Admin-Token", token)
+				// Stats
+				statsPath := "/api/stats?provider=" + url.QueryEscape(name)
+				statsResp, serr := client.Get(statsPath)
+				if serr == nil {
+					statsBody, _ := io.ReadAll(statsResp.Body)
+					_ = statsResp.Body.Close()
+					var stats map[string]interface{}
+					if json.Unmarshal(statsBody, &stats) == nil {
+						fmt.Printf("  Requests: %v (success: %v, failed: %v)\n",
+							stats["total_requests"], stats["successful_requests"], stats["failed_requests"])
+					}
 				}
 			}
-			statsResp, err := client.Do(statsReq)
-			if err == nil {
-				statsBody, _ := io.ReadAll(statsResp.Body)
-				_ = statsResp.Body.Close()
-				var stats map[string]interface{}
-				if json.Unmarshal(statsBody, &stats) == nil {
-					fmt.Printf("  Requests: %v (success: %v, failed: %v)\n",
-						stats["total_requests"], stats["successful_requests"], stats["failed_requests"])
-				}
-			}
-		} else {
-			fmt.Println("  Status:  not running")
 		}
 
 		// Config section
