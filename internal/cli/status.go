@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -24,49 +25,46 @@ var statusCmd = &cobra.Command{
 	Long:  `Query the running akswitch server and display health, key counts, and request statistics.` + "\n" + `Optional provider name filters output to a single provider.`,
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client := &http.Client{Timeout: 3 * time.Second}
-		port := detectServerPort()
-		host := detectServerHost()
+		client, err := NewAdminClient(3*time.Second, "")
+		if err != nil {
+			return err
+		}
 
 		providerName := ""
 		if len(args) > 0 {
 			providerName = args[0]
 		}
 
-		healthURL := fmt.Sprintf("http://%s:%d/health", host, port)
+		healthPath := "/health"
 		if providerName != "" {
-			healthURL += "?provider=" + providerName
+			healthPath += "?provider=" + url.QueryEscape(providerName)
 		}
-		healthReq, err := http.NewRequest(http.MethodGet, healthURL, nil)
+		healthReq, err := http.NewRequest(http.MethodGet, client.baseURL+healthPath, nil)
 		if err != nil {
-			return fmt.Errorf("server not reachable at %s: %w", healthURL, err)
+			return fmt.Errorf("server not reachable at %s: %w", client.baseURL+healthPath, err)
 		}
-		if token, tokErr := loadAdminTokenFromConfig(); tokErr == nil && token != "" {
-			healthReq.Header.Set("X-Admin-Token", token)
-		}
-
-		resp, err := client.Do(healthReq)
+		healthResp, err := client.Do(healthReq)
 		if err != nil {
-			return fmt.Errorf("server not reachable at %s: %w", healthURL, err)
+			return fmt.Errorf("server not reachable at %s: %w", client.baseURL+healthPath, err)
 		}
-		defer func() { _ = resp.Body.Close() }()
+		defer func() { _ = healthResp.Body.Close() }()
 
-		body, _ := io.ReadAll(resp.Body)
-		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-			return fmt.Errorf("auth failed (HTTP %d): check X-Admin-Token in server config", resp.StatusCode)
+		body, _ := io.ReadAll(healthResp.Body)
+		if healthResp.StatusCode == http.StatusUnauthorized || healthResp.StatusCode == http.StatusForbidden {
+			return fmt.Errorf("auth failed (HTTP %d): check X-Admin-Token in server config", healthResp.StatusCode)
 		}
-		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("server returned (HTTP %d): %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		if healthResp.StatusCode != http.StatusOK {
+			return fmt.Errorf("server returned (HTTP %d): %s", healthResp.StatusCode, strings.TrimSpace(string(body)))
 		}
 		var healthData map[string]interface{}
 		if err := json.Unmarshal(body, &healthData); err != nil {
 			if len(body) > 0 && body[0] != '{' && body[0] != '[' {
-				return fmt.Errorf("server not running or returned unexpected response (HTTP %d)", resp.StatusCode)
+				return fmt.Errorf("server not running or returned unexpected response (HTTP %d)", healthResp.StatusCode)
 			}
 			return fmt.Errorf("failed to parse health response: %w", err)
 		}
 
-		fmt.Printf("Server: http://%s:%d\n", host, port)
+		fmt.Printf("Server: %s\n", client.baseURL)
 		fmt.Printf("Status: %s\n", healthData["status"])
 
 		if providers, ok := healthData["providers"]; ok {
@@ -80,21 +78,13 @@ var statusCmd = &cobra.Command{
 		}
 
 		// Query stats endpoint
-		statsURL := fmt.Sprintf("http://%s:%d/api/stats", host, port)
+		statsPath := "/api/stats"
 		if providerName != "" {
-			statsURL += "?provider=" + providerName
+			statsPath += "?provider=" + url.QueryEscape(providerName)
 		}
-		statsReq, err := http.NewRequest(http.MethodGet, statsURL, nil)
+		statsResp, err := client.Get(statsPath)
 		if err != nil {
-			return fmt.Errorf("server not reachable at %s: %w", statsURL, err)
-		}
-		if token, tokErr := loadAdminTokenFromConfig(); tokErr == nil && token != "" {
-			statsReq.Header.Set("X-Admin-Token", token)
-		}
-
-		statsResp, err := client.Do(statsReq)
-		if err != nil {
-			return fmt.Errorf("server not reachable at %s: %w", statsURL, err)
+			return fmt.Errorf("server not reachable at %s: %w", client.baseURL+statsPath, err)
 		}
 		defer func() { _ = statsResp.Body.Close() }()
 

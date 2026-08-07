@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"strings"
 	"time"
 
@@ -27,16 +26,16 @@ Examples:
   akswitch log-level debug # set level to debug`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client := &http.Client{Timeout: 5 * time.Second}
-		port := detectServerPort()
-		host := detectServerHost()
-		baseURL := fmt.Sprintf("http://%s:%d/api/log-level", host, port)
+		client, err := NewAdminClient(5*time.Second, "")
+		if err != nil {
+			return fmt.Errorf("server not reachable at %s:%d: %w", detectServerHost(), detectServerPort(), err)
+		}
 
 		if len(args) == 0 {
 			// GET — show current log level
-			resp, err := client.Get(baseURL)
+			resp, err := client.Get("/api/log-level")
 			if err != nil {
-				return fmt.Errorf("server not reachable at %s:%d: %w", host, port, err)
+				return fmt.Errorf("server not reachable at %s: %w", client.baseURL, err)
 			}
 			defer func() { _ = resp.Body.Close() }()
 
@@ -59,9 +58,9 @@ Examples:
 		}
 
 		payload := fmt.Sprintf(`{"level":"%s"}`, level)
-		resp, err := client.Post(baseURL, "application/json", strings.NewReader(payload))
+		resp, err := client.Post("/api/log-level", "application/json", strings.NewReader(payload))
 		if err != nil {
-			return fmt.Errorf("server not reachable at %s:%d: %w", host, port, err)
+			return fmt.Errorf("server not reachable at %s: %w", client.baseURL, err)
 		}
 		defer func() { _ = resp.Body.Close() }()
 

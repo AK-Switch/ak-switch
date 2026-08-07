@@ -564,27 +564,18 @@ var keyEnableCmd = &cobra.Command{
 // resetUpstreamCB sends a POST to the running server to reset the upstream
 // circuit breaker for the specified provider.
 func resetUpstreamCB(provider string) error {
-	port := detectServerPort()
-	client := &http.Client{Timeout: 5 * time.Second}
-	url := fmt.Sprintf("http://%s:%d/api/stats/reset-upstream-cb?provider=%s",
-		detectServerHost(), port, url.QueryEscape(provider))
-
-	req, err := http.NewRequest(http.MethodPost, url, nil)
+	client, err := NewAdminClient(5*time.Second, provider)
 	if err != nil {
 		return err
 	}
-	if token, tokErr := loadAdminToken(provider); tokErr == nil && token != "" {
-		req.Header.Set("X-Admin-Token", token)
-	}
-
-	resp, err := client.Do(req)
+	path := "/api/stats/reset-upstream-cb?provider=" + url.QueryEscape(provider)
+	resp, err := client.Post(path, "application/json", nil)
 	if err != nil {
 		return fmt.Errorf("server not reachable: %w", err)
 	}
-	_ = resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
-
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		return fmt.Errorf("auth failed (HTTP %d): check X-Admin-Token in server config", resp.StatusCode)
 	}
@@ -674,36 +665,32 @@ func loadAdminToken(provider string) (string, error) {
 // Supported operations: "cooldown", "enable", "disable".
 // Returns nil on success, error if server is unreachable or API returns an error.
 func callKeyRuntimeAPI(provider string, idx int, operation string) error {
-	client := &http.Client{Timeout: 5 * time.Second}
-	baseURL := fmt.Sprintf("http://%s:%d/api/keys/%d/%s?provider=%s",
-		detectServerHost(), detectServerPort(), idx, operation, url.QueryEscape(provider))
+	client, err := NewAdminClient(5*time.Second, provider)
+	if err != nil {
+		return fmt.Errorf("server not reachable: %w", err)
+	}
 
+	path := fmt.Sprintf("/api/keys/%d/%s?provider=%s", idx, operation, url.QueryEscape(provider))
 	var reqBody io.Reader
 	if operation == "cooldown" {
 		reqBody = strings.NewReader(`{}`)
 	}
-
 	method := http.MethodPost
 	if operation == "cooldown" {
 		method = http.MethodPut
 	}
-	req, err := http.NewRequest(method, baseURL, reqBody)
+	req, err := http.NewRequest(method, client.baseURL+path, reqBody)
 	if err != nil {
-		return err
+		return fmt.Errorf("server not reachable: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if token, tokErr := loadAdminToken(provider); tokErr == nil && token != "" {
-		req.Header.Set("X-Admin-Token", token)
-	}
-
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("server not reachable: %w", err)
 	}
-	_ = resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
-
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		return fmt.Errorf("auth failed (HTTP %d): check X-Admin-Token in server config", resp.StatusCode)
 	}
@@ -715,25 +702,19 @@ func callKeyRuntimeAPI(provider string, idx int, operation string) error {
 
 // keyListRuntime queries the running server's /api/keys endpoint for live status.
 func keyListRuntime(provider string) error {
-	client := &http.Client{Timeout: 5 * time.Second}
-	url := fmt.Sprintf("http://%s:%d/api/keys?provider=%s", detectServerHost(), detectServerPort(), url.QueryEscape(provider))
-
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	client, err := NewAdminClient(5*time.Second, provider)
 	if err != nil {
 		return fmt.Errorf("server not reachable: %w", err)
 	}
-	if token, tokErr := loadAdminToken(provider); tokErr == nil && token != "" {
-		req.Header.Set("X-Admin-Token", token)
-	}
 
-	resp, err := client.Do(req)
+	path := "/api/keys?provider=" + url.QueryEscape(provider)
+	resp, err := client.Get(path)
 	if err != nil {
 		return fmt.Errorf("server not reachable: %w", err)
 	}
-	_ = resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
-
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		return fmt.Errorf("auth failed (HTTP %d): check X-Admin-Token in server config", resp.StatusCode)
 	}
