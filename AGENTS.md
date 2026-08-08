@@ -5,7 +5,7 @@ AK-Switch 是一个 AI API Key 代理网关（Go 1.26 + Cobra），为多个 LLM
 ## Dev Environment Tips
 
 - 安装依赖: `go mod download`
-- 构建: `make build`（输出 `bin/akswitch`）
+- 构建: `go install ./cmd/akswitch/`（安装到 $GOPATH/bin）
 - Docker 本地运行: `docker compose up -d`（需要 `deployments/docker-compose.yml`）
 - Go 1.26 必须安装。验证: `go version`
 
@@ -13,7 +13,7 @@ AK-Switch 是一个 AI API Key 代理网关（Go 1.26 + Cobra），为多个 LLM
 
 | 命令 | 用途 |
 |------|------|
-| `make build` | 编译二进制 |
+| `go install ./cmd/akswitch/` | 编译并安装到 $GOPATH/bin |
 | `make fmt` | 格式化源码 (`go fmt`) |
 | `make lint` | golangci-lint |
 | `make vet` | `go vet ./...` |
