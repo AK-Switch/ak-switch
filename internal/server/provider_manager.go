@@ -66,11 +66,16 @@ func (pm *ProviderManager) FirstProvider() *ProviderState {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 
-	names := pm.ProviderNames()
-	if len(names) == 0 {
+	var first string
+	for name := range pm.providers {
+		if first == "" || name < first {
+			first = name
+		}
+	}
+	if first == "" {
 		return nil
 	}
-	return pm.providers[names[0]]
+	return pm.providers[first]
 }
 
 // ForEach iterates over a snapshot of all providers.
