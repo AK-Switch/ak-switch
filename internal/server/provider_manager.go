@@ -73,11 +73,18 @@ func (pm *ProviderManager) FirstProvider() *ProviderState {
 	return pm.providers[names[0]]
 }
 
-// ForEach iterates over all providers.
+// ForEach iterates over a snapshot of all providers.
+// The snapshot is copied under the read lock, then the callback
+// executes without holding the lock to avoid deadlocks.
 func (pm *ProviderManager) ForEach(fn func(name string, ps *ProviderState)) {
 	pm.mu.RLock()
-	defer pm.mu.RUnlock()
+	providers := make(map[string]*ProviderState, len(pm.providers))
 	for name, ps := range pm.providers {
+		providers[name] = ps
+	}
+	pm.mu.RUnlock()
+
+	for name, ps := range providers {
 		fn(name, ps)
 	}
 }
