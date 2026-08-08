@@ -65,10 +65,12 @@ func (pm *ProviderManager) LookupProvider(name string) *ProviderState {
 func (pm *ProviderManager) FirstProvider() *ProviderState {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
-	for _, ps := range pm.providers {
-		return ps
+
+	names := pm.ProviderNames()
+	if len(names) == 0 {
+		return nil
 	}
-	return nil
+	return pm.providers[names[0]]
 }
 
 // ForEach iterates over all providers.
