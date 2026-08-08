@@ -5,26 +5,27 @@ AK-Switch 是一个 AI API Key 代理网关（Go 1.26 + Cobra），为多个 LLM
 ## Dev Environment Tips
 
 - 安装依赖: `go mod download`
-- 构建: `go install ./cmd/akswitch/`（安装到 $GOPATH/bin）
-- Docker 本地运行: `docker compose up -d`（需要 `deployments/docker-compose.yml`）
+- 构建输出到 `bin/akswitch`: `make build`
+- 直接安装到 $GOPATH/bin: `go install ./cmd/akswitch/`
 - Go 1.26 必须安装。验证: `go version`
 
 ## Build & Test
 
 | 命令 | 用途 |
 |------|------|
-| `go install ./cmd/akswitch/` | 编译并安装到 $GOPATH/bin |
+| `make build` | 编译二进制到 `bin/akswitch` |
+| `go install ./cmd/akswitch/` | 编译并安装到 `$GOPATH/bin` |
 | `make fmt` | 格式化源码 (`go fmt`) |
 | `make lint` | golangci-lint |
 | `make vet` | `go vet ./...` |
 | `make check` | lint + vet + fmt（提交前必须执行） |
-| `make test-unit` | 单元测试 (`-tags=unit`) |
-| `make test-integration` | 集成测试 (`-tags=integration`, 需要 Docker) |
-| `make test-e2e` | E2E 测试 (`-tags=e2e`, 仅 Windows) |
+| `make test-unit` | 单元测试 (`-tags=unit -short`) |
+| `make test-integration` | 集成测试 (`-tags=integration -race`, 需要 Docker) |
+| `make test-e2e` | E2E 测试 (`-tags=e2e -race`, 仅 Windows) |
 | `make test-all` | 全量测试 |
 
-单包测试: `go test -tags=unit -count=1 ./internal/server/`
-单测试: `go test -tags=unit -count=1 -run TestName ./internal/server/`
+单包测试: `go test -tags=unit -count=1 -short ./internal/server/`
+单测试: `go test -tags=unit -count=1 -short -run TestName ./internal/server/`
 
 ## Project Structure
 
@@ -99,3 +100,11 @@ ps.SetMaxRetries(3)
 - **Key 持久化不自动**: `PersistKeys()` 需手动调用，修改 Key 池后不持久化则重启丢失
 - **Makefile 用 Tab**: 编辑 Makefile 时确保用 Tab 而非空格缩进（golangci-lint 不检查 Makefile，但 `make` 会报错）
 - **Config 字段分两组**: 启动配置在 `ProviderConfig`（TOML 解析），运行时配置在 `RuntimeConfig`（Admin API 热更新）。改配置字段前先确认属于哪组
+
+## Verification Loop
+
+修改代码后按此顺序自验证：
+
+1. `make check` — lint + vet + fmt
+2. `make test-unit` — 单元测试（不需要 Docker）
+3. 改的是 proxy / Admin API / config 逻辑时，额外跑单包测试：`go test -tags=unit -count=1 -short ./internal/server/`
