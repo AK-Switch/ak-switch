@@ -27,4 +27,4 @@ USER appuser
 ENTRYPOINT ["/akswitch"]
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget -s http://localhost:3000/health
+  CMD wget -q -O - http://localhost:3000/health || exit 1
