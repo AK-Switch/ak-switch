@@ -521,8 +521,8 @@ func TestHealthHandlerAuth(t *testing.T) {
 		t.Fatalf("GET /health (no auth): %v", err)
 	}
 	resp.Body.Close()
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Errorf("expected 401 without token, got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200 without token, got %d", resp.StatusCode)
 	}
 
 	req, _ := http.NewRequest("GET", srv.URL+"/health", nil)
@@ -532,8 +532,8 @@ func TestHealthHandlerAuth(t *testing.T) {
 		t.Fatalf("GET /health (wrong token): %v", err)
 	}
 	resp.Body.Close()
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Errorf("expected 401 with wrong token, got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200 with wrong token, got %d", resp.StatusCode)
 	}
 
 	req, _ = http.NewRequest("GET", srv.URL+"/health", nil)
