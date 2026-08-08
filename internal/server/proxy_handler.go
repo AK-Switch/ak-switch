@@ -4,6 +4,7 @@ import (
 	"akswitch/internal/config"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -50,11 +51,13 @@ func readRequestBody(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 
 // buildTargetURL constructs the upstream URL.
 func buildTargetURL(cfg *config.Config, path, rawQuery string) string {
-	if strings.HasSuffix(cfg.TargetBase, "/v1") && strings.HasPrefix(path, "/v1") {
-		path = path[3:]
+	base, _ := url.Parse(cfg.TargetBase)
+	if strings.HasSuffix(base.Path, "/v1") && strings.HasPrefix(path, "/v1") {
+		path = path[len("/v1"):]
 	}
+	base.Path = strings.TrimRight(base.Path, "/") + path
 	if rawQuery != "" {
-		path += "?" + rawQuery
+		base.RawQuery = rawQuery
 	}
-	return cfg.TargetBase + path
+	return base.String()
 }
