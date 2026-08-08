@@ -86,7 +86,7 @@ func SaveFullStore(path string, store *KeyStore) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(path, data, 0600)
 }
 
 // SaveKeys saves a KeyStore for a provider using the system keyring.
@@ -112,13 +112,14 @@ func SaveKeysInsecure(provider string, store *KeyStore) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(path, data, 0600)
 }
 
 // LoadKeys loads a KeyStore for a provider from the system keyring.
 // If no keyring data is found, attempts fallback backends in order:
-//   1. Insecure plaintext file (<XDG config dir>/keys/<provider>.json)
-//   2. Migration from old encrypted file (<XDG config dir>/keys/<provider>.enc)
+//  1. Insecure plaintext file (<XDG config dir>/keys/<provider>.json)
+//  2. Migration from old encrypted file (<XDG config dir>/keys/<provider>.enc)
+//
 // Returns (nil, nil) if no stored keys exist in any backend.
 func LoadKeys(provider string) (*KeyStore, error) {
 	// 1. Try keyring first
@@ -147,7 +148,7 @@ func LoadKeys(provider string) (*KeyStore, error) {
 	// Migrate to keyring — best-effort; if it fails, keep old file
 	if saveErr := saveToKeyring(provider, oldStore); saveErr == nil {
 		src, _ := os.ReadFile(oldPath)
-		_ = os.WriteFile(oldPath+".bak", src, 0644)
+		_ = os.WriteFile(oldPath+".bak", src, 0600)
 		_ = os.Remove(oldPath)
 		return oldStore, nil
 	}
