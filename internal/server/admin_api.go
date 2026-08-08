@@ -820,7 +820,8 @@ func (api *AdminAPI) checkAdminToken(w http.ResponseWriter, r *http.Request, pro
 }
 
 // checkAnyAdminToken validates the X-Admin-Token header against any configured admin token.
-// Access is always denied unless a valid token matches at least one provider's AdminToken.
+// If no provider has an AdminToken configured, access is allowed (no auth enforced).
+// When tokens are configured, a matching token is required.
 func (api *AdminAPI) checkAnyAdminToken(w http.ResponseWriter, r *http.Request) bool {
 	token := r.Header.Get("X-Admin-Token")
 	matched := false
@@ -834,12 +835,11 @@ func (api *AdminAPI) checkAnyAdminToken(w http.ResponseWriter, r *http.Request) 
 			matched = true
 		}
 	})
-	if matched {
+	if !hasAnyToken {
 		return true
 	}
-	if !hasAnyToken {
-		http.Error(w, "admin token not configured", http.StatusForbidden)
-		return false
+	if matched {
+		return true
 	}
 	http.Error(w, "unauthorized", http.StatusUnauthorized)
 	return false
