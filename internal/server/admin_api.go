@@ -231,10 +231,6 @@ func (api *AdminAPI) keysHandler(w http.ResponseWriter, r *http.Request) {
 // ── Health Handler ──────────────────────────────────────
 
 func (api *AdminAPI) healthHandler(w http.ResponseWriter, r *http.Request) {
-	if !api.checkAnyAdminToken(w, r) {
-		return
-	}
-
 	pName := r.URL.Query().Get("provider")
 	type providerHealth struct {
 		Status            string `json:"status"`
