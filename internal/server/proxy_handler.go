@@ -51,7 +51,13 @@ func readRequestBody(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 
 // buildTargetURL constructs the upstream URL.
 func buildTargetURL(cfg *config.Config, path, rawQuery string) string {
-	base, _ := url.Parse(cfg.TargetBase)
+	base, err := url.Parse(cfg.TargetBase)
+	if err != nil || base == nil {
+		if rawQuery != "" {
+			path += "?" + rawQuery
+		}
+		return cfg.TargetBase + path
+	}
 	if strings.HasSuffix(base.Path, "/v1") && strings.HasPrefix(path, "/v1") {
 		path = path[len("/v1"):]
 	}
