@@ -137,6 +137,11 @@ func (ps *ProviderState) PoolCB(i int) *circuitbreaker.KeyCircuitBreaker { retur
 func (ps *ProviderState) PoolIsDisabled(i int) bool                      { return ps.pool.IsDisabled(i) }
 func (ps *ProviderState) PoolLen() int                                   { return ps.pool.Len() }
 func (ps *ProviderState) PoolAuthFailCount(idx int) int                  { return ps.pool.CB(idx).AuthFailCount() }
+func (ps *ProviderState) PoolDisable(i int) error                        { return ps.pool.Disable(i) }
+func (ps *ProviderState) PoolEnable(i int) error                         { return ps.pool.Enable(i) }
+func (ps *ProviderState) PoolCooldown(i int, d time.Duration) error      { return ps.pool.Cooldown(i, d) }
+func (ps *ProviderState) PoolRemoveKey(i int) error                      { return ps.pool.RemoveKey(i) }
+func (ps *ProviderState) PoolAddKey(key, name string) int                { return ps.pool.AddKey(key, name) }
 func (ps *ProviderState) ConfigurePoolCBs(base, backoffCap time.Duration, multiplier float64) {
 	ps.pool.ConfigureCBs(base, backoffCap, multiplier)
 }

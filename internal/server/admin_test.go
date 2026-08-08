@@ -18,8 +18,8 @@ import (
 
 func TestKeyOperationHandler_Disable(t *testing.T) {
 	pr := newTestRouterWithKeys(t, []string{"sk-key-0", "sk-key-1"})
-	handler := pr.api.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
-		return pool.Disable(idx)
+	handler := pr.api.keyOperationHandler(func(ps *ProviderState, idx int) error {
+		return ps.PoolDisable(idx)
 	})
 
 	w := httptest.NewRecorder()
@@ -38,8 +38,8 @@ func TestKeyOperationHandler_Disable(t *testing.T) {
 
 func TestKeyOperationHandler_Enable(t *testing.T) {
 	pr := newTestRouterWithKeys(t, []string{"sk-key-0", "sk-key-1"})
-	handler := pr.api.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
-		return pool.Enable(idx)
+	handler := pr.api.keyOperationHandler(func(ps *ProviderState, idx int) error {
+		return ps.PoolEnable(idx)
 	})
 
 	// First disable key 0
@@ -61,8 +61,8 @@ func TestKeyOperationHandler_Enable(t *testing.T) {
 
 func TestKeyOperationHandler_Cooldown(t *testing.T) {
 	pr := newTestRouterWithKeys(t, []string{"sk-key-0", "sk-key-1"})
-	handler := pr.api.keyOperationHandler(func(pool *keypool.KeyPool, cfg *config.Config, idx int) error {
-		return pool.Cooldown(idx, time.Duration(cfg.CooldownSec)*time.Second)
+	handler := pr.api.keyOperationHandler(func(ps *ProviderState, idx int) error {
+		return ps.PoolCooldown(idx, time.Duration(ps.CooldownSec())*time.Second)
 	})
 
 	w := httptest.NewRecorder()
@@ -78,8 +78,8 @@ func TestKeyOperationHandler_Cooldown(t *testing.T) {
 
 func TestKeyOperationHandler_Delete(t *testing.T) {
 	pr := newTestRouterWithKeys(t, []string{"sk-key-0", "sk-key-1"})
-	handler := pr.api.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
-		return pool.RemoveKey(idx)
+	handler := pr.api.keyOperationHandler(func(ps *ProviderState, idx int) error {
+		return ps.PoolRemoveKey(idx)
 	})
 
 	w := httptest.NewRecorder()
@@ -98,8 +98,8 @@ func TestKeyOperationHandler_Delete(t *testing.T) {
 
 func TestKeyOperationHandler_ProviderNotFound(t *testing.T) {
 	pr := newTestRouterWithKeys(t, []string{"sk-key-0"})
-	handler := pr.api.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
-		return pool.Disable(idx)
+	handler := pr.api.keyOperationHandler(func(ps *ProviderState, idx int) error {
+		return ps.PoolDisable(idx)
 	})
 
 	w := httptest.NewRecorder()
@@ -123,8 +123,8 @@ func TestKeyOperationHandler_ProviderNotFound(t *testing.T) {
 
 func TestKeyOperationHandler_InvalidIndex(t *testing.T) {
 	pr := newTestRouterWithKeys(t, []string{"sk-key-0"})
-	handler := pr.api.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
-		return pool.Disable(idx)
+	handler := pr.api.keyOperationHandler(func(ps *ProviderState, idx int) error {
+		return ps.PoolDisable(idx)
 	})
 
 	w := httptest.NewRecorder()
@@ -141,8 +141,8 @@ func TestKeyOperationHandler_InvalidIndex(t *testing.T) {
 func TestKeyOperationHandler_IndexZero(t *testing.T) {
 	// API uses 1-based indexing, so index "0" should be rejected
 	pr := newTestRouterWithKeys(t, []string{"sk-key-0"})
-	handler := pr.api.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
-		return pool.Disable(idx)
+	handler := pr.api.keyOperationHandler(func(ps *ProviderState, idx int) error {
+		return ps.PoolDisable(idx)
 	})
 
 	w := httptest.NewRecorder()
@@ -158,8 +158,8 @@ func TestKeyOperationHandler_IndexZero(t *testing.T) {
 
 func TestKeyOperationHandler_IndexOutOfBounds(t *testing.T) {
 	pr := newTestRouterWithKeys(t, []string{"sk-key-0"})
-	handler := pr.api.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
-		return pool.Disable(idx)
+	handler := pr.api.keyOperationHandler(func(ps *ProviderState, idx int) error {
+		return ps.PoolDisable(idx)
 	})
 
 	w := httptest.NewRecorder()
@@ -181,8 +181,8 @@ func TestKeyOperationHandler_AdminTokenRequired(t *testing.T) {
 	pool := keypool.NewKeyPool(cfg.Keys, nil)
 	pr.AddProvider("test", cfg, pool)
 
-	handler := pr.api.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
-		return pool.Disable(idx)
+	handler := pr.api.keyOperationHandler(func(ps *ProviderState, idx int) error {
+		return ps.PoolDisable(idx)
 	})
 
 	w := httptest.NewRecorder()
@@ -197,8 +197,8 @@ func TestKeyOperationHandler_AdminTokenRequired(t *testing.T) {
 
 func TestKeyOperationHandler_OperationError(t *testing.T) {
 	pr := newTestRouterWithKeys(t, []string{"sk-key-0"})
-	handler := pr.api.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
-		return pool.Disable(999) // out-of-range inside operation
+	handler := pr.api.keyOperationHandler(func(ps *ProviderState, idx int) error {
+		return ps.PoolDisable(999) // out-of-range inside operation
 	})
 
 	w := httptest.NewRecorder()
