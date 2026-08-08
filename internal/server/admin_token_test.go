@@ -224,8 +224,11 @@ func TestCheckAnyAdminToken_AllNoToken(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 
 	got := pr.api.checkAnyAdminToken(w, r)
-	if !got {
-		t.Errorf("expected true (no tokens anywhere), got false")
+	if got {
+		t.Errorf("expected false (no tokens anywhere), got true")
+	}
+	if w.Code != http.StatusForbidden {
+		t.Errorf("status code = %d, want %d", w.Code, http.StatusForbidden)
 	}
 }
 
@@ -236,8 +239,11 @@ func TestCheckAnyAdminToken_EmptyRouter(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 
 	got := pr.api.checkAnyAdminToken(w, r)
-	if !got {
-		t.Errorf("expected true (empty router, no auth needed), got false")
+	if got {
+		t.Errorf("expected false (empty router, no auth needed), got true")
+	}
+	if w.Code != http.StatusForbidden {
+		t.Errorf("status code = %d, want %d", w.Code, http.StatusForbidden)
 	}
 }
 
