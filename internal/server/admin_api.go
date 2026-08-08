@@ -826,18 +826,17 @@ func (api *AdminAPI) checkAdminToken(w http.ResponseWriter, r *http.Request, pro
 // Access is always denied unless a valid token matches at least one provider's AdminToken.
 func (api *AdminAPI) checkAnyAdminToken(w http.ResponseWriter, r *http.Request) bool {
 	token := r.Header.Get("X-Admin-Token")
-	names := api.pm.ProviderNames()
 	matched := false
 	hasAnyToken := false
-	for _, name := range names {
-		ps := api.pm.LookupProvider(name)
-		if ps.HasAdminToken() {
-			hasAnyToken = true
-			if ps.CheckAdminToken(token) {
-				matched = true
-			}
+	api.pm.ForEach(func(_ string, ps *ProviderState) {
+		if !ps.HasAdminToken() {
+			return
 		}
-	}
+		hasAnyToken = true
+		if ps.CheckAdminToken(token) {
+			matched = true
+		}
+	})
 	if matched {
 		return true
 	}
