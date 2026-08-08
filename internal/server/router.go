@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/subtle"
 	"log/slog"
 	"net"
 	"net/http"
@@ -100,61 +101,68 @@ func (ps *ProviderState) PersistKeys() {
 	}
 }
 
-func (ps *ProviderState) Name() string                { return ps.name }
-func (ps *ProviderState) HTTPTimeoutSec() int             { return ps.config.HTTPTimeoutSec }
-func (ps *ProviderState) MaxRetries() int             { return ps.config.MaxRetries }
-func (ps *ProviderState) CooldownSec() int            { return ps.config.CooldownSec }
-func (ps *ProviderState) BackoffCapSec() int          { return ps.config.BackoffCapSec }
-func (ps *ProviderState) BackoffMultiplier() float64  { return ps.config.BackoffMultiplier }
-func (ps *ProviderState) CBResetSec() int             { return ps.config.CBResetSec }
-func (ps *ProviderState) UpstreamCBThreshold() int    { return ps.config.UpstreamCBThreshold }
-func (ps *ProviderState) LogLevel() string            { return ps.config.LogLevel }
-func (ps *ProviderState) SetHTTPTimeoutSec(v int)   { ps.config.HTTPTimeoutSec = v }
-func (ps *ProviderState) SetMaxRetries(v int)                 { ps.config.MaxRetries = v }
-func (ps *ProviderState) SetCooldownSec(v int)                { ps.config.CooldownSec = v }
-func (ps *ProviderState) SetBackoffCapSec(v int)              { ps.config.BackoffCapSec = v }
-func (ps *ProviderState) SetBackoffMultiplier(v float64)      { ps.config.BackoffMultiplier = v }
-func (ps *ProviderState) SetCBResetSec(v int)                 { ps.config.CBResetSec = v }
-func (ps *ProviderState) SetUpstreamCBThreshold(n int) { ps.config.UpstreamCBThreshold = n }
-func (ps *ProviderState) SetLogLevel(v string)                { ps.config.LogLevel = v }
-func (ps *ProviderState) GenaiModel() string          { return ps.config.GenaiModel }
-func (ps *ProviderState) CalibrationIntervalSec() int { return ps.config.CalibrationIntervalSec }
-func (ps *ProviderState) TargetBase() string         { return ps.config.TargetBase }
+func (ps *ProviderState) Name() string                   { return ps.name }
+func (ps *ProviderState) HTTPTimeoutSec() int            { return ps.config.HTTPTimeoutSec }
+func (ps *ProviderState) MaxRetries() int                { return ps.config.MaxRetries }
+func (ps *ProviderState) CooldownSec() int               { return ps.config.CooldownSec }
+func (ps *ProviderState) BackoffCapSec() int             { return ps.config.BackoffCapSec }
+func (ps *ProviderState) BackoffMultiplier() float64     { return ps.config.BackoffMultiplier }
+func (ps *ProviderState) CBResetSec() int                { return ps.config.CBResetSec }
+func (ps *ProviderState) UpstreamCBThreshold() int       { return ps.config.UpstreamCBThreshold }
+func (ps *ProviderState) LogLevel() string               { return ps.config.LogLevel }
+func (ps *ProviderState) SetHTTPTimeoutSec(v int)        { ps.config.HTTPTimeoutSec = v }
+func (ps *ProviderState) SetMaxRetries(v int)            { ps.config.MaxRetries = v }
+func (ps *ProviderState) SetCooldownSec(v int)           { ps.config.CooldownSec = v }
+func (ps *ProviderState) SetBackoffCapSec(v int)         { ps.config.BackoffCapSec = v }
+func (ps *ProviderState) SetBackoffMultiplier(v float64) { ps.config.BackoffMultiplier = v }
+func (ps *ProviderState) SetCBResetSec(v int)            { ps.config.CBResetSec = v }
+func (ps *ProviderState) SetUpstreamCBThreshold(n int)   { ps.config.UpstreamCBThreshold = n }
+func (ps *ProviderState) SetLogLevel(v string)           { ps.config.LogLevel = v }
+func (ps *ProviderState) GenaiModel() string             { return ps.config.GenaiModel }
+func (ps *ProviderState) CalibrationIntervalSec() int    { return ps.config.CalibrationIntervalSec }
+func (ps *ProviderState) TargetBase() string             { return ps.config.TargetBase }
 
 // Pool proxy methods — forward to ps.pool
-func (ps *ProviderState) PoolKeys() []string                          { return ps.pool.Keys() }
-func (ps *ProviderState) PoolActiveCount() int                        { return ps.pool.ActiveCount() }
-func (ps *ProviderState) PoolCoolingCount() int                       { return ps.pool.CoolingCount() }
-func (ps *ProviderState) PoolDisabledCount() int                      { return ps.pool.DisabledCount() }
-func (ps *ProviderState) PoolName(i int) (string, error)              { return ps.pool.Name(i) }
-func (ps *ProviderState) PoolKeyStatusLabel(i int, now time.Time) string { return ps.pool.KeyStatusLabel(i, now) }
-func (ps *ProviderState) PoolRequestsInLastMinute(i int) int               { return ps.pool.RequestsInLastMinute(i) }
-func (ps *ProviderState) PoolCleanupOldRequests(i int)                      { ps.pool.CleanupOldRequests(i) }
+func (ps *ProviderState) PoolKeys() []string             { return ps.pool.Keys() }
+func (ps *ProviderState) PoolActiveCount() int           { return ps.pool.ActiveCount() }
+func (ps *ProviderState) PoolCoolingCount() int          { return ps.pool.CoolingCount() }
+func (ps *ProviderState) PoolDisabledCount() int         { return ps.pool.DisabledCount() }
+func (ps *ProviderState) PoolName(i int) (string, error) { return ps.pool.Name(i) }
+func (ps *ProviderState) PoolKeyStatusLabel(i int, now time.Time) string {
+	return ps.pool.KeyStatusLabel(i, now)
+}
+func (ps *ProviderState) PoolRequestsInLastMinute(i int) int             { return ps.pool.RequestsInLastMinute(i) }
+func (ps *ProviderState) PoolCleanupOldRequests(i int)                   { ps.pool.CleanupOldRequests(i) }
 func (ps *ProviderState) PoolCB(i int) *circuitbreaker.KeyCircuitBreaker { return ps.pool.CB(i) }
-func (ps *ProviderState) PoolIsDisabled(i int) bool                   { return ps.pool.IsDisabled(i) }
-func (ps *ProviderState) PoolLen() int                                { return ps.pool.Len() }
-func (ps *ProviderState) PoolAuthFailCount(idx int) int               { return ps.pool.CB(idx).AuthFailCount() }
+func (ps *ProviderState) PoolIsDisabled(i int) bool                      { return ps.pool.IsDisabled(i) }
+func (ps *ProviderState) PoolLen() int                                   { return ps.pool.Len() }
+func (ps *ProviderState) PoolAuthFailCount(idx int) int                  { return ps.pool.CB(idx).AuthFailCount() }
 func (ps *ProviderState) ConfigurePoolCBs(base, backoffCap time.Duration, multiplier float64) {
 	ps.pool.ConfigureCBs(base, backoffCap, multiplier)
 }
 
 // Proxy proxy methods — forward to ps.client
-func (ps *ProviderState) SetProxyTimeout(d time.Duration)          { ps.client.Timeout = d }
-func (ps *ProviderState) ProxyClientTimeout() time.Duration        { return ps.client.Timeout }
-func (ps *ProviderState) ResetUpstreamCB()                         { ps.upCB.Reset() }
-func (ps *ProviderState) RecordUpstreamFailure()                   { ps.upCB.RecordFailure() }
-func (ps *ProviderState) RecordUpstreamSuccess()                   { ps.upCB.RecordSuccess() }
-func (ps *ProviderState) UpstreamCBAllow() bool                    { return ps.upCB.Allow() }
-func (ps *ProviderState) SetUpstreamCBResetTimeout(sec int)        { ps.upCB.SetResetTimeout(time.Duration(sec) * time.Second) }
+func (ps *ProviderState) SetProxyTimeout(d time.Duration)   { ps.client.Timeout = d }
+func (ps *ProviderState) ProxyClientTimeout() time.Duration { return ps.client.Timeout }
+func (ps *ProviderState) ResetUpstreamCB()                  { ps.upCB.Reset() }
+func (ps *ProviderState) RecordUpstreamFailure()            { ps.upCB.RecordFailure() }
+func (ps *ProviderState) RecordUpstreamSuccess()            { ps.upCB.RecordSuccess() }
+func (ps *ProviderState) UpstreamCBAllow() bool             { return ps.upCB.Allow() }
+func (ps *ProviderState) SetUpstreamCBResetTimeout(sec int) {
+	ps.upCB.SetResetTimeout(time.Duration(sec) * time.Second)
+}
 
-func (ps *ProviderState) UpstreamCBState() circuitbreaker.State    { return ps.upCB.State() }
+func (ps *ProviderState) UpstreamCBState() circuitbreaker.State              { return ps.upCB.State() }
 func (ps *ProviderState) UpstreamCB() *circuitbreaker.UpstreamCircuitBreaker { return ps.upCB }
 
 func (ps *ProviderState) SetUpstreamProxyCBThreshold(n int) { ps.upCB.SetThreshold(n) }
 
-func (ps *ProviderState) HasAdminToken() bool         { return ps.config.AdminToken != "" }
+func (ps *ProviderState) HasAdminToken() bool { return ps.config.AdminToken != "" }
 func (ps *ProviderState) CheckAdminToken(token string) bool {
-	return ps.config.AdminToken != "" && ps.config.AdminToken == token
+	if ps.config.AdminToken == "" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(ps.config.AdminToken), []byte(token)) == 1
 }
 
 type ProviderRouter struct {
