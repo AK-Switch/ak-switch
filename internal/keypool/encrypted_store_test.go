@@ -81,6 +81,7 @@ func TestSaveEncrypted_WrongKey(t *testing.T) {
 	resetMasterKeyForTest()
 	kr1 := keyring.NewArrayKeyring(nil)
 	setTestKeyring(kr1)
+	defer resetTestKeyring()
 
 	dir := t.TempDir()
 	config.ConfigDir = dir
