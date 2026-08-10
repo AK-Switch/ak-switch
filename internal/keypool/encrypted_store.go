@@ -184,10 +184,13 @@ func SaveEncrypted(provider string, store *KeyStore) error {
 		return fmt.Errorf("save keys for %q: %w", provider, err)
 	}
 	// Atomic write: write to temp file then rename
+	// Use Remove + Rename instead of Rename alone because os.Rename
+	// silently fails on Windows when the target file already exists.
 	tmpPath := path + ".tmp"
 	if err := os.WriteFile(tmpPath, encrypted, 0600); err != nil {
 		return fmt.Errorf("save keys for %q: %w", provider, err)
 	}
+	_ = os.Remove(path)
 	if err := os.Rename(tmpPath, path); err != nil {
 		_ = os.Remove(tmpPath)
 		return fmt.Errorf("save keys for %q: %w", provider, err)

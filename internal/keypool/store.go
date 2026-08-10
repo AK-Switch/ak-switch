@@ -58,7 +58,6 @@ func SaveKeysToFile(path string, keys []string, names []string) error {
 
 // LoadFullStore loads the complete KeyStore from file (including disabled state).
 // Returns nil store with nil error if the file does not exist.
-// LoadFullStore loads the complete KeyStore from file (including disabled state).
 func LoadFullStore(path string) (*KeyStore, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -78,7 +77,6 @@ func LoadFullStore(path string) (*KeyStore, error) {
 	return &store, nil
 }
 
-// SaveFullStore writes the complete KeyStore to file.
 // SaveFullStore writes the complete KeyStore to file.
 func SaveFullStore(path string, store *KeyStore) error {
 
@@ -120,10 +118,9 @@ func SaveKeysInsecure(provider string, store *KeyStore) error {
 	return os.WriteFile(path, data, 0600)
 }
 
-// LoadKeys loads a KeyStore for a provider from the system keyring.
-// If no keyring data is found, attempts fallback backends in order:
-//  1. Insecure plaintext file (<XDG config dir>/keys/<provider>.json)
-//  2. Migration from old encrypted file (<XDG config dir>/keys/<provider>.enc)
+// LoadKeys loads a KeyStore for a provider from the encrypted file (primary).
+// If not found or decryption fails, falls back to keyring migration, insecure
+// plaintext file, and legacy .enc file in that order.
 //
 // Returns (nil, nil) if no stored keys exist in any backend.
 func LoadKeys(provider string) (*KeyStore, error) {
@@ -218,8 +215,10 @@ func legacyKeysPath(provider string) (string, error) {
 	return filepath.Join(filepath.Dir(xdgPath), "keys", provider+".enc"), nil
 }
 
-// LoadKeysFromStore loads API keys for a provider from the configured keys file
-// or the standard encrypted store. Returns loaded keys and whether keys were loaded.
+// LoadKeysFromStore loads API keys for a provider from all available backends
+// in priority order: encrypted file → keyring → custom keys file → insecure
+// plaintext file → legacy .enc file. Returns loaded keys and whether any
+// backend had keys.
 func LoadKeysFromStore(name string, cfg *config.Config) (keys, names []string, loaded bool) {
 	// 1. 加密文件
 	if store, err := LoadEncrypted(name); err == nil && store != nil {
