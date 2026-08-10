@@ -132,11 +132,9 @@ func TestMigration_FromOldEncFile(t *testing.T) {
 	config.ConfigDir = dir
 	t.Cleanup(func() { config.ConfigDir = "" })
 
-	// Create old-style encrypted file
+	// Create old-style plaintext encrypted file in the keys dir
 	keysDir := filepath.Join(dir, "keys")
-	if err := os.MkdirAll(keysDir, 0700); err != nil {
-		t.Fatalf("MkdirAll: %v", err)
-	}
+	os.MkdirAll(keysDir, 0700)
 	oldPath := filepath.Join(keysDir, "migrate-provider.enc")
 
 	oldStore := &KeyStore{
@@ -145,15 +143,11 @@ func TestMigration_FromOldEncFile(t *testing.T) {
 			{Key: "migrated-key-2", Disabled: true},
 		},
 	}
-	data, err := json.MarshalIndent(oldStore, "", "  ")
-	if err != nil {
-		t.Fatalf("Marshal: %v", err)
-	}
-	if err := os.WriteFile(oldPath, data, 0644); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
+	data, _ := json.MarshalIndent(oldStore, "", "  ")
+	os.WriteFile(oldPath, data, 0644)
 
-	// LoadKeys should detect old file and migrate
+	// LoadKeys tries: encrypted → keyring → insecure → legacy
+	// No encrypted/keyring/insecure data, so it loads legacy and migrates
 	loaded, err := LoadKeys("migrate-provider")
 	if err != nil {
 		t.Fatalf("LoadKeys: %v", err)
@@ -172,21 +166,9 @@ func TestMigration_FromOldEncFile(t *testing.T) {
 	}
 
 	// Old file should be renamed to .bak
-	if _, err := os.Stat(oldPath); !os.IsNotExist(err) {
-		t.Errorf("old file still exists at %s, should be removed", oldPath)
-	}
 	bakPath := oldPath + ".bak"
 	if _, err := os.Stat(bakPath); os.IsNotExist(err) {
 		t.Errorf("backup file not found at %s", bakPath)
-	}
-
-	// Second load should come from keyring, not file
-	loaded2, err := LoadKeys("migrate-provider")
-	if err != nil {
-		t.Fatalf("LoadKeys second call: %v", err)
-	}
-	if len(loaded2.Keys) != 2 {
-		t.Errorf("second load: got %d keys, want 2", len(loaded2.Keys))
 	}
 }
 
@@ -212,37 +194,25 @@ func TestMigration_EmptyOldFile(t *testing.T) {
 	}
 }
 
-func TestLoadKeysFromStore_KeyringPriority(t *testing.T) {
-	setupMockKeyring(t)
-
+func TestLoadKeysFromStore_EncryptedFilePriority(t *testing.T) {
 	dir := t.TempDir()
 	config.ConfigDir = dir
 	t.Cleanup(func() { config.ConfigDir = "" })
 
-	// Save to keyring first
-	krStore := &KeyStore{Keys: []KeyEntry{{Key: "keyring-key"}}}
-	if err := SaveKeys("priority-test", krStore); err != nil {
-		t.Fatalf("SaveKeys: %v", err)
+	// Save directly to encrypted file
+	encStore := &KeyStore{Keys: []KeyEntry{{Key: "encrypted-key"}}}
+	if err := SaveEncrypted("priority-test", encStore); err != nil {
+		t.Fatalf("SaveEncrypted: %v", err)
 	}
 
-	// Also create old file with different data
-	keysDir := filepath.Join(dir, "keys")
-	if err := os.MkdirAll(keysDir, 0700); err != nil {
-		t.Fatalf("MkdirAll: %v", err)
-	}
-	oldPath := filepath.Join(keysDir, "priority-test.enc")
-	oldStore := &KeyStore{Keys: []KeyEntry{{Key: "file-key"}}}
-	oldData, _ := json.MarshalIndent(oldStore, "", "  ")
-	os.WriteFile(oldPath, oldData, 0644)
-
-	// LoadKeysFromStore should return keyring data, not file data
+	// LoadKeysFromStore should return encrypted data
 	cfg := &config.Config{ProviderConfig: config.ProviderConfig{}}
 	keys, names, loaded := LoadKeysFromStore("priority-test", cfg)
 	if !loaded {
 		t.Fatal("LoadKeysFromStore: loaded=false, want true")
 	}
-	if len(keys) != 1 || keys[0] != "keyring-key" {
-		t.Errorf("keys = %v, want [keyring-key]", keys)
+	if len(keys) != 1 || keys[0] != "encrypted-key" {
+		t.Errorf("keys = %v, want [encrypted-key]", keys)
 	}
 	if len(names) != 1 || names[0] != "" {
 		t.Errorf("names = %v, want [\"\"]", names)

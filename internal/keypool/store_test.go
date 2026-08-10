@@ -416,32 +416,22 @@ func TestLoadDisabledNames_NoStore(t *testing.T) {
 	}
 }
 
-func TestLoadKeysFromStore_MergesKeyringAndInsecure(t *testing.T) {
+func TestLoadKeysFromStore_MergesEncryptedAndInsecure(t *testing.T) {
 	dir := t.TempDir()
 	config.ConfigDir = dir
 	defer func() { config.ConfigDir = "" }()
 
-	// Set up a test keyring with some keys
-	kr := keyring.NewArrayKeyring(nil)
-	keyringStore := &KeyStore{
+	// Save to encrypted file first
+	encStore := &KeyStore{
 		Keys: []KeyEntry{
-			{Key: "keyring-key-1", Name: "from-keyring"},
+			{Key: "encrypted-key-1", Name: "from-enc"},
 		},
 	}
-	keyringData, err := json.Marshal(keyringStore)
-	if err != nil {
-		t.Fatalf("marshal keyring store: %v", err)
+	if err := SaveEncrypted("test-merge", encStore); err != nil {
+		t.Fatalf("SaveEncrypted: %v", err)
 	}
-	if err := kr.Set(keyring.Item{
-		Key:  keyringItemKey("test-merge"),
-		Data: keyringData,
-	}); err != nil {
-		t.Fatalf("set keyring item: %v", err)
-	}
-	setTestKeyring(kr)
-	defer resetTestKeyring()
 
-	// Write an insecure file with additional keys not in keyring
+	// Write an insecure file with additional keys not in encrypted
 	insecureStore := &KeyStore{
 		Keys: []KeyEntry{
 			{Key: "insecure-key-1", Name: "from-insecure"},
@@ -457,7 +447,7 @@ func TestLoadKeysFromStore_MergesKeyringAndInsecure(t *testing.T) {
 		t.Fatal("LoadKeysFromStore: loaded=false, want true")
 	}
 	if len(keys) != 2 {
-		t.Fatalf("got %d keys, want 2 (keyring + insecure): %v", len(keys), keys)
+		t.Fatalf("got %d keys, want 2 (encrypted + insecure): %v", len(keys), keys)
 	}
 
 	// Verify all keys are present by key value
@@ -465,8 +455,8 @@ func TestLoadKeysFromStore_MergesKeyringAndInsecure(t *testing.T) {
 	for i, k := range keys {
 		got[k] = names[i]
 	}
-	if got["keyring-key-1"] != "from-keyring" {
-		t.Errorf("keyring key name = %q, want %q", got["keyring-key-1"], "from-keyring")
+	if got["encrypted-key-1"] != "from-enc" {
+		t.Errorf("encrypted key name = %q, want %q", got["encrypted-key-1"], "from-enc")
 	}
 	if got["insecure-key-1"] != "from-insecure" {
 		t.Errorf("insecure key name = %q, want %q", got["insecure-key-1"], "from-insecure")
