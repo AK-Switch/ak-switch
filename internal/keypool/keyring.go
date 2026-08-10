@@ -126,6 +126,7 @@ func fallbackPasswordFunc(passwordFile string) keyring.PromptFunc {
 
 // setTestKeyring replaces the keyring backend for testing.
 // Must be called before the function under test, paired with resetTestKeyring.
+//
 //nolint:unused // used by test files in the same package
 func setTestKeyring(kr keyring.Keyring) {
 	keyringMu.Lock()
@@ -135,6 +136,7 @@ func setTestKeyring(kr keyring.Keyring) {
 }
 
 // resetTestKeyring clears the keyring backend (for testing).
+//
 //nolint:unused // used by test files in the same package
 func resetTestKeyring() {
 	keyringMu.Lock()

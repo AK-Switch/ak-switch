@@ -169,16 +169,16 @@ func (sl *ServerLauncher) resolveProviders() (router *ProviderRouter, providers 
 	// Detect config source
 	xdgPath, err := config.XDGConfigPath()
 	if err != nil {
-	return nil, nil, 0, "", nil, fmt.Errorf("config detection failed: %w", err)
+		return nil, nil, 0, "", nil, fmt.Errorf("config detection failed: %w", err)
 	}
 
 	// Load providers from TOML
 	providers, err = config.LoadAllTomlProviders(xdgPath)
 	if err != nil {
-	return nil, nil, 0, "", nil, fmt.Errorf("failed to load providers from TOML: %w", err)
+		return nil, nil, 0, "", nil, fmt.Errorf("failed to load providers from TOML: %w", err)
 	}
 	if len(providers) == 0 {
-	return nil, nil, 0, "", nil, fmt.Errorf("no providers found in TOML config")
+		return nil, nil, 0, "", nil, fmt.Errorf("no providers found in TOML config")
 	}
 
 	// Create ProviderRouter

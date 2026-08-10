@@ -514,4 +514,3 @@ func TestLoadKeysFromStore_MergesInsecureOnlyWhenKeyringMissingKeys(t *testing.T
 		t.Errorf("name = %q, want %q (keyring should win)", names[0], "from-keyring")
 	}
 }
-

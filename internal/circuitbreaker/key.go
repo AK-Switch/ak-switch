@@ -20,8 +20,8 @@ type KeyCircuitBreaker struct {
 	backoffCap time.Duration
 	jitterFn   func(int) time.Duration // override for testing; nil = real random
 
-	authFailCount   int // consecutive auth failures (401/403)
-	permaThreshold  int // auth failures before permanent disable (0 = disable immediately)
+	authFailCount  int // consecutive auth failures (401/403)
+	permaThreshold int // auth failures before permanent disable (0 = disable immediately)
 }
 
 // NewKeyCircuitBreaker creates a new KeyCircuitBreaker.
@@ -33,10 +33,10 @@ func NewKeyCircuitBreaker(base, backoffCap time.Duration, multiplier float64, pe
 		threshold = permaThreshold[0]
 	}
 	return &KeyCircuitBreaker{
-		base:            base,
-		backoffCap:      backoffCap,
-		multiplier:      multiplier,
-		permaThreshold:  threshold,
+		base:           base,
+		backoffCap:     backoffCap,
+		multiplier:     multiplier,
+		permaThreshold: threshold,
 	}
 }
 

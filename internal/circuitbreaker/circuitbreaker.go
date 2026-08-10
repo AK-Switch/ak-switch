@@ -10,4 +10,3 @@ const (
 	HalfOpen               // Probing, allow one probe request (upstream-specific).
 	Permanent              // Permanently disabled (key-specific).
 )
-

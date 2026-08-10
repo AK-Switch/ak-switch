@@ -202,9 +202,14 @@ func LoadKeysFromStore(name string, cfg *config.Config) (keys, names []string, l
 			for _, ie := range insecureStore.Keys {
 				found := false
 				for _, ke := range store.Keys {
-					if ie.Key == ke.Key { found = true; break }
+					if ie.Key == ke.Key {
+						found = true
+						break
+					}
 				}
-				if !found { store.Keys = append(store.Keys, ie) }
+				if !found {
+					store.Keys = append(store.Keys, ie)
+				}
 			}
 		}
 		k, n := keysFromStore(store)
@@ -235,7 +240,9 @@ func LoadKeysFromStore(name string, cfg *config.Config) (keys, names []string, l
 
 	// 5. legacy .enc
 	xdgPath, err := config.XDGConfigPath()
-	if err != nil { return nil, nil, false }
+	if err != nil {
+		return nil, nil, false
+	}
 	keyFile := filepath.Join(filepath.Dir(xdgPath), "keys", name+".enc")
 	fileKeys, fileNames, err := LoadKeysFromFile(keyFile)
 	if err == nil && fileKeys != nil {

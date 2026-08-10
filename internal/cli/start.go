@@ -36,7 +36,6 @@ var startCmd = &cobra.Command{
 	},
 }
 
-
 // pidFilePath delegates to the server package for the PID file path.
 // This preserves the existing selfrestart.go call without modifying it.
 func pidFilePath(devMode bool) string {

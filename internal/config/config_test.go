@@ -195,7 +195,6 @@ func TestConfig_HealthCheckTimeoutTooSmall(t *testing.T) {
 	}
 }
 
-
 // ============================================================
 // mergeDefaults 测试
 // ============================================================
@@ -257,11 +256,11 @@ func TestMergeDefaults_EmptyConfig(t *testing.T) {
 
 func TestMergeDefaults_PreservesSetValues(t *testing.T) {
 	cfg := &Config{ProviderConfig: ProviderConfig{
-		Port:            9090,
-		Host:            "0.0.0.0",
-		CooldownSec:     45,
-		MaxRetries:      7,
-		BackoffCapSec:   300,
+		Port:              9090,
+		Host:              "0.0.0.0",
+		CooldownSec:       45,
+		MaxRetries:        7,
+		BackoffCapSec:     300,
 		BackoffMultiplier: 3.5,
 	}}
 	cfg.mergeDefaults()
@@ -1016,28 +1015,53 @@ func TestFindServerPort_FirstProviderPicked(t *testing.T) {
 
 func TestDefaultProviderConfig(t *testing.T) {
 	pc := DefaultProviderConfig()
-	if pc.Port != 8080 { t.Errorf("Port = %d, want 8080", pc.Port) }
-	if pc.Host != "127.0.0.1" { t.Errorf("Host = %q, want %q", pc.Host, "127.0.0.1") }
-	if pc.TargetBase != "" { t.Errorf("TargetBase should be empty, got %q", pc.TargetBase) }
-	if pc.MaxRetries != 1 { t.Errorf("MaxRetries = %d, want 1", pc.MaxRetries) }
-	if pc.CooldownSec != 15 { t.Errorf("CooldownSec = %d, want 15", pc.CooldownSec) }
-	if pc.HealthCheckPath != "/health" { t.Errorf("HealthCheckPath = %q, want %q", pc.HealthCheckPath, "/health") }
-	if pc.CalibrationIntervalSec != 3600 { t.Errorf("CalibrationIntervalSec = %d, want 3600", pc.CalibrationIntervalSec) }
+	if pc.Port != 8080 {
+		t.Errorf("Port = %d, want 8080", pc.Port)
+	}
+	if pc.Host != "127.0.0.1" {
+		t.Errorf("Host = %q, want %q", pc.Host, "127.0.0.1")
+	}
+	if pc.TargetBase != "" {
+		t.Errorf("TargetBase should be empty, got %q", pc.TargetBase)
+	}
+	if pc.MaxRetries != 1 {
+		t.Errorf("MaxRetries = %d, want 1", pc.MaxRetries)
+	}
+	if pc.CooldownSec != 15 {
+		t.Errorf("CooldownSec = %d, want 15", pc.CooldownSec)
+	}
+	if pc.HealthCheckPath != "/health" {
+		t.Errorf("HealthCheckPath = %q, want %q", pc.HealthCheckPath, "/health")
+	}
+	if pc.CalibrationIntervalSec != 3600 {
+		t.Errorf("CalibrationIntervalSec = %d, want 3600", pc.CalibrationIntervalSec)
+	}
 }
 
 func TestDefaultRuntimeConfig(t *testing.T) {
 	rc := DefaultRuntimeConfig()
-	if rc.HTTPTimeoutSec != 30 { t.Errorf("HTTPTimeoutSec = %d, want 30", rc.HTTPTimeoutSec) }
-	if rc.MaxRetries != 1 { t.Errorf("MaxRetries = %d, want 1", rc.MaxRetries) }
-	if rc.CooldownSec != 15 { t.Errorf("CooldownSec = %d, want 15", rc.CooldownSec) }
-	if rc.LogLevel != "info" { t.Errorf("LogLevel = %q, want %q", rc.LogLevel, "info") }
+	if rc.HTTPTimeoutSec != 30 {
+		t.Errorf("HTTPTimeoutSec = %d, want 30", rc.HTTPTimeoutSec)
+	}
+	if rc.MaxRetries != 1 {
+		t.Errorf("MaxRetries = %d, want 1", rc.MaxRetries)
+	}
+	if rc.CooldownSec != 15 {
+		t.Errorf("CooldownSec = %d, want 15", rc.CooldownSec)
+	}
+	if rc.LogLevel != "info" {
+		t.Errorf("LogLevel = %q, want %q", rc.LogLevel, "info")
+	}
 }
 
 func TestProviderConfig_Validate_PortRange(t *testing.T) {
 	pc := DefaultProviderConfig()
 	pc.TargetBase = "https://example.com"
 	pc.Keys = []string{"key1"}
-	tests := []struct{ port int; wantErr bool }{
+	tests := []struct {
+		port    int
+		wantErr bool
+	}{
 		{0, true}, {-1, true}, {65536, true}, {8080, false},
 	}
 	for _, tt := range tests {
@@ -1050,7 +1074,10 @@ func TestProviderConfig_Validate_PortRange(t *testing.T) {
 }
 
 func TestRuntimeConfig_Validate_HTTPTimeoutSec(t *testing.T) {
-	tests := []struct{ sec int; wantErr bool }{
+	tests := []struct {
+		sec     int
+		wantErr bool
+	}{
 		{0, true}, {-1, true}, {1, false}, {30, false},
 	}
 	for _, tt := range tests {
@@ -1063,7 +1090,10 @@ func TestRuntimeConfig_Validate_HTTPTimeoutSec(t *testing.T) {
 }
 
 func TestProviderConfig_Validate_HealthCheckTimeoutSec(t *testing.T) {
-	tests := []struct{ sec int; wantErr bool }{
+	tests := []struct {
+		sec     int
+		wantErr bool
+	}{
 		{0, true}, {-1, true}, {1, false}, {5, false},
 	}
 	for _, tt := range tests {
@@ -1080,12 +1110,22 @@ func TestProviderConfig_Validate_HealthCheckTimeoutSec(t *testing.T) {
 
 func TestConfig_BackwardCompatibility(t *testing.T) {
 	cfg := DefaultConfig()
-	if cfg.Port != 8080 { t.Errorf("Port = %d, want 8080", cfg.Port) }
-	if cfg.HTTPTimeoutSec != 30 { t.Errorf("HTTPTimeoutSec = %d, want 30", cfg.HTTPTimeoutSec) }
-	if cfg.MaxRetries != 1 { t.Errorf("MaxRetries = %d, want 1", cfg.MaxRetries) }
+	if cfg.Port != 8080 {
+		t.Errorf("Port = %d, want 8080", cfg.Port)
+	}
+	if cfg.HTTPTimeoutSec != 30 {
+		t.Errorf("HTTPTimeoutSec = %d, want 30", cfg.HTTPTimeoutSec)
+	}
+	if cfg.MaxRetries != 1 {
+		t.Errorf("MaxRetries = %d, want 1", cfg.MaxRetries)
+	}
 
 	cfg.Port = 9090
 	cfg.HTTPTimeoutSec = 60
-	if cfg.Port != 9090 { t.Error("field mutation broken") }
-	if cfg.HTTPTimeoutSec != 60 { t.Error("field mutation broken") }
+	if cfg.Port != 9090 {
+		t.Error("field mutation broken")
+	}
+	if cfg.HTTPTimeoutSec != 60 {
+		t.Error("field mutation broken")
+	}
 }

@@ -28,4 +28,3 @@ func parseKeyIndex(r *http.Request) (int, error) {
 	}
 	return idx - 1, nil // convert to 0-based
 }
-
