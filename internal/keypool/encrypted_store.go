@@ -54,13 +54,23 @@ func getMasterKey() ([]byte, error) {
 		}
 
 		// 2. Try local master.key file
-		mkPath, err := masterKeyFile()
-		if err == nil {
-			data, err := os.ReadFile(mkPath)
-			if err == nil && len(data) == 32 {
+		mkPath, mkErr := masterKeyFile()
+		if mkErr != nil {
+			masterKeyErr = fmt.Errorf("master key file path: %w", mkErr)
+			return
+		}
+		data, readErr := os.ReadFile(mkPath)
+		if readErr == nil {
+			if len(data) == 32 {
 				masterKey = data
 				return
 			}
+			masterKeyErr = fmt.Errorf("master key file has invalid length %d, want 32", len(data))
+			return
+		}
+		if !os.IsNotExist(readErr) {
+			masterKeyErr = fmt.Errorf("read master key file: %w", readErr)
+			return
 		}
 
 		// 3. Generate a new key
@@ -86,7 +96,7 @@ func getMasterKey() ([]byte, error) {
 			masterKeyErr = fmt.Errorf("create keys dir: %w", err)
 			return
 		}
-		mkPath, mkErr := masterKeyFile()
+		mkPath, mkErr = masterKeyFile()
 		if mkErr != nil {
 			masterKeyErr = fmt.Errorf("master key file: %w", mkErr)
 			return
