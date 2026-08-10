@@ -160,9 +160,10 @@ func LoadKeys(provider string) (*KeyStore, error) {
 		return nil, nil
 	}
 
-	// 迁移 legacy 到加密文件: 先备份旧文件，再写入加密文件
-	_ = os.Rename(oldPath, oldPath+".bak")
-	_ = SaveEncrypted(provider, oldStore)
+	// 迁移 legacy 到加密文件: 先写入加密文件成功后再备份旧文件
+	if err := SaveEncrypted(provider, oldStore); err == nil {
+		_ = os.Rename(oldPath, oldPath+".bak")
+	}
 	return oldStore, nil
 }
 
