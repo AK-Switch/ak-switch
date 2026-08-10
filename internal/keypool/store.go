@@ -289,12 +289,17 @@ func LoadDisabledNames(name string, cfg *config.Config) []string {
 // Priority: keyring → keys file → insecure file.
 // Returns the first successful result, or nil if all backends fail.
 func loadStoreFromAnyBackend(name string, cfg *config.Config) *KeyStore {
-	// 1. Try system keyring first
+	// 1. Try encrypted file first (new primary)
+	if store, err := LoadEncrypted(name); err == nil && store != nil {
+		return store
+	}
+
+	// 2. Fallback: keyring (migration happens at LoadKeys level)
 	if store, err := loadFromKeyring(name); err == nil && store != nil {
 		return store
 	}
 
-	// 2. Fallback: custom keys file
+	// 3. Fallback: custom keys file
 	if cfg.KeysFile != "" {
 		store, err := LoadFullStore(cfg.KeysFile)
 		if err == nil && store != nil {
@@ -302,7 +307,7 @@ func loadStoreFromAnyBackend(name string, cfg *config.Config) *KeyStore {
 		}
 	}
 
-	// 3. Fallback: insecure plaintext file
+	// 4. Fallback: insecure plaintext file
 	store, err := loadInsecureFile(name)
 	if err == nil && store != nil {
 		return store
