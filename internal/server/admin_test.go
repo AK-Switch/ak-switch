@@ -18,13 +18,14 @@ import (
 
 func TestKeyOperationHandler_Disable(t *testing.T) {
 	pr := newTestRouterWithKeys(t, []string{"sk-key-0", "sk-key-1"})
-	handler := pr.api.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
-		return pool.Disable(idx)
+	handler := pr.api.keyOperationHandler(func(ps *ProviderState, idx int) error {
+		return ps.PoolDisable(idx)
 	})
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/api/keys/1/disable", nil)
 	r.SetPathValue("index", "1")
+	r.Header.Set("X-Admin-Token", "test-admin-token")
 	handler(w, r)
 
 	if w.Code != http.StatusOK {
@@ -37,8 +38,8 @@ func TestKeyOperationHandler_Disable(t *testing.T) {
 
 func TestKeyOperationHandler_Enable(t *testing.T) {
 	pr := newTestRouterWithKeys(t, []string{"sk-key-0", "sk-key-1"})
-	handler := pr.api.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
-		return pool.Enable(idx)
+	handler := pr.api.keyOperationHandler(func(ps *ProviderState, idx int) error {
+		return ps.PoolEnable(idx)
 	})
 
 	// First disable key 0
@@ -47,6 +48,7 @@ func TestKeyOperationHandler_Enable(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/api/keys/1/enable", nil)
 	r.SetPathValue("index", "1")
+	r.Header.Set("X-Admin-Token", "test-admin-token")
 	handler(w, r)
 
 	if w.Code != http.StatusOK {
@@ -59,13 +61,14 @@ func TestKeyOperationHandler_Enable(t *testing.T) {
 
 func TestKeyOperationHandler_Cooldown(t *testing.T) {
 	pr := newTestRouterWithKeys(t, []string{"sk-key-0", "sk-key-1"})
-	handler := pr.api.keyOperationHandler(func(pool *keypool.KeyPool, cfg *config.Config, idx int) error {
-		return pool.Cooldown(idx, time.Duration(cfg.CooldownSec)*time.Second)
+	handler := pr.api.keyOperationHandler(func(ps *ProviderState, idx int) error {
+		return ps.PoolCooldown(idx, time.Duration(ps.CooldownSec())*time.Second)
 	})
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPut, "/api/keys/1/cooldown", nil)
 	r.SetPathValue("index", "1")
+	r.Header.Set("X-Admin-Token", "test-admin-token")
 	handler(w, r)
 
 	if w.Code != http.StatusOK {
@@ -75,13 +78,14 @@ func TestKeyOperationHandler_Cooldown(t *testing.T) {
 
 func TestKeyOperationHandler_Delete(t *testing.T) {
 	pr := newTestRouterWithKeys(t, []string{"sk-key-0", "sk-key-1"})
-	handler := pr.api.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
-		return pool.RemoveKey(idx)
+	handler := pr.api.keyOperationHandler(func(ps *ProviderState, idx int) error {
+		return ps.PoolRemoveKey(idx)
 	})
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodDelete, "/api/keys/1", nil)
 	r.SetPathValue("index", "1")
+	r.Header.Set("X-Admin-Token", "test-admin-token")
 	handler(w, r)
 
 	if w.Code != http.StatusOK {
@@ -94,13 +98,14 @@ func TestKeyOperationHandler_Delete(t *testing.T) {
 
 func TestKeyOperationHandler_ProviderNotFound(t *testing.T) {
 	pr := newTestRouterWithKeys(t, []string{"sk-key-0"})
-	handler := pr.api.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
-		return pool.Disable(idx)
+	handler := pr.api.keyOperationHandler(func(ps *ProviderState, idx int) error {
+		return ps.PoolDisable(idx)
 	})
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/api/keys/1/disable?provider=nonexistent", nil)
 	r.SetPathValue("index", "1")
+	r.Header.Set("X-Admin-Token", "test-admin-token")
 	handler(w, r)
 
 	if w.Code != http.StatusNotFound {
@@ -118,13 +123,14 @@ func TestKeyOperationHandler_ProviderNotFound(t *testing.T) {
 
 func TestKeyOperationHandler_InvalidIndex(t *testing.T) {
 	pr := newTestRouterWithKeys(t, []string{"sk-key-0"})
-	handler := pr.api.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
-		return pool.Disable(idx)
+	handler := pr.api.keyOperationHandler(func(ps *ProviderState, idx int) error {
+		return ps.PoolDisable(idx)
 	})
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/api/keys/abc/disable", nil)
 	r.SetPathValue("index", "abc")
+	r.Header.Set("X-Admin-Token", "test-admin-token")
 	handler(w, r)
 
 	if w.Code != http.StatusBadRequest {
@@ -135,13 +141,14 @@ func TestKeyOperationHandler_InvalidIndex(t *testing.T) {
 func TestKeyOperationHandler_IndexZero(t *testing.T) {
 	// API uses 1-based indexing, so index "0" should be rejected
 	pr := newTestRouterWithKeys(t, []string{"sk-key-0"})
-	handler := pr.api.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
-		return pool.Disable(idx)
+	handler := pr.api.keyOperationHandler(func(ps *ProviderState, idx int) error {
+		return ps.PoolDisable(idx)
 	})
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/api/keys/0/disable", nil)
 	r.SetPathValue("index", "0")
+	r.Header.Set("X-Admin-Token", "test-admin-token")
 	handler(w, r)
 
 	if w.Code != http.StatusBadRequest {
@@ -151,13 +158,14 @@ func TestKeyOperationHandler_IndexZero(t *testing.T) {
 
 func TestKeyOperationHandler_IndexOutOfBounds(t *testing.T) {
 	pr := newTestRouterWithKeys(t, []string{"sk-key-0"})
-	handler := pr.api.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
-		return pool.Disable(idx)
+	handler := pr.api.keyOperationHandler(func(ps *ProviderState, idx int) error {
+		return ps.PoolDisable(idx)
 	})
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/api/keys/999/disable", nil)
 	r.SetPathValue("index", "999")
+	r.Header.Set("X-Admin-Token", "test-admin-token")
 	handler(w, r)
 
 	if w.Code != http.StatusNotFound {
@@ -173,8 +181,8 @@ func TestKeyOperationHandler_AdminTokenRequired(t *testing.T) {
 	pool := keypool.NewKeyPool(cfg.Keys, nil)
 	pr.AddProvider("test", cfg, pool)
 
-	handler := pr.api.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
-		return pool.Disable(idx)
+	handler := pr.api.keyOperationHandler(func(ps *ProviderState, idx int) error {
+		return ps.PoolDisable(idx)
 	})
 
 	w := httptest.NewRecorder()
@@ -189,13 +197,14 @@ func TestKeyOperationHandler_AdminTokenRequired(t *testing.T) {
 
 func TestKeyOperationHandler_OperationError(t *testing.T) {
 	pr := newTestRouterWithKeys(t, []string{"sk-key-0"})
-	handler := pr.api.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
-		return pool.Disable(999) // out-of-range inside operation
+	handler := pr.api.keyOperationHandler(func(ps *ProviderState, idx int) error {
+		return ps.PoolDisable(999) // out-of-range inside operation
 	})
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/api/keys/1/disable", nil)
 	r.SetPathValue("index", "1")
+	r.Header.Set("X-Admin-Token", "test-admin-token")
 	handler(w, r)
 
 	if w.Code != http.StatusNotFound {
@@ -215,7 +224,7 @@ func TestHandleRuntimeConfigGet_ProviderAll(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/api/runtime-config?provider=all", nil)
-	r.Header.Set("X-Admin-Token", "")
+	r.Header.Set("X-Admin-Token", "test-admin-token")
 	pr.api.runtimeConfigHandler(w, r)
 
 	if w.Code != http.StatusOK {
@@ -249,7 +258,7 @@ func TestHandleRuntimeConfigGet_ProviderAllWithKey(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/api/runtime-config?provider=all&key=max_retries", nil)
-	r.Header.Set("X-Admin-Token", "")
+	r.Header.Set("X-Admin-Token", "test-admin-token")
 	pr.api.runtimeConfigHandler(w, r)
 
 	if w.Code != http.StatusOK {
@@ -278,7 +287,7 @@ func TestHandleRuntimeConfigSet_ProviderAll(t *testing.T) {
 	body := strings.NewReader(`{"key":"cooldown_sec","value":60}`)
 	r := httptest.NewRequest(http.MethodPost, "/api/runtime-config?provider=all", body)
 	r.Header.Set("Content-Type", "application/json")
-	r.Header.Set("X-Admin-Token", "")
+	r.Header.Set("X-Admin-Token", "test-admin-token")
 	pr.api.runtimeConfigHandler(w, r)
 
 	if w.Code != http.StatusOK {
@@ -320,7 +329,7 @@ func TestHandleRuntimeConfigSet_ProviderAllInvalidValue(t *testing.T) {
 	body := strings.NewReader(`{"key":"http_timeout_sec","value":0}`)
 	r := httptest.NewRequest(http.MethodPost, "/api/runtime-config?provider=all", body)
 	r.Header.Set("Content-Type", "application/json")
-	r.Header.Set("X-Admin-Token", "")
+	r.Header.Set("X-Admin-Token", "test-admin-token")
 	pr.api.runtimeConfigHandler(w, r)
 
 	if w.Code != http.StatusBadRequest {
@@ -342,7 +351,7 @@ func TestHandleRuntimeConfigSet_ProviderAllInvalidKey(t *testing.T) {
 	body := strings.NewReader(`{"key":"nonexistent_key","value":1}`)
 	r := httptest.NewRequest(http.MethodPost, "/api/runtime-config?provider=all", body)
 	r.Header.Set("Content-Type", "application/json")
-	r.Header.Set("X-Admin-Token", "")
+	r.Header.Set("X-Admin-Token", "test-admin-token")
 	pr.api.runtimeConfigHandler(w, r)
 
 	if w.Code != http.StatusBadRequest {
@@ -390,11 +399,11 @@ func TestRuntimeConfigField_Apply(t *testing.T) {
 		check   func(t *testing.T, ps *ProviderState)
 	}{
 		{name: "http_timeout_sec valid", key: "http_timeout_sec", value: 30, wantErr: false,
-		check: func(t *testing.T, ps *ProviderState) {
-			if got := ps.ProxyClientTimeout(); got != 30*time.Second {
-				t.Errorf("Timeout = %v, want 30s", got)
-			}
-		}},
+			check: func(t *testing.T, ps *ProviderState) {
+				if got := ps.ProxyClientTimeout(); got != 30*time.Second {
+					t.Errorf("Timeout = %v, want 30s", got)
+				}
+			}},
 		{name: "http_timeout_sec invalid zero", key: "http_timeout_sec", value: 0, wantErr: true},
 		{name: "max_retries valid", key: "max_retries", value: 3, wantErr: false,
 			check: func(t *testing.T, ps *ProviderState) {
@@ -470,6 +479,7 @@ func newTestRouterWithKeys(t *testing.T, keys []string) *ProviderRouter {
 	t.Helper()
 	pr := NewProviderRouter("")
 	cfg := config.DefaultConfig()
+	cfg.AdminToken = "test-admin-token"
 	cfg.Keys = keys
 	pool := keypool.NewKeyPool(keys, nil)
 	pr.AddProvider("test", cfg, pool)

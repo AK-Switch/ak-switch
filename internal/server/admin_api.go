@@ -3,7 +3,6 @@ package server
 import (
 	"akswitch/internal/circuitbreaker"
 	"akswitch/internal/config"
-	"akswitch/internal/keypool"
 	"akswitch/internal/logentry"
 	"encoding/json"
 	"fmt"
@@ -44,17 +43,17 @@ type AdminAPI struct {
 // NewAdminAPI creates a new AdminAPI.
 func NewAdminAPI(pm ProviderLookup, logManager *LogManager, dashboardHTML string, startTime time.Time) *AdminAPI {
 	api := &AdminAPI{pm: pm, logManager: logManager, dashboardHTML: dashboardHTML, startTime: startTime}
-	api.disableKeyHandler = api.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
-		return pool.Disable(idx)
+	api.disableKeyHandler = api.keyOperationHandler(func(ps *ProviderState, idx int) error {
+		return ps.PoolDisable(idx)
 	})
-	api.enableKeyHandler = api.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
-		return pool.Enable(idx)
+	api.enableKeyHandler = api.keyOperationHandler(func(ps *ProviderState, idx int) error {
+		return ps.PoolEnable(idx)
 	})
-	api.cooldownKeyHandler = api.keyOperationHandler(func(pool *keypool.KeyPool, cfg *config.Config, idx int) error {
-		return pool.Cooldown(idx, time.Duration(cfg.CooldownSec)*time.Second)
+	api.cooldownKeyHandler = api.keyOperationHandler(func(ps *ProviderState, idx int) error {
+		return ps.PoolCooldown(idx, time.Duration(ps.CooldownSec())*time.Second)
 	})
-	api.deleteKeyHandler = api.keyOperationHandler(func(pool *keypool.KeyPool, _ *config.Config, idx int) error {
-		return pool.RemoveKey(idx)
+	api.deleteKeyHandler = api.keyOperationHandler(func(ps *ProviderState, idx int) error {
+		return ps.PoolRemoveKey(idx)
 	})
 	return api
 }
@@ -154,8 +153,6 @@ func (api *AdminAPI) keysHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pool := ps.pool
-
 	if r.Method == http.MethodPost || r.Method == http.MethodDelete {
 		if !api.checkAdminToken(w, r, ps.Name()) {
 			return
@@ -164,17 +161,17 @@ func (api *AdminAPI) keysHandler(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
-		keys := pool.Keys()
+		keys := ps.PoolKeys()
 		now := time.Now()
 		result := make([]map[string]interface{}, len(keys))
 		for i := range keys {
-			pool.CleanupOldRequests(i)
-			nameVal, _ := pool.Name(i)
+			ps.PoolCleanupOldRequests(i)
+			nameVal, _ := ps.PoolName(i)
 			result[i] = map[string]interface{}{
 				"index":       i + 1,
 				"key":         logentry.MaskKey(keys[i]),
-				"status":      pool.KeyStatusLabel(i, now),
-				"requests_1m": pool.RequestsInLastMinute(i),
+				"status":      ps.PoolKeyStatusLabel(i, now),
+				"requests_1m": ps.PoolRequestsInLastMinute(i),
 				"name":        nameVal,
 			}
 		}
@@ -194,7 +191,7 @@ func (api *AdminAPI) keysHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "key is required", http.StatusBadRequest)
 			return
 		}
-		idx := pool.AddKey(body.Key, body.KeyName)
+		idx := ps.PoolAddKey(body.Key, body.KeyName)
 		ps.PersistKeys()
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
@@ -211,11 +208,11 @@ func (api *AdminAPI) keysHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
-		if body.Index < 1 || body.Index > len(pool.Keys()) {
+		if body.Index < 1 || body.Index > ps.PoolLen() {
 			respondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid index"})
 			return
 		}
-		if err := pool.RemoveKey(body.Index - 1); err != nil {
+		if err := ps.PoolRemoveKey(body.Index - 1); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -234,7 +231,6 @@ func (api *AdminAPI) healthHandler(w http.ResponseWriter, r *http.Request) {
 	if !api.checkAnyAdminToken(w, r) {
 		return
 	}
-
 	pName := r.URL.Query().Get("provider")
 	type providerHealth struct {
 		Status            string `json:"status"`
@@ -775,7 +771,7 @@ func (api *AdminAPI) getRuntimeParams(ps *ProviderState) map[string]interface{} 
 //
 // API uses 1-based indices (from URL path), converted to 0-based internally.
 // In contrast, CLI commands use 0-based indices directly.
-func (api *AdminAPI) keyOperationHandler(operation func(*keypool.KeyPool, *config.Config, int) error) http.HandlerFunc {
+func (api *AdminAPI) keyOperationHandler(operation func(ps *ProviderState, idx int) error) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ps, errMsg := api.resolveProvider(r)
 		if ps == nil {
@@ -796,7 +792,7 @@ func (api *AdminAPI) keyOperationHandler(operation func(*keypool.KeyPool, *confi
 			return
 		}
 
-		if err := operation(ps.pool, ps.config, idx); err != nil {
+		if err := operation(ps, idx); err != nil {
 			respondJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 			return
 		}
@@ -827,26 +823,25 @@ func (api *AdminAPI) checkAdminToken(w http.ResponseWriter, r *http.Request, pro
 }
 
 // checkAnyAdminToken validates the X-Admin-Token header against any configured admin token.
-// If at least one provider has an AdminToken configured, a valid token must be provided.
-// If no providers have AdminToken configured, access is allowed without token.
+// If no provider has an AdminToken configured, access is allowed (no auth enforced).
+// When tokens are configured, a matching token is required.
 func (api *AdminAPI) checkAnyAdminToken(w http.ResponseWriter, r *http.Request) bool {
 	token := r.Header.Get("X-Admin-Token")
-	names := api.pm.ProviderNames()
 	matched := false
 	hasAnyToken := false
-	for _, name := range names {
-		ps := api.pm.LookupProvider(name)
-		if ps.HasAdminToken() {
-			hasAnyToken = true
-			if ps.CheckAdminToken(token) {
-				matched = true
-			}
+	api.pm.ForEach(func(_ string, ps *ProviderState) {
+		if !ps.HasAdminToken() {
+			return
 		}
-	}
-	if matched {
+		hasAnyToken = true
+		if ps.CheckAdminToken(token) {
+			matched = true
+		}
+	})
+	if !hasAnyToken {
 		return true
 	}
-	if !hasAnyToken {
+	if matched {
 		return true
 	}
 	http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -998,8 +993,8 @@ var runtimeConfigFields = []runtimeConfigField{
 			ps.SetCooldownSec(v)
 			ps.ConfigurePoolCBs(
 				time.Duration(v)*time.Second,
-				time.Duration(ps.config.BackoffCapSec)*time.Second,
-				ps.config.BackoffMultiplier,
+				time.Duration(ps.BackoffCapSec())*time.Second,
+				ps.BackoffMultiplier(),
 			)
 			return v, nil
 		},
@@ -1017,9 +1012,9 @@ var runtimeConfigFields = []runtimeConfigField{
 			}
 			ps.SetBackoffCapSec(v)
 			ps.ConfigurePoolCBs(
-				time.Duration(ps.config.CooldownSec)*time.Second,
+				time.Duration(ps.CooldownSec())*time.Second,
 				time.Duration(v)*time.Second,
-				ps.config.BackoffMultiplier,
+				ps.BackoffMultiplier(),
 			)
 			return v, nil
 		},
@@ -1037,8 +1032,8 @@ var runtimeConfigFields = []runtimeConfigField{
 			}
 			ps.SetBackoffMultiplier(v)
 			ps.ConfigurePoolCBs(
-				time.Duration(ps.config.CooldownSec)*time.Second,
-				time.Duration(ps.config.BackoffCapSec)*time.Second,
+				time.Duration(ps.CooldownSec())*time.Second,
+				time.Duration(ps.BackoffCapSec())*time.Second,
 				v,
 			)
 			return v, nil
