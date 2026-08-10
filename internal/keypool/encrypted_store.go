@@ -41,15 +41,12 @@ var (
 )
 
 // getMasterKey returns a 32-byte master key, lazily initialized once.
-// Priority: OS keyring -> local master.key -> generate new key
+// Priority: keyring backend (test-injectable) -> local master.key -> generate new key
 func getMasterKey() ([]byte, error) {
 	masterKeyOnce.Do(func() {
-		// 1. Try OS keyring first
-		kr, err := keyring.Open(keyring.Config{
-			ServiceName: "akswitch",
-		})
-		if err == nil {
-			item, err := kr.Get("akswitch:master-key")
+		// 1. Try keyring backend (initKeyring checks test injection + OS keyring)
+		if err := initKeyring(); err == nil {
+			item, err := keyringBackend.Get("akswitch:master-key")
 			if err == nil {
 				masterKey = item.Data
 				return
@@ -74,8 +71,8 @@ func getMasterKey() ([]byte, error) {
 		}
 
 		// Prefer storing in keyring
-		if kr != nil {
-			if setErr := kr.Set(keyring.Item{
+		if keyringBackend != nil {
+			if setErr := keyringBackend.Set(keyring.Item{
 				Key:  "akswitch:master-key",
 				Data: key,
 			}); setErr == nil {
