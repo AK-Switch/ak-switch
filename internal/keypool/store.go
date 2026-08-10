@@ -93,7 +93,12 @@ func SaveFullStore(path string, store *KeyStore) error {
 // This is the primary write path; file-based SaveFullStore is retained
 // for migration and backward compatibility.
 func SaveKeys(provider string, store *KeyStore) error {
-	return saveToKeyring(provider, store)
+	if err := SaveEncrypted(provider, store); err != nil {
+		return err
+	}
+	// 同时清理旧 keyring 数据
+	_ = removeFromKeyring(provider)
+	return nil
 }
 
 // SaveKeysInsecure saves a KeyStore for a provider as a plaintext JSON file.
@@ -122,20 +127,30 @@ func SaveKeysInsecure(provider string, store *KeyStore) error {
 //
 // Returns (nil, nil) if no stored keys exist in any backend.
 func LoadKeys(provider string) (*KeyStore, error) {
-	// 1. Try keyring first
-	store, err := loadFromKeyring(provider)
-	if err != nil {
-	} else if store != nil {
+	// 1. 尝试加密文件（新主路径）
+	store, err := LoadEncrypted(provider)
+	if err == nil && store != nil {
 		return store, nil
 	}
 
-	// 2. Try insecure plaintext file
+	// 2. 尝试 keyring 旧数据（仅迁移用）
+	store, err = loadFromKeyring(provider)
+	if err == nil && store != nil {
+		// 迁移: 写入加密文件
+		if saveErr := SaveEncrypted(provider, store); saveErr == nil {
+			// 迁移成功，删除旧 keyring 条目
+			_ = removeFromKeyring(provider)
+		}
+		return store, nil
+	}
+
+	// 3. 尝试 insecure 明文文件
 	store, err = loadInsecureFile(provider)
 	if err == nil && store != nil {
 		return store, nil
 	}
 
-	// 3. Migrate from old encrypted file
+	// 4. 尝试 legacy .enc 文件
 	oldPath, pathErr := legacyKeysPath(provider)
 	if pathErr != nil {
 		return nil, nil
@@ -145,15 +160,10 @@ func LoadKeys(provider string) (*KeyStore, error) {
 		return nil, nil
 	}
 
-	// Migrate to keyring — best-effort; if it fails, keep old file
-	if saveErr := saveToKeyring(provider, oldStore); saveErr == nil {
-		src, _ := os.ReadFile(oldPath)
-		_ = os.WriteFile(oldPath+".bak", src, 0600)
-		_ = os.Remove(oldPath)
-		return oldStore, nil
-	}
-
-	return nil, nil
+	// 迁移 legacy 到加密文件: 先备份旧文件，再写入加密文件
+	_ = os.Rename(oldPath, oldPath+".bak")
+	_ = SaveEncrypted(provider, oldStore)
+	return oldStore, nil
 }
 
 // insecureKeysPath returns the path for a provider's insecure plaintext key file.
@@ -186,30 +196,30 @@ func legacyKeysPath(provider string) (string, error) {
 // LoadKeysFromStore loads API keys for a provider from the configured keys file
 // or the standard encrypted store. Returns loaded keys and whether keys were loaded.
 func LoadKeysFromStore(name string, cfg *config.Config) (keys, names []string, loaded bool) {
-	// 1. Try system keyring first
-	if store, err := loadFromKeyring(name); err == nil && store != nil {
-		// Also try to load from insecure file and merge keys not in keyring.
-		// This ensures keys saved with --insecure-storage are always loaded
-		// even when keyring has data.
+	// 1. 加密文件
+	if store, err := LoadEncrypted(name); err == nil && store != nil {
 		if insecureStore, err := loadInsecureFile(name); err == nil && insecureStore != nil {
-			for _, insecureEntry := range insecureStore.Keys {
+			for _, ie := range insecureStore.Keys {
 				found := false
-				for _, keyringEntry := range store.Keys {
-					if insecureEntry.Key == keyringEntry.Key {
-						found = true
-						break
-					}
+				for _, ke := range store.Keys {
+					if ie.Key == ke.Key { found = true; break }
 				}
-				if !found {
-					store.Keys = append(store.Keys, insecureEntry)
-				}
+				if !found { store.Keys = append(store.Keys, ie) }
 			}
 		}
 		k, n := keysFromStore(store)
 		return k, n, true
 	}
 
-	// 2. Fallback: custom keys file
+	// 2. keyring 旧数据（触发迁移）
+	if store, err := loadFromKeyring(name); err == nil && store != nil {
+		_ = SaveEncrypted(name, store)
+		_ = removeFromKeyring(name)
+		k, n := keysFromStore(store)
+		return k, n, true
+	}
+
+	// 3. 自定义 keys file
 	if cfg.KeysFile != "" {
 		fileKeys, fileNames, err := LoadKeysFromFile(cfg.KeysFile)
 		if err == nil && fileKeys != nil {
@@ -217,17 +227,15 @@ func LoadKeysFromStore(name string, cfg *config.Config) (keys, names []string, l
 		}
 	}
 
-	// 3. Fallback: insecure plaintext file
+	// 4. insecure 明文文件
 	if store, err := loadInsecureFile(name); err == nil && store != nil {
 		k, n := keysFromStore(store)
 		return k, n, true
 	}
 
-	// 4. Fallback: legacy encrypted file
+	// 5. legacy .enc
 	xdgPath, err := config.XDGConfigPath()
-	if err != nil {
-		return nil, nil, false
-	}
+	if err != nil { return nil, nil, false }
 	keyFile := filepath.Join(filepath.Dir(xdgPath), "keys", name+".enc")
 	fileKeys, fileNames, err := LoadKeysFromFile(keyFile)
 	if err == nil && fileKeys != nil {
@@ -238,7 +246,9 @@ func LoadKeysFromStore(name string, cfg *config.Config) (keys, names []string, l
 
 // RemoveKeys removes a provider's keys from the system keyring.
 func RemoveKeys(provider string) error {
-	return removeFromKeyring(provider)
+	_ = RemoveEncrypted(provider)
+	_ = removeFromKeyring(provider)
+	return nil
 }
 
 // LoadStoreFromKeyring loads a provider's full KeyStore from the system keyring.
