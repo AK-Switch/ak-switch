@@ -91,7 +91,7 @@ func getMasterKey() ([]byte, error) {
 		}
 		mkPath, mkErr := masterKeyFile()
 		if mkErr != nil {
-			masterKeyErr = mkErr
+			masterKeyErr = fmt.Errorf("master key file: %w", mkErr)
 			return
 		}
 		if err := os.WriteFile(mkPath, key, 0600); err != nil {
@@ -197,7 +197,7 @@ func LoadEncrypted(provider string) (*KeyStore, error) {
 	}
 	path, err := encryptedFilePath(provider)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load keys for %q: %w", provider, err)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -224,7 +224,7 @@ func LoadEncrypted(provider string) (*KeyStore, error) {
 func RemoveEncrypted(provider string) error {
 	path, err := encryptedFilePath(provider)
 	if err != nil {
-		return err
+		return fmt.Errorf("remove encrypted keys for %q: %w", provider, err)
 	}
 	err = os.Remove(path)
 	if err != nil && !os.IsNotExist(err) {
