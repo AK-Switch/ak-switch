@@ -120,7 +120,8 @@ func SaveKeysInsecure(provider string, store *KeyStore) error {
 
 // LoadKeys loads a KeyStore for a provider from the encrypted file (primary).
 // If not found or decryption fails, falls back to keyring migration, insecure
-// plaintext file, and legacy .enc file in that order.
+// plaintext file, and legacy .enc file in that order. Only returns an error if
+// all backends fail or an unrecoverable error occurs.
 //
 // Returns (nil, nil) if no stored keys exist in any backend.
 func LoadKeys(provider string) (*KeyStore, error) {
@@ -129,24 +130,27 @@ func LoadKeys(provider string) (*KeyStore, error) {
 	if err != nil {
 		// 解密失败时，尝试作为 legacy 明文 JSON 加载（文件名同为 .enc）
 		path, pathErr := encryptedFilePath(provider)
-		if pathErr == nil {
-			if _, statErr := os.Stat(path); statErr == nil {
-				if legacyStore, legacyErr := LoadFullStore(path); legacyErr == nil && legacyStore != nil {
-					// 先备份旧文件，再迁移到加密格式
-					src, _ := os.ReadFile(path)
-					_ = os.WriteFile(path+".bak", src, 0600)
-					_ = SaveEncrypted(provider, legacyStore)
-					return legacyStore, nil
-				}
+		if pathErr != nil {
+			return nil, fmt.Errorf("load keys for %q: %w", provider, pathErr)
+		}
+		if _, statErr := os.Stat(path); statErr == nil {
+			if legacyStore, legacyErr := LoadFullStore(path); legacyErr == nil && legacyStore != nil {
+				// 先备份旧文件，再迁移到加密格式
+				src, _ := os.ReadFile(path)
+				_ = os.WriteFile(path+".bak", src, 0600)
+				_ = SaveEncrypted(provider, legacyStore)
+				return legacyStore, nil
 			}
 		}
-		return nil, err
+		// 继续尝试其他回退路径（keyring、insecure、legacy .enc）
+		goto fallback
 	}
 	if store != nil {
 		return store, nil
 	}
 
 	// 2. 尝试 keyring 旧数据（仅迁移用）
+fallback:
 	store, err = loadFromKeyring(provider)
 	if err != nil {
 		return nil, err

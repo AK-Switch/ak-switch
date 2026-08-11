@@ -514,3 +514,55 @@ func TestLoadKeysFromStore_MergesInsecureOnlyWhenKeyringMissingKeys(t *testing.T
 		t.Errorf("name = %q, want %q (keyring should win)", names[0], "from-keyring")
 	}
 }
+
+func TestLoadKeys_DecryptFallsBackToKeyring(t *testing.T) {
+	dir := t.TempDir()
+	config.ConfigDir = dir
+	defer func() { config.ConfigDir = "" }()
+
+	// Reset master key so getMasterKey uses keyring backend
+	resetMasterKeyForTest()
+	defer resetMasterKeyForTest()
+
+	// Set up keyring with store data (no master-key item → getMasterKey generates random key)
+	kr := keyring.NewArrayKeyring(nil)
+	keyringStore := &KeyStore{
+		Keys: []KeyEntry{{Key: "kr-key", Name: "from-keyring"}},
+	}
+	keyringData, err := json.Marshal(keyringStore)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if err := kr.Set(keyring.Item{
+		Key:  keyringItemKey("fallback-decrypt"),
+		Data: keyringData,
+	}); err != nil {
+		t.Fatalf("set keyring item: %v", err)
+	}
+	setTestKeyring(kr)
+	defer resetTestKeyring()
+
+	// Write corrupted (non-JSON) encrypted file — LoadEncrypted will fail to decrypt
+	encPath, err := encryptedFilePath("fallback-decrypt")
+	if err != nil {
+		t.Fatalf("encryptedFilePath: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(encPath), 0700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(encPath, []byte("not-valid-encrypted-data"), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	// LoadKeys should fall back to keyring instead of returning decrypt error
+	loaded, err := LoadKeys("fallback-decrypt")
+	if err != nil {
+		t.Fatalf("LoadKeys returned error, want fallback to keyring: %v", err)
+	}
+	if loaded == nil {
+		t.Fatal("LoadKeys returned nil, want keyring data")
+	}
+	if len(loaded.Keys) != 1 || loaded.Keys[0].Key != "kr-key" {
+		t.Errorf("keys = %v, want [kr-key]", loaded.Keys)
+	}
+}
