@@ -53,8 +53,6 @@ func TestTokenUsageCounterRegistration(t *testing.T) {
 	}
 }
 
-
-
 func TestRetryCounterRegistration(t *testing.T) {
 	reg, m := NewRegistry()
 	if m.RetryCount == nil {

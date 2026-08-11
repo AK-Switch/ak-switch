@@ -198,7 +198,6 @@ func TestKeyCircuitBreaker_CooldownRemaining(t *testing.T) {
 	}
 }
 
-
 func TestKeyCircuitBreaker_RecordAuthFailure_Single(t *testing.T) {
 	cb := NewKeyCircuitBreaker(30*time.Second, 120*time.Second, 2, 3)
 	if cb.AuthFailCount() != 0 {

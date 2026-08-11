@@ -62,12 +62,12 @@ func newHTTPResponse(statusCode int, body string) *http.Response {
 
 func TestCategorizeError_NonRetryableCodes(t *testing.T) {
 	codes := map[int]ErrorCategory{
-		http.StatusBadRequest:          CatNonRetryable,
-		http.StatusMethodNotAllowed:    CatNonRetryable,
-		http.StatusNotAcceptable:       CatNonRetryable,
+		http.StatusBadRequest:            CatNonRetryable,
+		http.StatusMethodNotAllowed:      CatNonRetryable,
+		http.StatusNotAcceptable:         CatNonRetryable,
 		http.StatusRequestEntityTooLarge: CatNonRetryable,
-		http.StatusUnprocessableEntity: CatNonRetryable,
-		http.StatusNotImplemented:      CatNonRetryable,
+		http.StatusUnprocessableEntity:   CatNonRetryable,
+		http.StatusNotImplemented:        CatNonRetryable,
 	}
 	for code, want := range codes {
 		got := categorizeError(code, nil)

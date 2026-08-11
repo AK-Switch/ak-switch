@@ -58,7 +58,6 @@ func SaveKeysToFile(path string, keys []string, names []string) error {
 
 // LoadFullStore loads the complete KeyStore from file (including disabled state).
 // Returns nil store with nil error if the file does not exist.
-// LoadFullStore loads the complete KeyStore from file (including disabled state).
 func LoadFullStore(path string) (*KeyStore, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -79,7 +78,6 @@ func LoadFullStore(path string) (*KeyStore, error) {
 }
 
 // SaveFullStore writes the complete KeyStore to file.
-// SaveFullStore writes the complete KeyStore to file.
 func SaveFullStore(path string, store *KeyStore) error {
 
 	data, err := json.MarshalIndent(store, "", "  ")
@@ -89,11 +87,16 @@ func SaveFullStore(path string, store *KeyStore) error {
 	return os.WriteFile(path, data, 0600)
 }
 
-// SaveKeys saves a KeyStore for a provider using the system keyring.
-// This is the primary write path; file-based SaveFullStore is retained
-// for migration and backward compatibility.
+// SaveKeys saves a KeyStore for a provider as an encrypted file.
+// The keyring entry is also removed (migration cleanup).
+// Returns the error from SaveEncrypted directly if it fails.
 func SaveKeys(provider string, store *KeyStore) error {
-	return saveToKeyring(provider, store)
+	if err := SaveEncrypted(provider, store); err != nil {
+		return err
+	}
+	// 同时清理旧 keyring 数据
+	_ = removeFromKeyring(provider)
+	return nil
 }
 
 // SaveKeysInsecure saves a KeyStore for a provider as a plaintext JSON file.
@@ -115,27 +118,62 @@ func SaveKeysInsecure(provider string, store *KeyStore) error {
 	return os.WriteFile(path, data, 0600)
 }
 
-// LoadKeys loads a KeyStore for a provider from the system keyring.
-// If no keyring data is found, attempts fallback backends in order:
-//  1. Insecure plaintext file (<XDG config dir>/keys/<provider>.json)
-//  2. Migration from old encrypted file (<XDG config dir>/keys/<provider>.enc)
+// LoadKeys loads a KeyStore for a provider from the encrypted file (primary).
+// If not found or decryption fails, falls back to keyring migration, insecure
+// plaintext file, and legacy .enc file in that order. Only returns an error if
+// all backends fail or an unrecoverable error occurs.
 //
 // Returns (nil, nil) if no stored keys exist in any backend.
 func LoadKeys(provider string) (*KeyStore, error) {
-	// 1. Try keyring first
-	store, err := loadFromKeyring(provider)
+	// 1. 尝试加密文件（新主路径）
+	store, err := LoadEncrypted(provider)
 	if err != nil {
-	} else if store != nil {
+		// 解密失败时，尝试作为 legacy 明文 JSON 加载（文件名同为 .enc）
+		path, pathErr := encryptedFilePath(provider)
+		if pathErr != nil {
+			return nil, fmt.Errorf("load keys for %q: %w", provider, pathErr)
+		}
+		if _, statErr := os.Stat(path); statErr == nil {
+			if legacyStore, legacyErr := LoadFullStore(path); legacyErr == nil && legacyStore != nil {
+				// 先备份旧文件，再迁移到加密格式
+				src, _ := os.ReadFile(path)
+				_ = os.WriteFile(path+".bak", src, 0600)
+				_ = SaveEncrypted(provider, legacyStore)
+				return legacyStore, nil
+			}
+		}
+		// 继续尝试其他回退路径（keyring、insecure、legacy .enc）
+		goto fallback
+	}
+	if store != nil {
 		return store, nil
 	}
 
-	// 2. Try insecure plaintext file
+	// 2. 尝试 keyring 旧数据（仅迁移用）
+fallback:
+	store, err = loadFromKeyring(provider)
+	if err != nil {
+		return nil, err
+	}
+	if store != nil {
+		// 迁移: 写入加密文件
+		if saveErr := SaveEncrypted(provider, store); saveErr == nil {
+			// 迁移成功，删除旧 keyring 条目
+			_ = removeFromKeyring(provider)
+		}
+		return store, nil
+	}
+
+	// 3. 尝试 insecure 明文文件
 	store, err = loadInsecureFile(provider)
-	if err == nil && store != nil {
+	if err != nil {
+		return nil, err
+	}
+	if store != nil {
 		return store, nil
 	}
 
-	// 3. Migrate from old encrypted file
+	// 4. 尝试 legacy .enc 文件
 	oldPath, pathErr := legacyKeysPath(provider)
 	if pathErr != nil {
 		return nil, nil
@@ -145,15 +183,13 @@ func LoadKeys(provider string) (*KeyStore, error) {
 		return nil, nil
 	}
 
-	// Migrate to keyring — best-effort; if it fails, keep old file
-	if saveErr := saveToKeyring(provider, oldStore); saveErr == nil {
+	// 迁移 legacy 到加密文件: 先写入加密文件成功后再备份旧文件
+	if err := SaveEncrypted(provider, oldStore); err == nil {
 		src, _ := os.ReadFile(oldPath)
 		_ = os.WriteFile(oldPath+".bak", src, 0600)
 		_ = os.Remove(oldPath)
-		return oldStore, nil
 	}
-
-	return nil, nil
+	return oldStore, nil
 }
 
 // insecureKeysPath returns the path for a provider's insecure plaintext key file.
@@ -183,33 +219,29 @@ func legacyKeysPath(provider string) (string, error) {
 	return filepath.Join(filepath.Dir(xdgPath), "keys", provider+".enc"), nil
 }
 
-// LoadKeysFromStore loads API keys for a provider from the configured keys file
-// or the standard encrypted store. Returns loaded keys and whether keys were loaded.
+// LoadKeysFromStore loads API keys for a provider from all available backends
+// in priority order: encrypted file → keyring → custom keys file → insecure
+// plaintext file → legacy .enc file. Returns loaded keys and whether any
+// backend had keys.
 func LoadKeysFromStore(name string, cfg *config.Config) (keys, names []string, loaded bool) {
-	// 1. Try system keyring first
-	if store, err := loadFromKeyring(name); err == nil && store != nil {
-		// Also try to load from insecure file and merge keys not in keyring.
-		// This ensures keys saved with --insecure-storage are always loaded
-		// even when keyring has data.
-		if insecureStore, err := loadInsecureFile(name); err == nil && insecureStore != nil {
-			for _, insecureEntry := range insecureStore.Keys {
-				found := false
-				for _, keyringEntry := range store.Keys {
-					if insecureEntry.Key == keyringEntry.Key {
-						found = true
-						break
-					}
-				}
-				if !found {
-					store.Keys = append(store.Keys, insecureEntry)
-				}
-			}
-		}
+	// 1. 加密文件
+	if store, err := LoadEncrypted(name); err == nil && store != nil {
+		mergeInsecureKeys(name, store)
 		k, n := keysFromStore(store)
 		return k, n, true
 	}
 
-	// 2. Fallback: custom keys file
+	// 2. keyring 旧数据（触发迁移）
+	if store, err := loadFromKeyring(name); err == nil && store != nil {
+		// 先合并 insecure 文件中的 key（不重复），再写入加密文件
+		mergeInsecureKeys(name, store)
+		_ = SaveEncrypted(name, store)
+		_ = removeFromKeyring(name)
+		k, n := keysFromStore(store)
+		return k, n, true
+	}
+
+	// 3. 自定义 keys file
 	if cfg.KeysFile != "" {
 		fileKeys, fileNames, err := LoadKeysFromFile(cfg.KeysFile)
 		if err == nil && fileKeys != nil {
@@ -217,13 +249,13 @@ func LoadKeysFromStore(name string, cfg *config.Config) (keys, names []string, l
 		}
 	}
 
-	// 3. Fallback: insecure plaintext file
+	// 4. insecure 明文文件
 	if store, err := loadInsecureFile(name); err == nil && store != nil {
 		k, n := keysFromStore(store)
 		return k, n, true
 	}
 
-	// 4. Fallback: legacy encrypted file
+	// 5. legacy .enc
 	xdgPath, err := config.XDGConfigPath()
 	if err != nil {
 		return nil, nil, false
@@ -238,7 +270,9 @@ func LoadKeysFromStore(name string, cfg *config.Config) (keys, names []string, l
 
 // RemoveKeys removes a provider's keys from the system keyring.
 func RemoveKeys(provider string) error {
-	return removeFromKeyring(provider)
+	_ = RemoveEncrypted(provider)
+	_ = removeFromKeyring(provider)
+	return nil
 }
 
 // LoadStoreFromKeyring loads a provider's full KeyStore from the system keyring.
@@ -258,9 +292,30 @@ func keysFromStore(store *KeyStore) (keys, names []string) {
 	return keys, names
 }
 
+// mergeInsecureKeys merges keys from the insecure plaintext file into store.
+// Keys already present (by value) are not duplicated.
+func mergeInsecureKeys(name string, store *KeyStore) {
+	insecureStore, err := loadInsecureFile(name)
+	if err != nil || insecureStore == nil {
+		return
+	}
+	for _, ie := range insecureStore.Keys {
+		found := false
+		for _, ke := range store.Keys {
+			if ie.Key == ke.Key {
+				found = true
+				break
+			}
+		}
+		if !found {
+			store.Keys = append(store.Keys, ie)
+		}
+	}
+}
+
 // LoadDisabledNames loads the names of permanently disabled keys for a provider
 // from the key store. Returns nil if the store has no entries or no disabled keys.
-// Uses the same load priority as LoadKeysFromStore: keyring → keys file → insecure file.
+// Uses the same load priority as LoadKeysFromStore: encrypted file → keyring → keys file → insecure file.
 func LoadDisabledNames(name string, cfg *config.Config) []string {
 	store := loadStoreFromAnyBackend(name, cfg)
 	if store == nil {
@@ -276,15 +331,20 @@ func LoadDisabledNames(name string, cfg *config.Config) []string {
 }
 
 // loadStoreFromAnyBackend tries to load a KeyStore from any available backend.
-// Priority: keyring → keys file → insecure file.
+// Priority: encrypted file → keyring → keys file → insecure file.
 // Returns the first successful result, or nil if all backends fail.
 func loadStoreFromAnyBackend(name string, cfg *config.Config) *KeyStore {
-	// 1. Try system keyring first
+	// 1. Try encrypted file first (new primary)
+	if store, err := LoadEncrypted(name); err == nil && store != nil {
+		return store
+	}
+
+	// 2. Fallback: keyring (migration happens at LoadKeys level)
 	if store, err := loadFromKeyring(name); err == nil && store != nil {
 		return store
 	}
 
-	// 2. Fallback: custom keys file
+	// 3. Fallback: custom keys file
 	if cfg.KeysFile != "" {
 		store, err := LoadFullStore(cfg.KeysFile)
 		if err == nil && store != nil {
@@ -292,7 +352,7 @@ func loadStoreFromAnyBackend(name string, cfg *config.Config) *KeyStore {
 		}
 	}
 
-	// 3. Fallback: insecure plaintext file
+	// 4. Fallback: insecure plaintext file
 	store, err := loadInsecureFile(name)
 	if err == nil && store != nil {
 		return store

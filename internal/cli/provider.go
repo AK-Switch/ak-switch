@@ -106,7 +106,7 @@ Example:
 			if tc.Port == 0 {
 				return fmt.Errorf("--port/-p is required for the first provider")
 			}
-				// reuse existing port
+			// reuse existing port
 		} else if tc.Port == 0 {
 			// First provider with a port — set it
 			tc.Port = port

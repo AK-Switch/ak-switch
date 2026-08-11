@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"strings"
 
-	tiktoken "github.com/pkoukk/tiktoken-go"
 	"akswitch/internal/tracker"
+	tiktoken "github.com/pkoukk/tiktoken-go"
 )
 
 // ExtractTokenUsage attempts to parse input_tokens/output_tokens from a JSON response body.

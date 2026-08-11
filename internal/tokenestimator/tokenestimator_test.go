@@ -266,7 +266,7 @@ func TestRecordCalibration_BothPositive(t *testing.T) {
 
 func TestRecordCalibration_ZeroInput(t *testing.T) {
 	cal := tracker.NewCalibrator(100)
-	RecordCalibration(cal, "gpt-4o", 0, 0, 5, 5) // estInput=0, should not record
+	RecordCalibration(cal, "gpt-4o", 0, 0, 5, 5)   // estInput=0, should not record
 	RecordCalibration(cal, "gpt-4o", 10, 10, 0, 0) // estOutput=0, should not record
 	// No panic = pass
 }

@@ -267,8 +267,8 @@ func (p *KeyPool) Enable(idx int) error {
 	if err := p.validateIndex(idx); err != nil {
 		return err
 	}
-					p.cbs[idx].Reset()
-		
+	p.cbs[idx].Reset()
+
 	name := ""
 	if idx >= 0 && idx < len(p.names) {
 		name = p.names[idx]
@@ -289,6 +289,7 @@ func (p *KeyPool) IsDisabled(idx int) bool {
 	}
 	return p.cbs[idx].State() == circuitbreaker.Permanent
 }
+
 // ConfigureCBs replaces all per-key circuit breakers with new ones configured
 // with the given base cooldown, backoff cap, and multiplier.
 // Called by NewProviderState to synchronize breaker parameters with config.
@@ -352,7 +353,6 @@ func (p *KeyPool) Release(idx int) {
 		p.inUse[idx] = false
 	}
 }
-
 
 // ActiveCount returns the number of non-disabled keys.
 func (p *KeyPool) ActiveCount() int {
@@ -490,8 +490,8 @@ func (p *KeyPool) AddKey(key string, name string) int {
 	defer p.mu.Unlock()
 	p.keys = append(p.keys, key)
 	p.names = append(p.names, name)
-				p.cbs = append(p.cbs, circuitbreaker.NewKeyCircuitBreaker(0, 0, 0))
-		
+	p.cbs = append(p.cbs, circuitbreaker.NewKeyCircuitBreaker(0, 0, 0))
+
 	p.requestHistory = append(p.requestHistory, []time.Time{})
 	p.lastUsed = append(p.lastUsed, time.Time{})
 	p.inUse = append(p.inUse, false)
@@ -517,8 +517,8 @@ func (p *KeyPool) RemoveKey(idx int) error {
 	}
 	p.keys = append(p.keys[:idx], p.keys[idx+1:]...)
 	p.names = append(p.names[:idx], p.names[idx+1:]...)
-				p.cbs = append(p.cbs[:idx], p.cbs[idx+1:]...)
-		
+	p.cbs = append(p.cbs[:idx], p.cbs[idx+1:]...)
+
 	p.requestHistory = append(p.requestHistory[:idx], p.requestHistory[idx+1:]...)
 	p.lastUsed = append(p.lastUsed[:idx], p.lastUsed[idx+1:]...)
 	p.inUse = append(p.inUse[:idx], p.inUse[idx+1:]...)

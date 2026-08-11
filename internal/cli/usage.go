@@ -18,12 +18,12 @@ import (
 
 // credentialEntry represents a single line in the auto-reg-bot JSONL credential file.
 type credentialEntry struct {
-	APIKey       string `json:"api_key"`
-	APIKeyPlain  string `json:"api_key_plain"`
-	Account      string `json:"account"`
-	Password     string `json:"password"`
-	AccountName  string `json:"account_name,omitempty"`
-	TenantID     string `json:"tenant_id,omitempty"`
+	APIKey      string `json:"api_key"`
+	APIKeyPlain string `json:"api_key_plain"`
+	Account     string `json:"account"`
+	Password    string `json:"password"`
+	AccountName string `json:"account_name,omitempty"`
+	TenantID    string `json:"tenant_id,omitempty"`
 }
 
 func init() {
@@ -259,4 +259,3 @@ func truncate(s string, maxLen int) string {
 	}
 	return s[:maxLen] + "..."
 }
-
