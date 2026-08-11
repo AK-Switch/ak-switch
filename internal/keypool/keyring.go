@@ -150,24 +150,6 @@ func keyringItemKey(provider string) string {
 	return "akswitch:" + provider
 }
 
-// saveToKeyring saves a provider's KeyStore to the system keyring.
-func saveToKeyring(provider string, store *KeyStore) error {
-	if err := initKeyring(); err != nil {
-		return fmt.Errorf("save keys for %q to keyring: %w. "+
-			"Hint: use --insecure-storage to bypass the system keyring (WARNING: keys stored in plaintext)", provider, err)
-	}
-	data, err := json.Marshal(store)
-	if err != nil {
-		return fmt.Errorf("save keys for %q: marshal keystore: %w", provider, err)
-	}
-	if err := keyringBackend.Set(keyring.Item{
-		Key:  keyringItemKey(provider),
-		Data: data,
-	}); err != nil {
-		return fmt.Errorf("save keys for %q to keyring: %w", provider, err)
-	}
-	return nil
-}
 
 // loadFromKeyring loads a provider's KeyStore from the system keyring.
 // Returns (nil, nil) if the provider has no stored keys.
