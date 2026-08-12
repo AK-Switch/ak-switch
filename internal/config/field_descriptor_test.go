@@ -2,9 +2,7 @@
 
 package config
 
-import (
-	"testing"
-)
+import "testing"
 
 func TestFindField_Existing(t *testing.T) {
 	f := FindField("target")
@@ -29,8 +27,8 @@ func TestFindField_AllRegistered(t *testing.T) {
 	expected := []string{
 		"target", "cooldown_sec", "max_retries", "backoff_cap_sec",
 		"backoff_multiplier", "cb_reset_sec", "upstream_cb_threshold",
-		"http_timeout_sec", "health_check_interval_sec", "admin_token",
-		"disable_thinking", "genai_model", "keys_file",
+		"http_timeout_sec", "log_level", "health_check_interval_sec",
+		"admin_token", "disable_thinking", "genai_model", "keys_file",
 		"port", "log_file",
 	}
 	for _, key := range expected {

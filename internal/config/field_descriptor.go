@@ -241,7 +241,7 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 		TomlPath:        "provider.%s.health_check_interval_sec",
 		Type:            FieldTypeInt,
 		Default:         "30",
-		RuntimeEditable: false,
+		RuntimeEditable: true,
 		Parse:           func(s string) (any, error) { return strconv.Atoi(s) },
 		Format:          func(v any) string { return strconv.Itoa(v.(int)) },
 		ApplyRuntime: func(provider string, value any) error {
@@ -280,8 +280,7 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 		TomlPath:        "provider.%s.disable_thinking",
 		Type:            FieldTypeBool,
 		Default:         "false",
-		RuntimeEditable: false,
-		ReadOnly:        true,
+		RuntimeEditable: true,
 		Parse:           func(s string) (any, error) { return strconv.ParseBool(s) },
 		Format:          func(v any) string { return strconv.FormatBool(v.(bool)) },
 		ApplyRuntime: func(provider string, value any) error {
@@ -300,8 +299,7 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 		TomlPath:        "provider.%s.genai_model",
 		Type:            FieldTypeString,
 		Default:         "",
-		RuntimeEditable: false,
-		ReadOnly:        true,
+		RuntimeEditable: true,
 		Parse:           func(s string) (any, error) { return s, nil },
 		Format:          func(v any) string { return fmt.Sprintf("%v", v) },
 		ApplyRuntime: func(provider string, value any) error {
