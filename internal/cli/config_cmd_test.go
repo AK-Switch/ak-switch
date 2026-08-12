@@ -78,8 +78,14 @@ func TestConfigSetCmd_Exists(t *testing.T) {
 	}
 }
 
-func TestConfigSetCmd_HasPersistFlag(t *testing.T) {
-	if configSetCmd.Flags().Lookup("persist") == nil {
-		t.Fatal("expected --persist flag on config set command")
+func TestConfigSetCmd_HasRuntimeOnlyFlag(t *testing.T) {
+	if configSetCmd.Flags().Lookup("runtime-only") == nil {
+		t.Fatal("expected --runtime-only flag on config set command")
+	}
+}
+
+func TestConfigSetCmd_NoPersistFlag(t *testing.T) {
+	if configSetCmd.Flags().Lookup("persist") != nil {
+		t.Fatal("--persist flag should be removed (replaced by --runtime-only)")
 	}
 }
