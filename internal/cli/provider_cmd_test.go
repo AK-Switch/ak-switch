@@ -162,3 +162,12 @@ func TestProviderUsageCmd_Exists(t *testing.T) {
 		t.Fatal("expected usageCmd to be defined")
 	}
 }
+
+func TestProviderUpstreamCBResetCmd_Exists(t *testing.T) {
+	if providerUpstreamCBResetCmd == nil {
+		t.Fatal("providerUpstreamCBResetCmd is nil")
+	}
+	if providerUpstreamCBResetCmd.Use != "upstream-cb-reset <name>" {
+		t.Errorf("unexpected Use: %q", providerUpstreamCBResetCmd.Use)
+	}
+}

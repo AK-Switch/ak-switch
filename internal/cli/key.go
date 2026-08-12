@@ -599,6 +599,7 @@ Examples:
   akswitch key upstream-cb-reset sensenova`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		fmt.Fprintln(os.Stderr, "WARNING: 'key upstream-cb-reset' is deprecated, use 'provider upstream-cb-reset' instead")
 		return resetUpstreamCB(args[0])
 	},
 }
