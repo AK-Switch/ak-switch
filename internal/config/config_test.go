@@ -1129,3 +1129,54 @@ func TestConfig_BackwardCompatibility(t *testing.T) {
 		t.Error("field mutation broken")
 	}
 }
+
+func TestSaveTomlConfig_OmitZeroValues(t *testing.T) {
+	tc := &TomlConfig{
+		Provider: map[string]*Config{
+			"test": {
+				ProviderConfig: ProviderConfig{
+					Port:       7070,
+					TargetBase: "https://example.com",
+					// CooldownSec, MaxRetries, etc. left at zero
+				},
+			},
+		},
+	}
+	tmpDir := t.TempDir()
+	tomlPath := filepath.Join(tmpDir, "omit_zero.toml")
+	if err := SaveTomlConfig(tc, tomlPath); err != nil {
+		t.Fatalf("SaveTomlConfig() error: %v", err)
+	}
+
+	data, err := os.ReadFile(tomlPath)
+	if err != nil {
+		t.Fatalf("ReadFile error: %v", err)
+	}
+	output := string(data)
+
+	zeroValueFields := []string{
+		"cooldown_sec",
+		"max_retries",
+		"backoff_cap_sec",
+		"backoff_multiplier",
+		"cb_reset_sec",
+		"upstream_cb_threshold",
+		"http_timeout_sec",
+		"health_check_interval_sec",
+		"log_max_size",
+		"log_max_age",
+		"calibration_interval_sec",
+	}
+	for _, f := range zeroValueFields {
+		if strings.Contains(output, f) {
+			t.Errorf("TOML should not contain zero-value %s", f)
+		}
+	}
+
+	required := []string{"port", "target", "provider"}
+	for _, f := range required {
+		if !strings.Contains(output, f) {
+			t.Errorf("TOML must contain %s", f)
+		}
+	}
+}
