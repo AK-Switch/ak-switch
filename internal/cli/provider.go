@@ -27,6 +27,7 @@ func init() {
 	providerCmd.AddCommand(providerDefaultCmd)
 	providerCmd.AddCommand(providerInfoCmd)
 	providerCmd.AddCommand(providerUpdateCmd)
+	providerCmd.AddCommand(providerUpstreamCBResetCmd)
 
 	providerAddCmd.Flags().StringP("target", "t", "", "Upstream target URL (required)")
 	providerAddCmd.Flags().IntP("port", "p", 0, "HTTP listen port (required for first provider)")
@@ -367,6 +368,10 @@ Example:
 				return fmt.Errorf("invalid --%s value: %w", flagName, err)
 			}
 
+			if v, ok := parsed.(int); ok && v < -1 {
+				return fmt.Errorf("--%s must be >= -1", flagName)
+			}
+
 			fd.Persist(tc, name, prov, parsed)
 			changes++
 		}
@@ -559,6 +564,16 @@ Example:
 		}
 
 		return nil
+	},
+}
+
+var providerUpstreamCBResetCmd = &cobra.Command{
+	Use:   "upstream-cb-reset <name>",
+	Short: "Reset the upstream circuit breaker for a provider",
+	Long:  `Force-close the upstream circuit breaker for a provider.`,
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return resetUpstreamCB(args[0])
 	},
 }
 
