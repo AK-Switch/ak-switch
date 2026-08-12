@@ -171,3 +171,12 @@ func TestProviderUpstreamCBResetCmd_Exists(t *testing.T) {
 		t.Errorf("unexpected Use: %q", providerUpstreamCBResetCmd.Use)
 	}
 }
+
+func TestKeyUpstreamCBResetCmd_Deprecated(t *testing.T) {
+	if keyUpstreamCBResetCmd == nil {
+		t.Fatal("keyUpstreamCBResetCmd should still exist as deprecated alias")
+	}
+	if keyUpstreamCBResetCmd.Use != "upstream-cb-reset <provider>" {
+		t.Errorf("unexpected Use: %q", keyUpstreamCBResetCmd.Use)
+	}
+}
