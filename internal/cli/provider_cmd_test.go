@@ -207,16 +207,16 @@ func TestProviderUpdateCmd_BackoffMultiplierRangeValidation(t *testing.T) {
 	// hasCLIFlag/getCLIFlagValue read os.Args, not Cobra args.
 	// Must include the full command path so Cobra routes correctly.
 	origArgs := os.Args
-	os.Args = []string{"akswitch", "provider", "update", "test", "--backoff-multiplier", "-2.0"}
+	os.Args = []string{"akswitch", "provider", "update", "test", "--backoff-multiplier", "0.5"}
 	defer func() { os.Args = origArgs }()
 
 	cmd := providerUpdateCmd
-	cmd.SetArgs([]string{"test", "--backoff-multiplier", "-2.0"})
+	cmd.SetArgs([]string{"test", "--backoff-multiplier", "0.5"})
 	err := cmd.Execute()
 	if err == nil {
-		t.Fatal("expected error for backoff_multiplier < -1, got nil")
+		t.Fatal("expected error for backoff_multiplier = 0.5, got nil")
 	}
-	if !strings.Contains(err.Error(), "must be >= -1") {
-		t.Errorf("expected '>= -1' error, got: %v", err)
+	if !strings.Contains(err.Error(), "must be >= 1") {
+		t.Errorf("expected '>= 1' error, got: %v", err)
 	}
 }

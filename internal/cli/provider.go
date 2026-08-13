@@ -374,8 +374,8 @@ Example:
 					return fmt.Errorf("--%s must be >= -1", flagName)
 				}
 			case float64:
-				if v < -1 {
-					return fmt.Errorf("--%s must be >= -1", flagName)
+				if v < 1 {
+					return fmt.Errorf("--%s must be >= %g", flagName, 1.0)
 				}
 			}
 
