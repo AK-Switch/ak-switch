@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"time"
 
 	"akswitch/internal/config"
@@ -216,7 +215,7 @@ var configListCmd = &cobra.Command{
 					continue
 				}
 				val, _ := getFieldValue(tc, name, &fd)
-				fmt.Printf("  %-30s %s\n", fd.DisplayName+":", fd.Format(val))
+				fmt.Printf("  %-30s %s\n", fd.DisplayName+":", maskSensitiveValue(&fd, val))
 			}
 		}
 		return nil
@@ -271,7 +270,7 @@ var configGetCmd = &cobra.Command{
 			}
 			tc, _ := config.LoadTomlConfig(source)
 			val, _ := getGlobalFieldValue(tc, fd)
-			fmt.Println(fd.Format(val))
+			fmt.Println(maskSensitiveValue(fd, val))
 			return nil
 		}
 
@@ -283,9 +282,9 @@ var configGetCmd = &cobra.Command{
 			tc, _ := config.LoadTomlConfig(source)
 			val, _ := getFieldValue(tc, p, fd)
 			if all {
-				fmt.Printf("%s: %s\n", p, fd.Format(val))
+				fmt.Printf("%s: %s\n", p, maskSensitiveValue(fd, val))
 			} else {
-				fmt.Println(fd.Format(val))
+				fmt.Println(maskSensitiveValue(fd, val))
 			}
 		}
 		return nil
@@ -443,6 +442,18 @@ func persistFieldToToml(provider string, fd *config.ConfigFieldDescriptor, value
 	return config.SaveTomlConfig(tc, source)
 }
 
+// maskSensitiveValue returns a safe representation for sensitive fields
+// (e.g. admin_token). Non-sensitive fields pass through unchanged.
+func maskSensitiveValue(fd *config.ConfigFieldDescriptor, val any) string {
+	if fd.Key == "admin_token" {
+		if s, ok := val.(string); ok && s != "" {
+			return "(set)"
+		}
+		return "(not set)"
+	}
+	return fd.Format(val)
+}
+
 // getFieldValue reads a provider-scoped field value from a loaded TOML config.
 // Falls back to the field's default if the config is missing or unset.
 func getFieldValue(tc *config.TomlConfig, provider string, fd *config.ConfigFieldDescriptor) (any, error) {
@@ -473,6 +484,7 @@ func getFieldValue(tc *config.TomlConfig, provider string, fd *config.ConfigFiel
 				if p.AdminToken != "" {
 					return p.AdminToken, nil
 				}
+				return "", nil
 			case "disable_thinking":
 				return p.DisableThinking, nil
 			case "genai_model":
@@ -483,7 +495,7 @@ func getFieldValue(tc *config.TomlConfig, provider string, fd *config.ConfigFiel
 		}
 	}
 	// Fall back to default value
-	return parseDefault(fd)
+	return config.ParseDefault(fd)
 }
 
 // getGlobalFieldValue reads a global-scoped field value from a loaded TOML config.
@@ -496,21 +508,5 @@ func getGlobalFieldValue(tc *config.TomlConfig, fd *config.ConfigFieldDescriptor
 			return tc.LogFile, nil
 		}
 	}
-	return parseDefault(fd)
-}
-
-// parseDefault converts a ConfigFieldDescriptor's Default string to its typed value.
-func parseDefault(fd *config.ConfigFieldDescriptor) (any, error) {
-	switch fd.Type {
-	case config.FieldTypeInt:
-		return strconv.Atoi(fd.Default)
-	case config.FieldTypeFloat64:
-		return strconv.ParseFloat(fd.Default, 64)
-	case config.FieldTypeBool:
-		return strconv.ParseBool(fd.Default)
-	case config.FieldTypeString:
-		return fd.Default, nil
-	default:
-		return nil, fmt.Errorf("unknown field type: %s", fd.Type)
-	}
+	return config.ParseDefault(fd)
 }
