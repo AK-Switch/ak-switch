@@ -19,7 +19,9 @@ type ProviderConfig struct {
 	Host            string   `toml:"host,omitempty" default:"127.0.0.1"`
 	TargetBase      string   `toml:"target"`                     // Upstream target base URL (required)
 	AdminToken      string   `toml:"admin_token,omitempty"`      // Optional admin authentication token
-	DisableThinking bool     `toml:"disable_thinking,omitempty"` // Disable thinking mode
+	DisableThinking      bool     `toml:"disable_thinking,omitempty"` // Deprecated: use thinking_mode
+	ThinkingMode         string   `toml:"thinking_mode,omitempty"`        // "default" | "rectify"
+	RectifyThinkingMapTo string   `toml:"rectify_thinking_map_to,omitempty"` // "enabled" | "auto" | "disabled"
 	GenaiModel      string   `toml:"genai_model,omitempty"`      // Generative AI model name
 	MaxRetries      int      `toml:"max_retries" default:"1"`
 	LogLevel        string   `toml:"log_level,omitempty" default:"info"`
@@ -220,6 +222,8 @@ func (c *Config) DeepCopy() *Config {
 			TargetBase:             c.TargetBase,
 			AdminToken:             c.AdminToken,
 			DisableThinking:        c.DisableThinking,
+			ThinkingMode:         c.ThinkingMode,
+			RectifyThinkingMapTo: c.RectifyThinkingMapTo,
 			GenaiModel:             c.GenaiModel,
 			MaxRetries:             c.MaxRetries,
 			LogLevel:               c.LogLevel,
@@ -307,6 +311,12 @@ func mergeWithDefaults(base, override *Config) *Config {
 	if override.DisableThinking {
 		result.DisableThinking = true
 	}
+	if override.ThinkingMode != "" {
+		result.ThinkingMode = override.ThinkingMode
+	}
+	if override.RectifyThinkingMapTo != "" {
+		result.RectifyThinkingMapTo = override.RectifyThinkingMapTo
+	}
 	if override.GenaiModel != "" {
 		result.GenaiModel = override.GenaiModel
 	}
@@ -347,6 +357,16 @@ func mergeWithDefaults(base, override *Config) *Config {
 	result.RuntimeConfig.UpstreamCBThreshold = result.UpstreamCBThreshold
 	result.RuntimeConfig.LogLevel = result.LogLevel
 	return result
+}
+
+// migrateDisableThinking handles backward compatibility for the deprecated
+// DisableThinking field. When DisableThinking is true and ThinkingMode is
+// unset, it maps to the new field names.
+func (pc *ProviderConfig) migrateDisableThinking() {
+	if pc.DisableThinking && pc.ThinkingMode == "" {
+		pc.ThinkingMode = "rectify"
+		pc.RectifyThinkingMapTo = "enabled"
+	}
 }
 
 // mergeDefaults fills in zero-value fields with their default values using
