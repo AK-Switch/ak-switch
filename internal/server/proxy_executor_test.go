@@ -232,7 +232,7 @@ func TestHandleSuccess_PassthroughBody(t *testing.T) {
 	resp := newHTTPResponse(http.StatusOK, string(body))
 	w := httptest.NewRecorder()
 
-	px.handleSuccess(w, ps, 0, resp, testStartTime(), "POST", "http://upstream/v1/chat", body, 0)
+	px.handleSuccess(w, ps, 0, resp, testStartTime(), "POST", "http://upstream/v1/chat", body, 0, false)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("response status = %d, want 200", w.Code)
