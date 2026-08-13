@@ -549,6 +549,12 @@ func maskSensitiveValue(fd *config.ConfigFieldDescriptor, val any) string {
 		}
 		return "(not set)"
 	}
+	if fd.Key == "keys_file" {
+		if s, ok := val.(string); ok && s != "" {
+			return "(set)"
+		}
+		return "(not set)"
+	}
 	return fd.Format(val)
 }
 

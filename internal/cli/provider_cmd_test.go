@@ -373,3 +373,40 @@ func TestProviderUpdateCmd_NonRuntimeEditableWarning(t *testing.T) {
 		t.Error("disable_thinking should have been persisted to TOML")
 	}
 }
+
+func TestProviderUpdateCmd_LogLevelApplied(t *testing.T) {
+	tmpDir := t.TempDir()
+	tc := &config.TomlConfig{
+		Port: 8080,
+		Provider: map[string]*config.Config{
+			"test": {ProviderConfig: config.ProviderConfig{
+				TargetBase: "http://localhost:11434",
+				LogLevel:   "info",
+			}},
+		},
+	}
+	tomlPath := filepath.Join(tmpDir, "config.toml")
+	if err := config.SaveTomlConfig(tc, tomlPath); err != nil {
+		t.Fatalf("setup save config: %v", err)
+	}
+
+	origDir := config.ConfigDir
+	defer func() { config.ConfigDir = origDir }()
+	config.ConfigDir = tmpDir
+
+	origArgs := os.Args
+	os.Args = []string{"akswitch", "provider", "update", "test", "--log-level", "debug"}
+	defer func() { os.Args = origArgs }()
+
+	cmd := providerUpdateCmd
+	cmd.SetArgs([]string{"test", "--log-level", "debug"})
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("provider update --log-level should succeed: %v", err)
+	}
+
+	loaded, _ := config.LoadTomlConfig(tomlPath)
+	if loaded.Provider["test"].LogLevel != "debug" {
+		t.Errorf("log_level = %q, want \"debug\"", loaded.Provider["test"].LogLevel)
+	}
+}

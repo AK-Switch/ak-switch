@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -48,6 +48,7 @@ func init() {
 	providerUpdateCmd.Flags().String("admin-token", "", "Admin authentication token (empty to clear)")
 	providerUpdateCmd.Flags().Bool("disable-thinking", false, "Disable thinking mode")
 	providerUpdateCmd.Flags().String("genai-model", "", "Generative AI model name")
+	providerUpdateCmd.Flags().String("log-level", "", "Log level (debug, info, warn, error)")
 	providerUpdateCmd.Flags().String("keys-file", "", "Keys file path (empty for default)")
 	providerUpdateCmd.Flags().Bool("default", false, "Set this provider as the default")
 }
@@ -351,6 +352,7 @@ Example:
 			"disable-thinking":          "disable_thinking",
 			"genai-model":               "genai_model",
 			"keys-file":                 "keys_file",
+		"log-level":                 "log_level",
 		}
 
 		// Fail-fast: check --target before any field is persisted

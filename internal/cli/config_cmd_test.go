@@ -429,6 +429,40 @@ func TestGetFieldValue_AdminTokenMasked(t *testing.T) {
 	}
 }
 
+func TestMaskSensitiveValue_KeysFileMasked(t *testing.T) {
+	fd := config.FindField("keys_file")
+	if fd == nil {
+		t.Fatal("keys_file field not found")
+	}
+
+	// Set keys_file
+	tc := &config.TomlConfig{
+		Provider: map[string]*config.Config{
+			"test": {ProviderConfig: config.ProviderConfig{KeysFile: "keys.json"}},
+		},
+	}
+	val, _ := getFieldValue(tc, "test", fd)
+	masked := maskSensitiveValue(fd, val)
+	if masked == "keys.json" {
+		t.Error("keys_file should be masked, not printed raw")
+	}
+	if masked != "(set)" {
+		t.Errorf("expected '(set)', got %q", masked)
+	}
+
+	// Empty keys_file
+	tc2 := &config.TomlConfig{
+		Provider: map[string]*config.Config{
+			"test": {ProviderConfig: config.ProviderConfig{KeysFile: ""}},
+		},
+	}
+	val2, _ := getFieldValue(tc2, "test", fd)
+	masked2 := maskSensitiveValue(fd, val2)
+	if masked2 != "(not set)" {
+		t.Errorf("expected '(not set)', got %q", masked2)
+	}
+}
+
 func TestConfigListCmd_NoArgsShowsFirstProvider(t *testing.T) {
 	tmpDir := t.TempDir()
 	tc := &config.TomlConfig{
