@@ -220,3 +220,112 @@ func TestProviderUpdateCmd_BackoffMultiplierRangeValidation(t *testing.T) {
 		t.Errorf("expected '>= 1' error, got: %v", err)
 	}
 }
+
+func TestProviderUpdateCmd_ReadOnlyGuard(t *testing.T) {
+	tmpDir := t.TempDir()
+	tc := &config.TomlConfig{
+		Port: 8080,
+		Provider: map[string]*config.Config{
+			"test": {ProviderConfig: config.ProviderConfig{
+				TargetBase: "http://localhost:11434",
+				AdminToken: "oldtoken",
+			}},
+		},
+	}
+	tomlPath := filepath.Join(tmpDir, "config.toml")
+	if err := config.SaveTomlConfig(tc, tomlPath); err != nil {
+		t.Fatalf("setup save config: %v", err)
+	}
+
+	origDir := config.ConfigDir
+	defer func() { config.ConfigDir = origDir }()
+	config.ConfigDir = tmpDir
+
+	origArgs := os.Args
+	os.Args = []string{"akswitch", "provider", "update", "test", "--admin-token", "newtoken"}
+	defer func() { os.Args = origArgs }()
+
+	cmd := providerUpdateCmd
+	cmd.SetArgs([]string{"test", "--admin-token", "newtoken"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for ReadOnly field admin_token, got nil")
+	}
+}
+
+func TestProviderUpdateCmd_TargetEmptyCheckBeforePersist(t *testing.T) {
+	tmpDir := t.TempDir()
+	tc := &config.TomlConfig{
+		Port: 8080,
+		Provider: map[string]*config.Config{
+			"test": {ProviderConfig: config.ProviderConfig{
+				TargetBase:  "http://localhost:11434",
+				CooldownSec: 60,
+			}},
+		},
+	}
+	tomlPath := filepath.Join(tmpDir, "config.toml")
+	if err := config.SaveTomlConfig(tc, tomlPath); err != nil {
+		t.Fatalf("setup save config: %v", err)
+	}
+
+	origDir := config.ConfigDir
+	defer func() { config.ConfigDir = origDir }()
+	config.ConfigDir = tmpDir
+
+	origArgs := os.Args
+	os.Args = []string{"akswitch", "provider", "update", "test", "--cooldown-sec", "30", "--target", ""}
+	defer func() { os.Args = origArgs }()
+
+	cmd := providerUpdateCmd
+	cmd.SetArgs([]string{"test", "--cooldown-sec", "30", "--target", ""})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for empty --target, got nil")
+	}
+
+	// Verify cooldown was NOT persisted (fail-fast before persist)
+	loaded, _ := config.LoadTomlConfig(tomlPath)
+	if loaded.Provider["test"].CooldownSec != 60 {
+		t.Errorf("cooldown should not have changed (expected 60, got %d)", loaded.Provider["test"].CooldownSec)
+	}
+}
+
+func TestProviderUpdateCmd_NonRuntimeEditableWarning(t *testing.T) {
+	tmpDir := t.TempDir()
+	tc := &config.TomlConfig{
+		Port: 8080,
+		Provider: map[string]*config.Config{
+			"test": {ProviderConfig: config.ProviderConfig{
+				TargetBase:      "http://localhost:11434",
+				DisableThinking: false,
+			}},
+		},
+	}
+	tomlPath := filepath.Join(tmpDir, "config.toml")
+	if err := config.SaveTomlConfig(tc, tomlPath); err != nil {
+		t.Fatalf("setup save config: %v", err)
+	}
+
+	origDir := config.ConfigDir
+	defer func() { config.ConfigDir = origDir }()
+	config.ConfigDir = tmpDir
+
+	// hasCLIFlag/getCLIFlagValue scan os.Args; set the full command path
+	origArgs := os.Args
+	os.Args = []string{"akswitch", "provider", "update", "test", "--disable-thinking", "true"}
+	defer func() { os.Args = origArgs }()
+
+	// Call RunE directly to avoid Cobra command-tree args parsing issues
+	// with boolean flags (--disable-thinking true is misparsed as 2 positional args)
+	err := providerUpdateCmd.RunE(providerUpdateCmd, []string{"test"})
+	if err != nil {
+		t.Fatalf("expected no error for non-runtime-editable field, got: %v", err)
+	}
+
+	// Verify the value was persisted to TOML (warning only, not error)
+	loaded, _ := config.LoadTomlConfig(tomlPath)
+	if !loaded.Provider["test"].DisableThinking {
+		t.Error("disable_thinking should have been persisted to TOML")
+	}
+}

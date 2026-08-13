@@ -352,6 +352,13 @@ Example:
 			"keys-file":                 "keys_file",
 		}
 
+		// Fail-fast: check --target before any field is persisted
+		if hasCLIFlag("target") {
+			if getCLIFlagValue("target") == "" {
+				return fmt.Errorf("--target/-t cannot be empty")
+			}
+		}
+
 		for flagName, fieldKey := range flagToFieldKey {
 			if !hasCLIFlag(flagName) {
 				continue
@@ -360,6 +367,11 @@ Example:
 			fd := config.FindField(fieldKey)
 			if fd == nil {
 				continue
+			}
+
+			// Guard: ReadOnly fields cannot be changed via provider update
+			if fd.ReadOnly {
+				return fmt.Errorf("%s cannot be changed via provider update — edit the TOML config file and reload", fd.Key)
 			}
 
 			valueStr := getCLIFlagValue(flagName)
@@ -379,12 +391,12 @@ Example:
 				}
 			}
 
+			if !fd.RuntimeEditable {
+				fmt.Fprintf(os.Stderr, "warning: %s is not runtime-editable — change will only take effect after reload\n", fd.Key)
+			}
+
 			fd.Persist(tc, name, prov, parsed)
 			changes++
-		}
-
-		if hasCLIFlag("target") && prov.TargetBase == "" {
-			return fmt.Errorf("--target/-t cannot be empty")
 		}
 
 		// --default modifies TomlConfig, not the provider itself
