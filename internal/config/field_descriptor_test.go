@@ -97,3 +97,23 @@ func TestFieldDescriptor_FormatFloat(t *testing.T) {
 		t.Errorf("expected '2', got %q", s)
 	}
 }
+
+func TestFieldDescriptor_RuntimeEditableMatchesServer(t *testing.T) {
+	// Server-side runtimeConfigFields handles only these keys (from admin_api.go initRuntimeConfigDescriptors)
+	serverHandled := map[string]bool{
+		"http_timeout_sec":      true,
+		"max_retries":           true,
+		"cooldown_sec":          true,
+		"backoff_cap_sec":       true,
+		"backoff_multiplier":    true,
+		"cb_reset_sec":          true,
+		"upstream_cb_threshold": true,
+		"log_level":             true,
+	}
+
+	for _, fd := range ConfigFieldDescriptors {
+		if fd.RuntimeEditable && !serverHandled[fd.Key] {
+			t.Errorf("field %q has RuntimeEditable=true but server does not handle it", fd.Key)
+		}
+	}
+}
