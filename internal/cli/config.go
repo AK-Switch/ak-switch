@@ -29,7 +29,7 @@ func init() {
 	configListCmd.Flags().Bool("all", false, "Show all providers")
 	configGetCmd.Flags().Bool("all", false, "Show value from all providers")
 	configSetCmd.Flags().Bool("runtime-only", false, "Apply to runtime only, do not persist to config file")
-	configSetCmd.Flags().Bool("all", false, "Apply to all providers (writes to [provider.default] when used with --persist)")
+	configSetCmd.Flags().Bool("all", false, "Apply to all providers")
 }
 
 var configCmd = &cobra.Command{
