@@ -17,6 +17,25 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// validateFieldRange checks numeric range constraints for config fields.
+func validateFieldRange(fd *config.ConfigFieldDescriptor, valueStr string) error {
+	parsed, err := fd.Parse(valueStr)
+	if err != nil {
+		return fmt.Errorf("invalid --%s value: %w", fd.Key, err)
+	}
+	switch v := parsed.(type) {
+	case int:
+		if v < -1 {
+			return fmt.Errorf("--%s must be >= -1", fd.Key)
+		}
+	case float64:
+		if v < 1 {
+			return fmt.Errorf("--%s must be >= %g", fd.Key, 1.0)
+		}
+	}
+	return nil
+}
+
 func init() {
 	rootCmd.AddCommand(configCmd)
 	configCmd.AddCommand(configInitCmd)
@@ -189,7 +208,10 @@ var configListCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to determine config path: %w", err)
 		}
-		tc, _ := config.LoadTomlConfig(source) // may fail if no config yet
+		tc, err := config.LoadTomlConfig(source)
+		if err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("failed to load config: %w", err)
+		}
 
 		// Build provider list
 		var names []string
@@ -259,12 +281,16 @@ var configGetCmd = &cobra.Command{
 		}
 
 		var providers []string
+		var tc *config.TomlConfig
 		if all {
 			source, err := config.XDGConfigPath()
 			if err != nil {
 				return fmt.Errorf("failed to determine config path: %w", err)
 			}
-			tc, _ := config.LoadTomlConfig(source)
+			tc, err = config.LoadTomlConfig(source)
+			if err != nil {
+				return fmt.Errorf("failed to load config: %w", err)
+			}
 			if tc != nil {
 				for n := range tc.Provider {
 					providers = append(providers, n)
@@ -276,24 +302,30 @@ var configGetCmd = &cobra.Command{
 				return fmt.Errorf("%s requires a provider name (or --all)", key)
 			}
 			providers = []string{args[1]}
+			source, err := config.XDGConfigPath()
+			if err != nil {
+				return fmt.Errorf("failed to determine config path: %w", err)
+			}
+			tc, err = config.LoadTomlConfig(source)
+			if err != nil {
+				return fmt.Errorf("failed to load config: %w", err)
+			}
 		} else {
 			// Global field — no provider needed
 			source, err := config.XDGConfigPath()
 			if err != nil {
 				return fmt.Errorf("failed to determine config path: %w", err)
 			}
-			tc, _ := config.LoadTomlConfig(source)
+			tc, err := config.LoadTomlConfig(source)
+			if err != nil {
+				return fmt.Errorf("failed to load config: %w", err)
+			}
 			val, _ := getGlobalFieldValue(tc, fd)
 			fmt.Println(maskSensitiveValue(fd, val))
 			return nil
 		}
 
 		for _, p := range providers {
-			source, err := config.XDGConfigPath()
-			if err != nil {
-				return fmt.Errorf("failed to determine config path: %w", err)
-			}
-			tc, _ := config.LoadTomlConfig(source)
 			val, _ := getFieldValue(tc, p, fd)
 			if all {
 				fmt.Printf("%s: %s\n", p, maskSensitiveValue(fd, val))
@@ -312,9 +344,10 @@ var configSetCmd = &cobra.Command{
 
 	Use --runtime-only to apply without persisting to the config file.
 
-	Valid keys: target, cooldown_sec, max_retries, backoff_cap_sec,
-	backoff_multiplier, cb_reset_sec, upstream_cb_threshold, http_timeout_sec,
-	log_level, disable_thinking, genai_model
+	Valid keys: port, log_file, target, cooldown_sec, max_retries,
+	backoff_cap_sec, backoff_multiplier, cb_reset_sec, upstream_cb_threshold,
+	http_timeout_sec, health_check_interval_sec, log_level,
+	disable_thinking, genai_model, admin_token, keys_file
 
 	Examples:
 	  akswitch config set http_timeout_sec 60
@@ -335,6 +368,10 @@ var configSetCmd = &cobra.Command{
 		parsed, err := fd.Parse(valueStr)
 		if err != nil {
 			return fmt.Errorf("invalid value for %s: %w", key, err)
+		}
+
+		if err := validateFieldRange(fd, valueStr); err != nil {
+			return err
 		}
 
 		if fd.ReadOnly {
@@ -361,11 +398,12 @@ var configSetCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("failed to determine config path: %w", err)
 			}
-			tc, _ := config.LoadTomlConfig(source)
-			if tc != nil {
-				for name := range tc.Provider {
-					providerList = append(providerList, name)
-				}
+			tc, err := config.LoadTomlConfig(source)
+			if err != nil {
+				return fmt.Errorf("failed to load config: %w", err)
+			}
+			for name := range tc.Provider {
+				providerList = append(providerList, name)
 			}
 			if len(providerList) == 0 {
 				return fmt.Errorf("no providers configured for --all")
@@ -375,8 +413,25 @@ var configSetCmd = &cobra.Command{
 			providerList = []string{provider}
 		}
 
+		// Validate providers exist before any modifications
+		if fd.Scope == config.FieldScopeProvider && provider != "all" {
+			source, err := config.XDGConfigPath()
+			if err != nil {
+				return fmt.Errorf("failed to determine config path: %w", err)
+			}
+			tc, err := config.LoadTomlConfig(source)
+			if err != nil {
+				return fmt.Errorf("failed to load config: %w", err)
+			}
+			for _, p := range providerList {
+				if _, ok := tc.Provider[p]; !ok {
+					return fmt.Errorf("provider %q not found in config — run 'provider add' first", p)
+				}
+			}
+		}
+
 		// 1. Apply to runtime (call server API for provider-scoped runtime-editable fields)
-		if fd.Scope == config.FieldScopeProvider && fd.RuntimeEditable && !runtimeOnly {
+		if fd.Scope == config.FieldScopeProvider && fd.RuntimeEditable && runtimeOnly {
 			for _, p := range providerList {
 				if err := applyRuntimeField(p, fd, parsed); err != nil {
 					return err

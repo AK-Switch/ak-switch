@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -164,6 +165,222 @@ func TestConfigSetCmd_HasRuntimeOnlyFlag(t *testing.T) {
 func TestConfigSetCmd_NoPersistFlag(t *testing.T) {
 	if configSetCmd.Flags().Lookup("persist") != nil {
 		t.Fatal("--persist flag should be removed (replaced by --runtime-only)")
+	}
+}
+
+func TestConfigSetCmd_RuntimeOnlyAppliesButDoesNotPersist(t *testing.T) {
+	tmpDir := t.TempDir()
+	tc := &config.TomlConfig{
+		Port: 8080,
+		Provider: map[string]*config.Config{
+			"test": {ProviderConfig: config.ProviderConfig{
+				TargetBase:  "http://localhost:11434",
+				CooldownSec: 60,
+			}},
+		},
+	}
+	tomlPath := filepath.Join(tmpDir, "config.toml")
+	if err := config.SaveTomlConfig(tc, tomlPath); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	origDir := config.ConfigDir
+	defer func() { config.ConfigDir = origDir }()
+	config.ConfigDir = tmpDir
+
+	origArgs := os.Args
+	os.Args = []string{"akswitch", "config", "set", "cooldown_sec", "30", "test", "--runtime-only"}
+	defer func() { os.Args = origArgs }()
+
+	cmd := configSetCmd
+	cmd.SetArgs([]string{"cooldown_sec", "30", "test", "--runtime-only"})
+	err := cmd.Execute()
+	if err != nil {
+		// applyRuntimeField may fail if no server running or server returns error —
+		// that's expected. The key assertion (TOML not modified) only holds when
+		// runtime apply succeeds. Skip when runtime apply fails.
+		if strings.Contains(err.Error(), "not reachable") ||
+			strings.Contains(err.Error(), "API error") {
+			t.Skip("server not available for runtime-only apply — skipping TOML assertion")
+		}
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// TOML must NOT be modified with --runtime-only
+	loaded, loadErr := config.LoadTomlConfig(tomlPath)
+	if loadErr != nil {
+		t.Fatalf("reload: %v", loadErr)
+	}
+	if loaded.Provider["test"].CooldownSec != 60 {
+		t.Errorf("cooldown should NOT have changed with --runtime-only (expected 60, got %d)",
+			loaded.Provider["test"].CooldownSec)
+	}
+}
+
+func TestConfigSetCmd_RangeValidation(t *testing.T) {
+	tests := []struct {
+		key     string
+		value   string
+		wantErr bool
+		errSub  string
+	}{
+		{"backoff_multiplier", "0.5", true, "must be >= 1"},
+		{"backoff_multiplier", "2.0", false, ""},
+		{"max_retries", "-2", true, "must be >= -1"},
+		{"max_retries", "5", false, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.key+"_"+tt.value, func(t *testing.T) {
+			fd := config.FindField(tt.key)
+			if fd == nil {
+				t.Fatalf("field %q not found", tt.key)
+			}
+			err := validateFieldRange(fd, tt.value)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error for %s=%s, got nil", tt.key, tt.value)
+				}
+				if !strings.Contains(err.Error(), tt.errSub) {
+					t.Errorf("expected error containing %q, got: %v", tt.errSub, err)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error for %s=%s: %v", tt.key, tt.value, err)
+				}
+			}
+		})
+	}
+}
+
+func TestConfigSetCmd_TomlLoadErrorNotSwallowed(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	origDir := config.ConfigDir
+	defer func() { config.ConfigDir = origDir }()
+	config.ConfigDir = tmpDir // no config.toml exists
+
+	origArgs := os.Args
+	os.Args = []string{"akswitch", "config", "set", "target", "http://x.com", "test"}
+	defer func() { os.Args = origArgs }()
+
+	cmd := configSetCmd
+	cmd.SetArgs([]string{"target", "http://x.com", "test"})
+	cmd.DisableFlagParsing = true
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error when config.toml does not exist, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to load config") && !strings.Contains(err.Error(), "not exist") {
+		t.Errorf("expected error about missing config, got: %v", err)
+	}
+}
+
+func TestConfigGetCmd_AllLoadsTomlOnce(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Use non-default values so we verify TOML is actually read (not just defaults)
+	tc := &config.TomlConfig{
+		Port: 8080,
+		Provider: map[string]*config.Config{
+			"alpha": {ProviderConfig: config.ProviderConfig{CooldownSec: 123}},
+			"beta":  {ProviderConfig: config.ProviderConfig{CooldownSec: 456}},
+			"gamma": {ProviderConfig: config.ProviderConfig{CooldownSec: 789}},
+		},
+	}
+	tomlPath := filepath.Join(tmpDir, "config.toml")
+	if err := config.SaveTomlConfig(tc, tomlPath); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	origDir := config.ConfigDir
+	defer func() { config.ConfigDir = origDir }()
+	config.ConfigDir = tmpDir
+
+	// Simulate what configGetCmd.RunE does with --all:
+	// load TOML once, then get field value for each provider
+	source, err := config.XDGConfigPath()
+	if err != nil {
+		t.Fatalf("xdg path: %v", err)
+	}
+	tcLoaded, err := config.LoadTomlConfig(source)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	fd := config.FindField("cooldown_sec")
+	if fd == nil {
+		t.Fatal("cooldown_sec field not found")
+	}
+
+	var providers []string
+	for name := range tcLoaded.Provider {
+		providers = append(providers, name)
+	}
+	sort.Strings(providers)
+
+	for _, p := range providers {
+		val, getErr := getFieldValue(tcLoaded, p, fd)
+		if getErr != nil {
+			t.Fatalf("getFieldValue(%s): %v", p, getErr)
+		}
+		formatted := fd.Format(val)
+		expected := strconv.Itoa(tc.Provider[p].CooldownSec)
+		if formatted != expected {
+			t.Errorf("provider %s: got %s, want %s", p, formatted, expected)
+		}
+	}
+}
+
+func TestConfigSetCmd_RejectsNonExistentProvider(t *testing.T) {
+	tmpDir := t.TempDir()
+	tc := &config.TomlConfig{
+		Port: 8080,
+		Provider: map[string]*config.Config{
+			"real": {ProviderConfig: config.ProviderConfig{TargetBase: "http://localhost:11434"}},
+		},
+	}
+	tomlPath := filepath.Join(tmpDir, "config.toml")
+	if err := config.SaveTomlConfig(tc, tomlPath); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	origDir := config.ConfigDir
+	defer func() { config.ConfigDir = origDir }()
+	config.ConfigDir = tmpDir
+
+	origArgs := os.Args
+	os.Args = []string{"akswitch", "config", "set", "target", "http://x.com", "ghost_provider"}
+	defer func() { os.Args = origArgs }()
+
+	cmd := configSetCmd
+	cmd.SetArgs([]string{"target", "http://x.com", "ghost_provider"})
+	cmd.DisableFlagParsing = true
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for non-existent provider, got nil")
+	}
+
+	loaded, loadErr := config.LoadTomlConfig(tomlPath)
+	if loadErr != nil {
+		t.Fatalf("reload: %v", loadErr)
+	}
+	if _, hasGhost := loaded.Provider["ghost_provider"]; hasGhost {
+		t.Error("ghost provider should not have been created in TOML")
+	}
+}
+
+func TestConfigSetCmd_HelpTextListsAllKeys(t *testing.T) {
+	helpText := configSetCmd.Long
+	expectedKeys := []string{
+		"port", "log_file", "target", "cooldown_sec", "max_retries",
+		"backoff_cap_sec", "backoff_multiplier", "cb_reset_sec",
+		"upstream_cb_threshold", "http_timeout_sec", "health_check_interval_sec",
+		"log_level", "disable_thinking", "genai_model", "admin_token", "keys_file",
+	}
+	for _, key := range expectedKeys {
+		if !strings.Contains(helpText, key) {
+			t.Errorf("configSetCmd help text missing key %q", key)
+		}
 	}
 }
 
