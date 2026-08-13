@@ -34,6 +34,7 @@ type ConfigFieldDescriptor struct {
 	Default         string // string representation of default value
 	RuntimeEditable bool
 	ReadOnly        bool // true = cannot be set via config set (needs TOML edit + reload)
+	MinInt          int  // minimum value for int fields; -1 = use default (-1), 0+ = enforce this minimum
 
 	// Parse converts a string value to the field's type. Returns error on invalid input.
 	Parse func(string) (any, error)
@@ -74,6 +75,7 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 		Type:            FieldTypeInt,
 		Default:         "60",
 		RuntimeEditable: true,
+		MinInt:          -1,
 		Parse:           func(s string) (any, error) { return strconv.Atoi(s) },
 		Format:          func(v any) string { return strconv.Itoa(v.(int)) },
 		Persist: func(tc *TomlConfig, provider string, c *Config, value any) {
@@ -90,6 +92,7 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 		Type:            FieldTypeInt,
 		Default:         "1",
 		RuntimeEditable: true,
+		MinInt:          0,
 		Parse:           func(s string) (any, error) { return strconv.Atoi(s) },
 		Format:          func(v any) string { return strconv.Itoa(v.(int)) },
 		Persist: func(tc *TomlConfig, provider string, c *Config, value any) {
@@ -106,6 +109,7 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 		Type:            FieldTypeInt,
 		Default:         "120",
 		RuntimeEditable: true,
+		MinInt:          -1,
 		Parse:           func(s string) (any, error) { return strconv.Atoi(s) },
 		Format:          func(v any) string { return strconv.Itoa(v.(int)) },
 		Persist: func(tc *TomlConfig, provider string, c *Config, value any) {
@@ -146,6 +150,7 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 		Type:            FieldTypeInt,
 		Default:         "30",
 		RuntimeEditable: true,
+		MinInt:          -1,
 		Parse:           func(s string) (any, error) { return strconv.Atoi(s) },
 		Format:          func(v any) string { return strconv.Itoa(v.(int)) },
 		Persist: func(tc *TomlConfig, provider string, c *Config, value any) {
@@ -162,6 +167,7 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 		Type:            FieldTypeInt,
 		Default:         "5",
 		RuntimeEditable: true,
+		MinInt:          -1,
 		Parse:           func(s string) (any, error) { return strconv.Atoi(s) },
 		Format:          func(v any) string { return strconv.Itoa(v.(int)) },
 		Persist: func(tc *TomlConfig, provider string, c *Config, value any) {
@@ -178,6 +184,7 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 		Type:            FieldTypeInt,
 		Default:         "30",
 		RuntimeEditable: true,
+		MinInt:          -1,
 		Parse:           func(s string) (any, error) { return strconv.Atoi(s) },
 		Format:          func(v any) string { return strconv.Itoa(v.(int)) },
 		Persist: func(tc *TomlConfig, provider string, c *Config, value any) {

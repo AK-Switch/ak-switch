@@ -21,12 +21,16 @@ import (
 func validateFieldRange(fd *config.ConfigFieldDescriptor, valueStr string) error {
 	parsed, err := fd.Parse(valueStr)
 	if err != nil {
-		return fmt.Errorf("invalid --%s value: %w", fd.Key, err)
+		return fmt.Errorf("validateFieldRange: invalid --%s value: %w", fd.Key, err)
 	}
 	switch v := parsed.(type) {
 	case int:
-		if v < -1 {
-			return fmt.Errorf("--%s must be >= -1", fd.Key)
+		min := -1
+		if fd.MinInt >= 0 {
+			min = fd.MinInt
+		}
+		if v < min {
+			return fmt.Errorf("--%s must be >= %d", fd.Key, min)
 		}
 	case float64:
 		if v < 1 {
@@ -506,11 +510,11 @@ func applyRuntimeField(provider string, fd *config.ConfigFieldDescriptor, value 
 func persistFieldToToml(provider string, fd *config.ConfigFieldDescriptor, value any) error {
 	source, err := config.XDGConfigPath()
 	if err != nil {
-		return err
+		return fmt.Errorf("persistFieldToToml: %w", err)
 	}
 	tc, err := config.LoadTomlConfig(source)
 	if err != nil && !os.IsNotExist(err) {
-		return err
+		return fmt.Errorf("persistFieldToToml: %w", err)
 	}
 	if tc == nil {
 		tc = &config.TomlConfig{Provider: make(map[string]*config.Config)}

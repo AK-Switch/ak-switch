@@ -226,7 +226,8 @@ func TestConfigSetCmd_RangeValidation(t *testing.T) {
 	}{
 		{"backoff_multiplier", "0.5", true, "must be >= 1"},
 		{"backoff_multiplier", "2.0", false, ""},
-		{"max_retries", "-2", true, "must be >= -1"},
+		{"max_retries", "-1", true, "must be >= 0"},
+		{"max_retries", "0", false, ""},
 		{"max_retries", "5", false, ""},
 	}
 

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -398,7 +399,7 @@ Example:
 			}
 
 			if !fd.RuntimeEditable {
-				fmt.Fprintf(os.Stderr, "warning: %s is not runtime-editable — change will only take effect after reload\n", fd.Key)
+				slog.Warn("not runtime-editable — change will only take effect after reload", "key", fd.Key)
 			}
 
 			fd.Persist(tc, name, prov, parsed)
