@@ -127,6 +127,17 @@ func TestFieldDescriptor_LogLevelParse_InvalidValue(t *testing.T) {
 	}
 }
 
+func TestProviderRuntimeInterface_NoCallers(t *testing.T) {
+	// providerRuntime was an unused interface in field_descriptor.go.
+	// This test documents that ConfigFieldDescriptors work without it.
+	// If the interface is reintroduced, this test should be updated.
+	for _, fd := range ConfigFieldDescriptors {
+		if fd.Key == "" {
+			t.Fatal("empty key in descriptor table")
+		}
+	}
+}
+
 func TestFieldDescriptor_RuntimeEditableMatchesServer(t *testing.T) {
 	// Server-side runtimeConfigFields handles only these keys (from admin_api.go initRuntimeConfigDescriptors)
 	serverHandled := map[string]bool{

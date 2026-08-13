@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // FieldScope identifies whether a field belongs to a provider or is global.
@@ -51,25 +50,6 @@ type ConfigFieldDescriptor struct {
 	Persist func(tc *TomlConfig, provider string, c *Config, value any)
 }
 
-// providerRuntime is the interface that ProviderState satisfies, avoiding an import cycle
-// between internal/config and internal/server.
-type providerRuntime interface {
-	SetTargetBase(v string)
-	SetCooldownSec(v int)
-	SetMaxRetries(v int)
-	SetBackoffCapSec(v int)
-	SetBackoffMultiplier(v float64)
-	SetCBResetSec(v int)
-	SetUpstreamCBThreshold(n int)
-	SetHTTPTimeoutSec(v int)
-	SetProxyTimeout(d time.Duration)
-	SetUpstreamCBResetTimeout(sec int)
-	SetUpstreamProxyCBThreshold(n int)
-	ConfigurePoolCBs(base, backoffCap time.Duration, multiplier float64)
-	CooldownSec() int
-	BackoffCapSec() int
-	BackoffMultiplier() float64
-}
 
 // ConfigFieldDescriptors is the single source of truth for all configurable fields.
 // Provider-scoped fields come first, then global fields.
