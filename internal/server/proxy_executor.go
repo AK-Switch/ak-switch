@@ -48,6 +48,10 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 		return
 	}
 
+	if ps.ThinkingMode() == "rectify" {
+		bodyBytes = NewThinkingRectifier(true, ps.RectifyThinkingMapTo()).Process(bodyBytes)
+	}
+
 	// Build target URL
 	target := buildTargetURL(ps.config, r.URL.Path, r.URL.RawQuery)
 
