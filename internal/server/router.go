@@ -118,6 +118,10 @@ func (ps *ProviderState) SetBackoffMultiplier(v float64) { ps.config.BackoffMult
 func (ps *ProviderState) SetCBResetSec(v int)            { ps.config.CBResetSec = v }
 func (ps *ProviderState) SetUpstreamCBThreshold(n int)   { ps.config.UpstreamCBThreshold = n }
 func (ps *ProviderState) SetLogLevel(v string)           { ps.config.LogLevel = v }
+func (ps *ProviderState) ThinkingMode() string           { return ps.config.ThinkingMode }
+func (ps *ProviderState) RectifyThinkingMapTo() string   { return ps.config.RectifyThinkingMapTo }
+func (ps *ProviderState) SetThinkingMode(v string)       { ps.config.ThinkingMode = v }
+func (ps *ProviderState) SetRectifyThinkingMapTo(v string) { ps.config.RectifyThinkingMapTo = v }
 func (ps *ProviderState) GenaiModel() string             { return ps.config.GenaiModel }
 func (ps *ProviderState) CalibrationIntervalSec() int    { return ps.config.CalibrationIntervalSec }
 func (ps *ProviderState) TargetBase() string             { return ps.config.TargetBase }
