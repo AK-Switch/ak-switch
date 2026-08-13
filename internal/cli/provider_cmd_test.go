@@ -291,6 +291,50 @@ func TestProviderUpdateCmd_TargetEmptyCheckBeforePersist(t *testing.T) {
 	}
 }
 
+func TestProviderUpdateCmd_BoolFlagNoValue(t *testing.T) {
+	tmpDir := t.TempDir()
+	tc := &config.TomlConfig{
+		Port: 8080,
+		Provider: map[string]*config.Config{
+			"test": {ProviderConfig: config.ProviderConfig{
+				TargetBase:      "http://localhost:11434",
+				DisableThinking: false,
+			}},
+		},
+	}
+	tomlPath := filepath.Join(tmpDir, "config.toml")
+	if err := config.SaveTomlConfig(tc, tomlPath); err != nil {
+		t.Fatalf("setup save config: %v", err)
+	}
+
+	origDir := config.ConfigDir
+	defer func() { config.ConfigDir = origDir }()
+	config.ConfigDir = tmpDir
+
+	// Simulate: user runs `akswitch provider update test --disable-thinking`
+	// (no explicit value — boolean flag should default to true)
+	origArgs := os.Args
+	os.Args = []string{"akswitch", "provider", "update", "test", "--disable-thinking"}
+	defer func() { os.Args = origArgs }()
+
+	cmd := providerUpdateCmd
+	cmd.SetArgs([]string{"test", "--disable-thinking"})
+
+	// Reset flag state (Cobra persists flags between test runs)
+	cmd.Flags().Set("disable-thinking", "false")
+
+	// Call RunE directly to avoid Cobra args parsing issues with boolean flags
+	err := cmd.RunE(cmd, []string{"test"})
+	if err != nil {
+		t.Fatalf("expected no error for --disable-thinking without value, got: %v", err)
+	}
+
+	loaded, _ := config.LoadTomlConfig(tomlPath)
+	if !loaded.Provider["test"].DisableThinking {
+		t.Error("disable_thinking should have been set to true")
+	}
+}
+
 func TestProviderUpdateCmd_NonRuntimeEditableWarning(t *testing.T) {
 	tmpDir := t.TempDir()
 	tc := &config.TomlConfig{

@@ -375,6 +375,12 @@ Example:
 			}
 
 			valueStr := getCLIFlagValue(flagName)
+
+			// Boolean flags: if Changed() but value is empty, the flag was present without a value
+			if valueStr == "" && fd.Type == "bool" && cmd.Flags().Changed(flagName) {
+				valueStr = "true"
+			}
+
 			parsed, err := fd.Parse(valueStr)
 			if err != nil {
 				return fmt.Errorf("invalid --%s value: %w", flagName, err)
