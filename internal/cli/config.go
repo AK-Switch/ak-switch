@@ -340,17 +340,42 @@ var configSetCmd = &cobra.Command{
 			}
 		}
 
+		// Resolve provider list (expand "all" to actual provider names)
+		var providerList []string
+		if provider == "all" {
+			source, err := config.XDGConfigPath()
+			if err != nil {
+				return fmt.Errorf("failed to determine config path: %w", err)
+			}
+			tc, _ := config.LoadTomlConfig(source)
+			if tc != nil {
+				for name := range tc.Provider {
+					providerList = append(providerList, name)
+				}
+			}
+			if len(providerList) == 0 {
+				return fmt.Errorf("no providers configured for --all")
+			}
+			sort.Strings(providerList)
+		} else {
+			providerList = []string{provider}
+		}
+
 		// 1. Apply to runtime (call server API for provider-scoped runtime-editable fields)
 		if fd.Scope == config.FieldScopeProvider && fd.RuntimeEditable && !runtimeOnly {
-			if err := applyRuntimeField(provider, fd, parsed); err != nil {
-				return err
+			for _, p := range providerList {
+				if err := applyRuntimeField(p, fd, parsed); err != nil {
+					return err
+				}
 			}
 		}
 
 		// 2. Persist to TOML
 		if !runtimeOnly {
-			if err := persistFieldToToml(provider, fd, parsed); err != nil {
-				return err
+			for _, p := range providerList {
+				if err := persistFieldToToml(p, fd, parsed); err != nil {
+					return err
+				}
 			}
 		}
 

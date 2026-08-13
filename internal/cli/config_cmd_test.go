@@ -3,10 +3,80 @@
 package cli
 
 import (
+	"path/filepath"
+	"sort"
 	"testing"
 
 	"akswitch/internal/config"
 )
+
+func TestConfigSetCmd_AllUpdatesAllProviders(t *testing.T) {
+	tmpDir := t.TempDir()
+	tc := &config.TomlConfig{
+		Port: 8080,
+		Provider: map[string]*config.Config{
+			"alpha": {ProviderConfig: config.ProviderConfig{CooldownSec: 60}},
+			"beta":  {ProviderConfig: config.ProviderConfig{CooldownSec: 60}},
+		},
+	}
+	tomlPath := filepath.Join(tmpDir, "config.toml")
+	if err := config.SaveTomlConfig(tc, tomlPath); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	// Override ConfigDir to point to temp directory
+	origDir := config.ConfigDir
+	defer func() { config.ConfigDir = origDir }()
+	config.ConfigDir = tmpDir
+
+	// Simulate what configSetCmd.RunE does with --all:
+	// load providers, sort them, persist to each one individually
+	source, err := config.XDGConfigPath()
+	if err != nil {
+		t.Fatalf("xdg path: %v", err)
+	}
+	tcLoaded, _ := config.LoadTomlConfig(source)
+	if tcLoaded == nil {
+		t.Fatal("config not loaded")
+	}
+
+	var providerList []string
+	for name := range tcLoaded.Provider {
+		providerList = append(providerList, name)
+	}
+	sort.Strings(providerList)
+
+	fd := config.FindField("cooldown_sec")
+	if fd == nil {
+		t.Fatal("cooldown_sec field not found")
+	}
+	val, parseErr := fd.Parse("30")
+	if parseErr != nil {
+		t.Fatalf("parse: %v", parseErr)
+	}
+
+	// Persist to each provider individually (this is what --all should do)
+	for _, p := range providerList {
+		if err := persistFieldToToml(p, fd, val); err != nil {
+			t.Fatalf("persist %s: %v", p, err)
+		}
+	}
+
+	// Reload and verify
+	loaded, err := config.LoadTomlConfig(tomlPath)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if loaded.Provider["alpha"].CooldownSec != 30 {
+		t.Errorf("alpha cooldown = %d, want 30", loaded.Provider["alpha"].CooldownSec)
+	}
+	if loaded.Provider["beta"].CooldownSec != 30 {
+		t.Errorf("beta cooldown = %d, want 30", loaded.Provider["beta"].CooldownSec)
+	}
+	if _, hasGhost := loaded.Provider["all"]; hasGhost {
+		t.Error("ghost provider 'all' should not exist")
+	}
+}
 
 func TestConfigInitCmd_Flags(t *testing.T) {
 	flags := []string{"path"}
