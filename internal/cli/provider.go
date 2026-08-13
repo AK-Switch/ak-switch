@@ -368,8 +368,15 @@ Example:
 				return fmt.Errorf("invalid --%s value: %w", flagName, err)
 			}
 
-			if v, ok := parsed.(int); ok && v < -1 {
-				return fmt.Errorf("--%s must be >= -1", flagName)
+			switch v := parsed.(type) {
+			case int:
+				if v < -1 {
+					return fmt.Errorf("--%s must be >= -1", flagName)
+				}
+			case float64:
+				if v < -1 {
+					return fmt.Errorf("--%s must be >= -1", flagName)
+				}
 			}
 
 			fd.Persist(tc, name, prov, parsed)

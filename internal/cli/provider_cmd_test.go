@@ -3,8 +3,12 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
+	"akswitch/internal/config"
 	"akswitch/internal/keypool"
 	"github.com/spf13/cobra"
 )
@@ -178,5 +182,41 @@ func TestKeyUpstreamCBResetCmd_Deprecated(t *testing.T) {
 	}
 	if keyUpstreamCBResetCmd.Use != "upstream-cb-reset <provider>" {
 		t.Errorf("unexpected Use: %q", keyUpstreamCBResetCmd.Use)
+	}
+}
+
+func TestProviderUpdateCmd_BackoffMultiplierRangeValidation(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Save a config with one provider so the update command can find it
+	tc := &config.TomlConfig{
+		Port: 8080,
+		Provider: map[string]*config.Config{
+			"test": {ProviderConfig: config.ProviderConfig{TargetBase: "http://localhost:11434"}},
+		},
+	}
+	tomlPath := filepath.Join(tmpDir, "config.toml")
+	if err := config.SaveTomlConfig(tc, tomlPath); err != nil {
+		t.Fatalf("setup save config: %v", err)
+	}
+
+	origDir := config.ConfigDir
+	defer func() { config.ConfigDir = origDir }()
+	config.ConfigDir = tmpDir
+
+	// hasCLIFlag/getCLIFlagValue read os.Args, not Cobra args.
+	// Must include the full command path so Cobra routes correctly.
+	origArgs := os.Args
+	os.Args = []string{"akswitch", "provider", "update", "test", "--backoff-multiplier", "-2.0"}
+	defer func() { os.Args = origArgs }()
+
+	cmd := providerUpdateCmd
+	cmd.SetArgs([]string{"test", "--backoff-multiplier", "-2.0"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for backoff_multiplier < -1, got nil")
+	}
+	if !strings.Contains(err.Error(), "must be >= -1") {
+		t.Errorf("expected '>= -1' error, got: %v", err)
 	}
 }
