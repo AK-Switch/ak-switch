@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -235,6 +236,33 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 		},
 	},
 	{
+		Key:             "log_level",
+		DisplayName:     "Log Level",
+		Scope:           FieldScopeProvider,
+		TomlPath:        "provider.%s.log_level",
+		Type:            FieldTypeString,
+		Default:         "info",
+		RuntimeEditable: true,
+		Parse: func(s string) (any, error) {
+			v := strings.TrimSpace(strings.ToLower(s))
+			switch v {
+			case "debug", "info", "warn", "error":
+				return v, nil
+			}
+			return nil, fmt.Errorf("invalid log level %q, use: debug, info, warn, error", s)
+		},
+		Format:          func(v any) string { return fmt.Sprintf("%v", v) },
+		ApplyRuntime: func(provider string, value any) error {
+			return nil
+		},
+		Persist: func(tc *TomlConfig, provider string, c *Config, value any) {
+			if c != nil {
+				c.LogLevel = value.(string)
+			}
+		},
+	},
+	{
+
 		Key:             "health_check_interval_sec",
 		DisplayName:     "Health Check Interval (sec)",
 		Scope:           FieldScopeProvider,

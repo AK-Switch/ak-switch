@@ -98,6 +98,35 @@ func TestFieldDescriptor_FormatFloat(t *testing.T) {
 	}
 }
 
+func TestFieldDescriptor_LogLevelParse_ValidValues(t *testing.T) {
+	f := FindField("log_level")
+	if f == nil {
+		t.Fatal("field not found")
+	}
+
+	for _, level := range []string{"debug", "info", "warn", "error"} {
+		v, err := f.Parse(level)
+		if err != nil {
+			t.Errorf("Parse(%q) returned error: %v", level, err)
+		}
+		if v.(string) != level {
+			t.Errorf("Parse(%q) = %q, want %q", level, v.(string), level)
+		}
+	}
+}
+
+func TestFieldDescriptor_LogLevelParse_InvalidValue(t *testing.T) {
+	f := FindField("log_level")
+	if f == nil {
+		t.Fatal("field not found")
+	}
+
+	_, err := f.Parse("invalid_level")
+	if err == nil {
+		t.Error("expected error for invalid log level, got nil")
+	}
+}
+
 func TestFieldDescriptor_RuntimeEditableMatchesServer(t *testing.T) {
 	// Server-side runtimeConfigFields handles only these keys (from admin_api.go initRuntimeConfigDescriptors)
 	serverHandled := map[string]bool{
