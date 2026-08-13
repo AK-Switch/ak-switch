@@ -3,8 +3,11 @@
 package cli
 
 import (
+	"bytes"
+	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
 	"akswitch/internal/config"
@@ -205,6 +208,67 @@ func TestGetFieldValue_AdminTokenMasked(t *testing.T) {
 	masked3 := maskSensitiveValue(fdInt, val3)
 	if masked3 != "60" {
 		t.Errorf("expected '60', got %q", masked3)
+	}
+}
+
+func TestConfigListCmd_NoArgsShowsFirstProvider(t *testing.T) {
+	tmpDir := t.TempDir()
+	tc := &config.TomlConfig{
+		Port: 8080,
+		Provider: map[string]*config.Config{
+			"alpha": {ProviderConfig: config.ProviderConfig{TargetBase: "http://a.example.com"}},
+			"beta":  {ProviderConfig: config.ProviderConfig{TargetBase: "http://b.example.com"}},
+		},
+	}
+	tomlPath := filepath.Join(tmpDir, "config.toml")
+	if err := config.SaveTomlConfig(tc, tomlPath); err != nil {
+		t.Fatalf("setup save config: %v", err)
+	}
+
+	origDir := config.ConfigDir
+	defer func() { config.ConfigDir = origDir }()
+	config.ConfigDir = tmpDir
+
+	// Capture os.Stdout since RunE uses fmt.Printf
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	cmd := configListCmd
+	cmd.SetArgs([]string{})
+	err := cmd.RunE(cmd, []string{})
+	w.Close()
+	os.Stdout = oldStdout
+
+	var output bytes.Buffer
+	output.ReadFrom(r)
+
+	if err != nil {
+		t.Fatalf("config list should not error when providers exist: %v", err)
+	}
+
+	out := output.String()
+	if strings.Contains(out, "Provider: beta") {
+		t.Error("config list with no args should show only the first provider, not all providers")
+	}
+	if !strings.Contains(out, "Provider: alpha") {
+		t.Error("config list with no args should show the first provider")
+	}
+}
+
+func TestConfigGetCmd_HelpTextListsAllKeys(t *testing.T) {
+	helpText := configGetCmd.Long
+	expectedKeys := []string{
+		"http_timeout_sec", "max_retries", "cooldown_sec", "backoff_cap_sec",
+		"backoff_multiplier", "cb_reset_sec", "upstream_cb_threshold",
+		"health_check_interval_sec", "log_level", "disable_thinking",
+		"genai_model", "admin_token", "keys_file",
+		"port", "log_file",
+	}
+	for _, key := range expectedKeys {
+		if !strings.Contains(helpText, key) {
+			t.Errorf("configGetCmd help text missing key %q", key)
+		}
 	}
 }
 

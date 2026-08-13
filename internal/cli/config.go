@@ -193,18 +193,30 @@ var configListCmd = &cobra.Command{
 
 		// Build provider list
 		var names []string
-		if all || targetProvider == "" {
+		if all {
 			if tc != nil {
 				for n := range tc.Provider {
 					names = append(names, n)
 				}
 			}
 			sort.Strings(names)
-			if len(names) == 0 && targetProvider == "" {
+			if len(names) == 0 {
 				return fmt.Errorf("no providers configured")
 			}
-		} else {
+		} else if targetProvider != "" {
 			names = []string{targetProvider}
+		} else {
+			// No args, no --all: show the first (or only) provider
+			if tc != nil {
+				for n := range tc.Provider {
+					names = append(names, n)
+				}
+				sort.Strings(names)
+			}
+			if len(names) == 0 {
+				return fmt.Errorf("no providers configured")
+			}
+			names = []string{names[0]}
 		}
 
 		for _, name := range names {
@@ -227,8 +239,10 @@ var configGetCmd = &cobra.Command{
 	Short: "Get a runtime parameter",
 	Long: `Display the current value of a single runtime-configurable parameter.
 
-	Valid keys: http_timeout_sec, max_retries, cooldown_sec, backoff_cap_sec,
-	backoff_multiplier, cb_reset_sec, upstream_cb_threshold, log_level
+	Valid keys: port, log_file, target, cooldown_sec, max_retries,
+	backoff_cap_sec, backoff_multiplier, cb_reset_sec, upstream_cb_threshold,
+	http_timeout_sec, health_check_interval_sec, log_level,
+	disable_thinking, genai_model, admin_token, keys_file
 
 	Examples:
 	  akswitch config get http_timeout_sec
