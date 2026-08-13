@@ -41,10 +41,6 @@ type ConfigFieldDescriptor struct {
 	// Format converts a typed value back to string for display.
 	Format func(any) string
 
-	// ApplyRuntime modifies a provider's runtime state with the parsed value. Called only for
-	// provider-scoped, runtime-editable fields. Provider is guaranteed non-empty.
-	ApplyRuntime func(provider string, value any) error
-
 	// Persist writes the parsed value into the Config struct. Provider is the
 	// target provider name; for global fields, provider is empty and c is nil.
 	Persist func(tc *TomlConfig, provider string, c *Config, value any)
@@ -65,9 +61,6 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 		RuntimeEditable: false,
 		Parse:           func(s string) (any, error) { return s, nil },
 		Format:          func(v any) string { return fmt.Sprintf("%v", v) },
-		ApplyRuntime: func(provider string, value any) error {
-			return nil // direct struct field access: ps.config.TargetBase
-		},
 		Persist: func(tc *TomlConfig, provider string, c *Config, value any) {
 			if c != nil {
 				c.TargetBase = value.(string)
@@ -84,9 +77,6 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 		RuntimeEditable: true,
 		Parse:           func(s string) (any, error) { return strconv.Atoi(s) },
 		Format:          func(v any) string { return strconv.Itoa(v.(int)) },
-		ApplyRuntime: func(provider string, value any) error {
-			return nil
-		},
 		Persist: func(tc *TomlConfig, provider string, c *Config, value any) {
 			if c != nil {
 				c.CooldownSec = value.(int)
@@ -103,9 +93,6 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 		RuntimeEditable: true,
 		Parse:           func(s string) (any, error) { return strconv.Atoi(s) },
 		Format:          func(v any) string { return strconv.Itoa(v.(int)) },
-		ApplyRuntime: func(provider string, value any) error {
-			return nil
-		},
 		Persist: func(tc *TomlConfig, provider string, c *Config, value any) {
 			if c != nil {
 				c.MaxRetries = value.(int)
@@ -122,9 +109,6 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 		RuntimeEditable: true,
 		Parse:           func(s string) (any, error) { return strconv.Atoi(s) },
 		Format:          func(v any) string { return strconv.Itoa(v.(int)) },
-		ApplyRuntime: func(provider string, value any) error {
-			return nil
-		},
 		Persist: func(tc *TomlConfig, provider string, c *Config, value any) {
 			if c != nil {
 				c.BackoffCapSec = value.(int)
@@ -149,9 +133,6 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 			}
 			return strconv.FormatFloat(f, 'f', 1, 64)
 		},
-		ApplyRuntime: func(provider string, value any) error {
-			return nil
-		},
 		Persist: func(tc *TomlConfig, provider string, c *Config, value any) {
 			if c != nil {
 				c.BackoffMultiplier = value.(float64)
@@ -168,9 +149,6 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 		RuntimeEditable: true,
 		Parse:           func(s string) (any, error) { return strconv.Atoi(s) },
 		Format:          func(v any) string { return strconv.Itoa(v.(int)) },
-		ApplyRuntime: func(provider string, value any) error {
-			return nil
-		},
 		Persist: func(tc *TomlConfig, provider string, c *Config, value any) {
 			if c != nil {
 				c.CBResetSec = value.(int)
@@ -187,9 +165,6 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 		RuntimeEditable: true,
 		Parse:           func(s string) (any, error) { return strconv.Atoi(s) },
 		Format:          func(v any) string { return strconv.Itoa(v.(int)) },
-		ApplyRuntime: func(provider string, value any) error {
-			return nil
-		},
 		Persist: func(tc *TomlConfig, provider string, c *Config, value any) {
 			if c != nil {
 				c.UpstreamCBThreshold = value.(int)
@@ -206,9 +181,6 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 		RuntimeEditable: true,
 		Parse:           func(s string) (any, error) { return strconv.Atoi(s) },
 		Format:          func(v any) string { return strconv.Itoa(v.(int)) },
-		ApplyRuntime: func(provider string, value any) error {
-			return nil
-		},
 		Persist: func(tc *TomlConfig, provider string, c *Config, value any) {
 			if c != nil {
 				c.HTTPTimeoutSec = value.(int)
@@ -232,9 +204,6 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 			return nil, fmt.Errorf("invalid log level %q, use: debug, info, warn, error", s)
 		},
 		Format:          func(v any) string { return fmt.Sprintf("%v", v) },
-		ApplyRuntime: func(provider string, value any) error {
-			return nil
-		},
 		Persist: func(tc *TomlConfig, provider string, c *Config, value any) {
 			if c != nil {
 				c.LogLevel = value.(string)
@@ -252,9 +221,6 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 		RuntimeEditable: false,
 		Parse:           func(s string) (any, error) { return strconv.Atoi(s) },
 		Format:          func(v any) string { return strconv.Itoa(v.(int)) },
-		ApplyRuntime: func(provider string, value any) error {
-			return nil
-		},
 		Persist: func(tc *TomlConfig, provider string, c *Config, value any) {
 			if c != nil {
 				c.HealthCheckIntervalSec = value.(int)
@@ -272,9 +238,6 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 		ReadOnly:        true,
 		Parse:           func(s string) (any, error) { return s, nil },
 		Format:          func(v any) string { return fmt.Sprintf("%v", v) },
-		ApplyRuntime: func(provider string, value any) error {
-			return nil
-		},
 		Persist: func(tc *TomlConfig, provider string, c *Config, value any) {
 			if c != nil {
 				c.AdminToken = value.(string)
@@ -291,9 +254,6 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 		RuntimeEditable: false,
 		Parse:           func(s string) (any, error) { return strconv.ParseBool(s) },
 		Format:          func(v any) string { return strconv.FormatBool(v.(bool)) },
-		ApplyRuntime: func(provider string, value any) error {
-			return nil
-		},
 		Persist: func(tc *TomlConfig, provider string, c *Config, value any) {
 			if c != nil {
 				c.DisableThinking = value.(bool)
@@ -310,9 +270,6 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 		RuntimeEditable: false,
 		Parse:           func(s string) (any, error) { return s, nil },
 		Format:          func(v any) string { return fmt.Sprintf("%v", v) },
-		ApplyRuntime: func(provider string, value any) error {
-			return nil
-		},
 		Persist: func(tc *TomlConfig, provider string, c *Config, value any) {
 			if c != nil {
 				c.GenaiModel = value.(string)
@@ -330,9 +287,6 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 		ReadOnly:        true,
 		Parse:           func(s string) (any, error) { return s, nil },
 		Format:          func(v any) string { return fmt.Sprintf("%v", v) },
-		ApplyRuntime: func(provider string, value any) error {
-			return nil
-		},
 		Persist: func(tc *TomlConfig, provider string, c *Config, value any) {
 			if c != nil {
 				c.KeysFile = value.(string)
