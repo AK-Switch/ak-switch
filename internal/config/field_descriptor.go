@@ -379,8 +379,8 @@ func FindField(key string) *ConfigFieldDescriptor {
 	return nil
 }
 
-// parseDefault converts the Default string to the field's type.
-func parseDefault(d *ConfigFieldDescriptor) (any, error) {
+// ParseDefault converts the Default string to the field's type.
+func ParseDefault(d *ConfigFieldDescriptor) (any, error) {
 	switch d.Type {
 	case FieldTypeInt:
 		return strconv.Atoi(d.Default)
