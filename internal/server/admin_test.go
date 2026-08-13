@@ -478,6 +478,12 @@ func TestRuntimeConfigField_Apply(t *testing.T) {
 					t.Errorf("RectifyThinkingMapTo = %q, want auto", ps.RectifyThinkingMapTo())
 				}
 			}},
+		{name: "rectify_thinking_map_to valid disabled", key: "rectify_thinking_map_to", value: "disabled", wantErr: false,
+			check: func(t *testing.T, ps *ProviderState) {
+				if ps.RectifyThinkingMapTo() != "disabled" {
+					t.Errorf("RectifyThinkingMapTo = %q, want disabled", ps.RectifyThinkingMapTo())
+				}
+			}},
 		{name: "rectify_thinking_map_to invalid", key: "rectify_thinking_map_to", value: "invalid", wantErr: true},
 		{name: "unknown key", key: "nonexistent", value: "x", wantErr: true},
 	}

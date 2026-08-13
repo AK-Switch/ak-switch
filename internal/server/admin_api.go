@@ -752,15 +752,15 @@ func (api *AdminAPI) setRuntimeConfigField(ps *ProviderState, key string, value 
 // getRuntimeParams returns all runtime-configurable parameters for a provider.
 func (api *AdminAPI) getRuntimeParams(ps *ProviderState) map[string]interface{} {
 	return map[string]interface{}{
-		"http_timeout_sec":      ps.HTTPTimeoutSec(),
-		"max_retries":           ps.MaxRetries(),
-		"cooldown_sec":          ps.CooldownSec(),
-		"backoff_cap_sec":       ps.BackoffCapSec(),
-		"backoff_multiplier":    ps.BackoffMultiplier(),
-		"cb_reset_sec":          ps.CBResetSec(),
-		"upstream_cb_threshold": ps.UpstreamCBThreshold(),
-		"log_level":             ps.LogLevel(),
-		"thinking_mode":         ps.ThinkingMode(),
+		"http_timeout_sec":        ps.HTTPTimeoutSec(),
+		"max_retries":             ps.MaxRetries(),
+		"cooldown_sec":            ps.CooldownSec(),
+		"backoff_cap_sec":         ps.BackoffCapSec(),
+		"backoff_multiplier":      ps.BackoffMultiplier(),
+		"cb_reset_sec":            ps.CBResetSec(),
+		"upstream_cb_threshold":   ps.UpstreamCBThreshold(),
+		"log_level":               ps.LogLevel(),
+		"thinking_mode":           ps.ThinkingMode(),
 		"rectify_thinking_map_to": ps.RectifyThinkingMapTo(),
 	}
 }
@@ -1134,6 +1134,9 @@ var runtimeConfigFields = []runtimeConfigField{
 		},
 		persist: func(cfg *config.Config, val interface{}) {
 			v, _ := val.(string)
+			if v == "disabled" {
+				v = ""
+			}
 			cfg.RectifyThinkingMapTo = v
 		},
 	},
