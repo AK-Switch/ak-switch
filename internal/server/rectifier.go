@@ -21,12 +21,9 @@ type RectifierStats struct {
 }
 
 // NewThinkingRectifier creates a rectifier with the given configuration.
-// If enabled is false, Process() is a no-op passthrough.
+// If enabled is false or mapTo is empty, Process() is a no-op passthrough.
 // mapTo must be one of: "enabled", "auto", "disabled".
 func NewThinkingRectifier(enabled bool, mapTo string) *ThinkingRectifier {
-	if enabled && mapTo == "" {
-		mapTo = "enabled"
-	}
 	return &ThinkingRectifier{
 		enabled: enabled,
 		mapTo:   mapTo,
