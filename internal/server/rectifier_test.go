@@ -89,3 +89,14 @@ func TestThinkingRectifier_DefaultModeSkips(t *testing.T) {
 	}
 }
 
+func TestThinkingRectifier_DisabledIsNoop(t *testing.T) {
+	r := NewThinkingRectifier(true, "disabled")
+	body := []byte(`{"model":"gpt-4","thinking":{"type":"adaptive"}}`)
+	result, modified := r.Process(body)
+	if modified {
+		t.Fatal("expected no modification when mapTo is disabled")
+	}
+	if string(result) != string(body) {
+		t.Fatal("expected body unchanged when mapTo is disabled")
+	}
+}

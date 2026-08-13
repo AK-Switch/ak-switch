@@ -25,7 +25,7 @@ func NewThinkingRectifier(enabled bool, mapTo string) *ThinkingRectifier {
 // to the configured mapTo value. Returns (modifiedBody, true) when rectification
 // occurred, or (originalBody, false) on any parse/marshal failure or passthrough.
 func (r *ThinkingRectifier) Process(body []byte) ([]byte, bool) {
-	if !r.enabled || r.mapTo == "" {
+	if !r.enabled || r.mapTo == "" || r.mapTo == "disabled" {
 		return body, false
 	}
 
