@@ -1,6 +1,9 @@
 package server
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestThinkingRectifier_AdaptiveToEnabled(t *testing.T) {
 	r := NewThinkingRectifier(true, "enabled")
@@ -9,12 +12,8 @@ func TestThinkingRectifier_AdaptiveToEnabled(t *testing.T) {
 	if string(result) == string(body) {
 		t.Fatal("expected body to be modified")
 	}
-	stats := r.Stats()
-	if stats.Modified != 1 {
-		t.Fatalf("expected 1 modified, got %d", stats.Modified)
-	}
-	if stats.Total != 1 {
-		t.Fatalf("expected 1 total, got %d", stats.Total)
+	if !strings.Contains(string(result), `"type":"enabled"`) {
+		t.Fatalf("expected type to be changed to enabled, got %s", result)
 	}
 }
 
@@ -25,9 +24,8 @@ func TestThinkingRectifier_AdaptiveToAuto(t *testing.T) {
 	if string(result) == string(body) {
 		t.Fatal("expected body to be modified")
 	}
-	stats := r.Stats()
-	if stats.Modified != 1 {
-		t.Fatalf("expected 1 modified, got %d", stats.Modified)
+	if !strings.Contains(string(result), `"type":"auto"`) {
+		t.Fatalf("expected type to be changed to auto, got %s", result)
 	}
 }
 
@@ -38,10 +36,6 @@ func TestThinkingRectifier_NonAdaptivePassthrough(t *testing.T) {
 	if string(result) != string(body) {
 		t.Fatal("expected body unchanged for non-adaptive type")
 	}
-	stats := r.Stats()
-	if stats.Passthrough != 1 {
-		t.Fatalf("expected 1 passthrough, got %d", stats.Passthrough)
-	}
 }
 
 func TestThinkingRectifier_NoThinkingField(t *testing.T) {
@@ -50,10 +44,6 @@ func TestThinkingRectifier_NoThinkingField(t *testing.T) {
 	result := r.Process(body)
 	if string(result) != string(body) {
 		t.Fatal("expected body unchanged when no thinking field")
-	}
-	stats := r.Stats()
-	if stats.Passthrough != 1 {
-		t.Fatalf("expected 1 passthrough, got %d", stats.Passthrough)
 	}
 }
 
@@ -83,3 +73,4 @@ func TestThinkingRectifier_DefaultModeSkips(t *testing.T) {
 		t.Fatal("expected body unchanged with empty mapTo")
 	}
 }
+

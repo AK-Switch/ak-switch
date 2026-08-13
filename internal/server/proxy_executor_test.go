@@ -364,3 +364,34 @@ func TestExecute_ThinkingRectifier_Enabled(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 }
+
+func TestExecute_ThinkingRectifier_Disabled(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		if strings.Contains(string(body), `"type":"adaptive"`) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"choices":[]}`))
+			return
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"unexpected thinking.type"}`))
+	}))
+	defer backend.Close()
+
+	ps := newTestProviderState(t, "test", []string{"sk-key-0"})
+	ps.config.TargetBase = backend.URL
+	ps.SetThinkingMode("default")
+
+	px, _, _ := newProxyExecutor(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions",
+		strings.NewReader(`{"model":"gpt-4","thinking":{"type":"adaptive"}}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	px.Execute(w, req, ps)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
