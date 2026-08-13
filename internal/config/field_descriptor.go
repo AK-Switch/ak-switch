@@ -46,7 +46,6 @@ type ConfigFieldDescriptor struct {
 	Persist func(tc *TomlConfig, provider string, c *Config, value any)
 }
 
-
 // ConfigFieldDescriptors is the single source of truth for all configurable fields.
 // Provider-scoped fields come first, then global fields.
 var ConfigFieldDescriptors = []ConfigFieldDescriptor{
@@ -203,7 +202,7 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 			}
 			return nil, fmt.Errorf("invalid log level %q, use: debug, info, warn, error", s)
 		},
-		Format:          func(v any) string { return fmt.Sprintf("%v", v) },
+		Format: func(v any) string { return fmt.Sprintf("%v", v) },
 		Persist: func(tc *TomlConfig, provider string, c *Config, value any) {
 			if c != nil {
 				c.LogLevel = value.(string)
