@@ -330,3 +330,37 @@ func TestStreamSSEAndEstimateTokens_EmptyStream(t *testing.T) {
 		t.Errorf("unexpected negative tokens: input=%d output=%d", inputTokens, outputTokens)
 	}
 }
+
+// ── Thinking Rectifier integration ──────────────────────
+
+func TestExecute_ThinkingRectifier_Enabled(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		if strings.Contains(string(body), `"type":"enabled"`) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"choices":[]}`))
+			return
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"thinking.type not supported"}`))
+	}))
+	defer backend.Close()
+
+	ps := newTestProviderState(t, "test", []string{"sk-key-0"})
+	ps.config.TargetBase = backend.URL
+	ps.SetThinkingMode("rectify")
+	ps.SetRectifyThinkingMapTo("enabled")
+
+	px, _, _ := newProxyExecutor(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions",
+		strings.NewReader(`{"model":"gpt-4","thinking":{"type":"adaptive"}}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	px.Execute(w, req, ps)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
