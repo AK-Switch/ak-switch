@@ -642,8 +642,9 @@ func findKeyIndexByName(store *keypool.KeyStore, name string) (int, error) {
 	return matches[0], nil
 }
 
-// loadAdminToken loads the admin token for a specific provider from the TOML config.
-// Used for provider-scoped endpoints (checkAdminToken on the server side).
+// loadAdminToken loads an admin token from the TOML config file.
+// If provider is non-empty, looks up that specific provider's token.
+// If provider is empty, returns the first non-empty token from any provider.
 func loadAdminToken(provider string) (string, error) {
 	xdgPath, err := config.XDGConfigPath()
 	if err != nil {
@@ -656,8 +657,16 @@ func loadAdminToken(provider string) (string, error) {
 		}
 		return "", err
 	}
-	if p, ok := tc.Provider[provider]; ok {
-		return p.AdminToken, nil
+	if provider != "" {
+		if p, ok := tc.Provider[provider]; ok {
+			return p.AdminToken, nil
+		}
+		return "", nil
+	}
+	for _, p := range tc.Provider {
+		if p.AdminToken != "" {
+			return p.AdminToken, nil
+		}
 	}
 	return "", nil
 }
