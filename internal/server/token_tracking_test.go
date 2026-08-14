@@ -3,13 +3,14 @@
 package server
 
 import (
-		"bufio"
-		"io"
-		"net/http"
-		"net/http/httptest"
-		"strings"
-		"testing"
-	)
+	"bufio"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+)
+
 // ── streamSSEAndEstimateTokens ─────────────────────────
 
 func TestStreamSSE_EmptyStream(t *testing.T) {
@@ -286,13 +287,13 @@ func TestStreamSSE_InputJsonDelta(t *testing.T) {
 	respBody := io.NopCloser(strings.NewReader(sseData))
 	resp := &http.Response{Body: respBody, Header: make(http.Header)}
 
-_, output, _ := streamSSEAndEstimateTokens(w, resp, nil, "")
+	_, output, _ := streamSSEAndEstimateTokens(w, resp, nil, "")
 
-		// Should accumulate text from both input_json_delta (partial_json) and text_delta (text)
-		if output <= 0 {
-			t.Errorf("output_tokens = %d, want > 0 (should accumulate both input_json_delta and text_delta)", output)
-		}
+	// Should accumulate text from both input_json_delta (partial_json) and text_delta (text)
+	if output <= 0 {
+		t.Errorf("output_tokens = %d, want > 0 (should accumulate both input_json_delta and text_delta)", output)
 	}
+}
 
 func TestStreamSSE_RespBodySize(t *testing.T) {
 	// SSE data lines (each line ends with LF in the raw stream)
