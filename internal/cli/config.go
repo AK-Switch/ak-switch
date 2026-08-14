@@ -194,7 +194,7 @@ var configViewCmd = &cobra.Command{
 var configListCmd = &cobra.Command{
 	Use:   "list [provider]",
 	Short: "List runtime-configurable parameters",
-	Long: `Display all runtime-configurable parameters and their current values.
+	Long: `Display all runtime-configurable parameters and their current values from the config file.
 
 	If a provider name is given, shows parameters for that provider only.
 	Use --all to show parameters for all providers.
@@ -263,7 +263,7 @@ var configListCmd = &cobra.Command{
 var configGetCmd = &cobra.Command{
 	Use:   "get <key> [provider]",
 	Short: "Get a runtime parameter",
-	Long: `Display the current value of a single runtime-configurable parameter.
+	Long: `Display the current value of a single runtime-configurable parameter from the config file.
 
 	Valid keys: port, log_file, target, cooldown_sec, max_retries,
 	backoff_cap_sec, backoff_multiplier, cb_reset_sec, upstream_cb_threshold,
@@ -435,7 +435,7 @@ var configSetCmd = &cobra.Command{
 		}
 
 		// 1. Apply to runtime (call server API for provider-scoped runtime-editable fields)
-		if fd.Scope == config.FieldScopeProvider && fd.RuntimeEditable && runtimeOnly {
+		if fd.Scope == config.FieldScopeProvider && fd.RuntimeEditable {
 			for _, p := range providerList {
 				if err := applyRuntimeField(p, fd, parsed); err != nil {
 					return err
