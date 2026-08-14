@@ -371,10 +371,7 @@ func (px *ProxyExecutor) writeAllKeysExhausted(w http.ResponseWriter, ps *Provid
 func streamSSEAndEstimateTokens(w http.ResponseWriter, resp *http.Response, bodyBytes []byte, model string) (int, int, int64) {
 	defer func() { _ = resp.Body.Close() }()
 
-	// thinkingBuf accumulates thinking content separately from outputBuf,
-	// so the fallback tiktoken estimation (EstimateOutput) only estimates
-	// text tokens, avoiding inflation from long reasoning traces.
-	var outputBuf, thinkingBuf strings.Builder
+	var outputBuf strings.Builder
 	var respBodySize int64
 	var apiOutputTokens int
 
@@ -406,9 +403,8 @@ func streamSSEAndEstimateTokens(w http.ResponseWriter, resp *http.Response, body
 		// Parse data: lines for SSE events
 		if strings.HasPrefix(line, "data: ") {
 			raw := line[6:]
-			tokens, textDelta, thinkingDelta := tokenestimator.ParseSSEEvent([]byte(raw))
+			tokens, textDelta, _ := tokenestimator.ParseSSEEvent([]byte(raw))
 			outputBuf.WriteString(textDelta)
-			thinkingBuf.WriteString(thinkingDelta)
 			if tokens > 0 {
 				apiOutputTokens = tokens
 			}
