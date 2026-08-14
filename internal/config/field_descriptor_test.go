@@ -27,7 +27,8 @@ func TestFindField_AllRegistered(t *testing.T) {
 	expected := []string{
 		"target", "cooldown_sec", "max_retries", "backoff_cap_sec",
 		"backoff_multiplier", "cb_reset_sec", "upstream_cb_threshold",
-		"http_timeout_sec", "log_level", "health_check_interval_sec",
+		"http_timeout_sec", "log_level", "thinking_mode",
+		"rectify_thinking_map_to", "health_check_interval_sec",
 		"admin_token", "disable_thinking", "genai_model", "keys_file",
 		"port", "log_file",
 	}
@@ -149,6 +150,8 @@ func TestFieldDescriptor_RuntimeEditableMatchesServer(t *testing.T) {
 		"cb_reset_sec":          true,
 		"upstream_cb_threshold": true,
 		"log_level":             true,
+		"thinking_mode":         true,
+		"rectify_thinking_map_to": true,
 	}
 
 	for _, fd := range ConfigFieldDescriptors {
