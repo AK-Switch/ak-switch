@@ -402,8 +402,8 @@ func streamSSEAndEstimateTokens(w http.ResponseWriter, resp *http.Response, body
 		// Parse data: lines for SSE events
 		if strings.HasPrefix(line, "data: ") {
 			raw := line[6:]
-			tokens, delta := tokenestimator.ParseSSEEvent([]byte(raw))
-			outputBuf.WriteString(delta)
+			tokens, textDelta, thinkingDelta := tokenestimator.ParseSSEEvent([]byte(raw))
+			outputBuf.WriteString(textDelta + thinkingDelta)
 			if tokens > 0 {
 				apiOutputTokens = tokens
 			}

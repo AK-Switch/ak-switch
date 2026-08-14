@@ -144,7 +144,7 @@ func TestExtractResponseText_AnthropicNoTextBlock(t *testing.T) {
 
 func TestParseSSEEvent_ContentBlockDelta(t *testing.T) {
 	raw := []byte(`{"type":"content_block_delta","delta":{"text":"hello","partial_json":"{\"key\""}}`)
-	tokens, delta := ParseSSEEvent(raw)
+	tokens, delta, _ := ParseSSEEvent(raw)
 	if tokens != 0 {
 		t.Errorf("expected 0 tokens, got %d", tokens)
 	}
@@ -155,7 +155,7 @@ func TestParseSSEEvent_ContentBlockDelta(t *testing.T) {
 
 func TestParseSSEEvent_ContentBlockStart(t *testing.T) {
 	raw := []byte(`{"type":"content_block_start","content_block":{"text":"greeting"}}`)
-	_, delta := ParseSSEEvent(raw)
+	_, delta, _ := ParseSSEEvent(raw)
 	if delta != "greeting" {
 		t.Errorf("expected `greeting`, got %q", delta)
 	}
@@ -163,7 +163,7 @@ func TestParseSSEEvent_ContentBlockStart(t *testing.T) {
 
 func TestParseSSEEvent_MessageDelta(t *testing.T) {
 	raw := []byte(`{"type":"message_delta","usage":{"output_tokens":42}}`)
-	tokens, _ := ParseSSEEvent(raw)
+	tokens, _, _ := ParseSSEEvent(raw)
 	if tokens != 42 {
 		t.Errorf("expected 42 tokens, got %d", tokens)
 	}
@@ -171,7 +171,7 @@ func TestParseSSEEvent_MessageDelta(t *testing.T) {
 
 func TestParseSSEEvent_OpenAIFormat(t *testing.T) {
 	raw := []byte(`{"choices":[{"delta":{"content":"hi"}}]}`)
-	_, delta := ParseSSEEvent(raw)
+	_, delta, _ := ParseSSEEvent(raw)
 	if delta != "hi" {
 		t.Errorf("expected `hi`, got %q", delta)
 	}
@@ -179,7 +179,7 @@ func TestParseSSEEvent_OpenAIFormat(t *testing.T) {
 
 func TestParseSSEEvent_NonDataLine(t *testing.T) {
 	raw := []byte(`event: ping`)
-	tokens, delta := ParseSSEEvent(raw)
+	tokens, delta, _ := ParseSSEEvent(raw)
 	if tokens != 0 || delta != "" {
 		t.Errorf("expected (0, \"\"), got (%d, %q)", tokens, delta)
 	}
@@ -187,7 +187,7 @@ func TestParseSSEEvent_NonDataLine(t *testing.T) {
 
 func TestParseSSEEvent_InvalidJSON(t *testing.T) {
 	raw := []byte(`not json`)
-	tokens, delta := ParseSSEEvent(raw)
+	tokens, delta, _ := ParseSSEEvent(raw)
 	if tokens != 0 || delta != "" {
 		t.Errorf("expected (0, \"\"), got (%d, %q)", tokens, delta)
 	}
@@ -195,7 +195,7 @@ func TestParseSSEEvent_InvalidJSON(t *testing.T) {
 
 func TestParseSSEEvent_PartialJSON(t *testing.T) {
 	raw := []byte(`{"type":"content_block_delta","delta":{"partial_json":"{\"name\":"}}`)
-	_, delta := ParseSSEEvent(raw)
+	_, delta, _ := ParseSSEEvent(raw)
 	if delta != "{\"name\":" {
 		t.Errorf("expected `{\"name\":`, got %q", delta)
 	}
@@ -203,7 +203,7 @@ func TestParseSSEEvent_PartialJSON(t *testing.T) {
 
 func TestParseSSEEvent_ThinkingDelta(t *testing.T) {
 	raw := []byte(`{"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"Let me think step by step"}}`)
-	_, delta := ParseSSEEvent(raw)
+	_, _, delta := ParseSSEEvent(raw)
 	if delta != "Let me think step by step" {
 		t.Errorf("expected `Let me think step by step`, got %q", delta)
 	}
@@ -211,7 +211,7 @@ func TestParseSSEEvent_ThinkingDelta(t *testing.T) {
 
 func TestParseSSEEvent_ContentBlockStartThinking(t *testing.T) {
 	raw := []byte(`{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"deep reasoning"}}`)
-	_, delta := ParseSSEEvent(raw)
+	_, _, delta := ParseSSEEvent(raw)
 	if delta != "deep reasoning" {
 		t.Errorf("expected `deep reasoning`, got %q", delta)
 	}
@@ -219,10 +219,12 @@ func TestParseSSEEvent_ContentBlockStartThinking(t *testing.T) {
 
 func TestParseSSEEvent_ThinkingAndTextDelta(t *testing.T) {
 	raw := []byte(`{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"reasoning","text":"answer"}}`)
-	_, delta := ParseSSEEvent(raw)
-	// Accumulation order: Text, PartialJSON, Thinking
-	if delta != "answerreasoning" {
-		t.Errorf("expected `answerreasoning`, got %q", delta)
+	_, textDelta, thinkingDelta := ParseSSEEvent(raw)
+	if textDelta != "answer" {
+		t.Errorf("expected `answer`, got %q", textDelta)
+	}
+	if thinkingDelta != "reasoning" {
+		t.Errorf("expected `reasoning`, got %q", thinkingDelta)
 	}
 }
 
@@ -241,8 +243,8 @@ func TestParseSSEEvent_ThinkingAndTextCombined(t *testing.T) {
 	var accumulated string
 	var apiTokens int
 	for _, ev := range events {
-		tokens, delta := ParseSSEEvent(ev.raw)
-		accumulated += delta
+		tokens, textDelta, thinkingDelta := ParseSSEEvent(ev.raw)
+		accumulated += textDelta + thinkingDelta
 		if tokens > 0 {
 			apiTokens = tokens
 		}

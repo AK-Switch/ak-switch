@@ -161,9 +161,9 @@ func EstimateInput(bodyBytes []byte, model string) int {
 // the extracted text delta and output token count.
 // Returns (0, "") for non-data lines, unrecognized JSON, or events
 // that don't carry text/token information.
-func ParseSSEEvent(raw []byte) (outputTokens int, textDelta string) {
+func ParseSSEEvent(raw []byte) (outputTokens int, textDelta string, thinkingDelta string) {
 	if len(raw) == 0 {
-		return 0, ""
+		return 0, "", ""
 	}
 
 	var result struct {
@@ -189,14 +189,14 @@ func ParseSSEEvent(raw []byte) (outputTokens int, textDelta string) {
 	if err := json.Unmarshal(raw, &result); err != nil || result.Type == "" {
 		// Try OpenAI format (no "type" field)
 		if err := json.Unmarshal(raw, &result); err != nil {
-			return 0, ""
+			return 0, "", ""
 		}
 		for _, choice := range result.Choices {
 			if choice.Delta != nil {
 				textDelta += choice.Delta.Content
 			}
 		}
-		return 0, textDelta
+		return 0, textDelta, ""
 	}
 
 	switch result.Type {
@@ -204,19 +204,19 @@ func ParseSSEEvent(raw []byte) (outputTokens int, textDelta string) {
 		if result.Delta != nil {
 			textDelta += result.Delta.Text
 			textDelta += result.Delta.PartialJSON
-			textDelta += result.Delta.Thinking
+			thinkingDelta += result.Delta.Thinking
 		}
 	case "content_block_start":
 		if result.ContentBlock != nil {
 			textDelta += result.ContentBlock.Text
-			textDelta += result.ContentBlock.Thinking
+			thinkingDelta += result.ContentBlock.Thinking
 		}
 	case "message_delta":
 		if result.Usage != nil && result.Usage.OutputTokens > 0 {
 			outputTokens = result.Usage.OutputTokens
 		}
 	}
-	return outputTokens, textDelta
+	return outputTokens, textDelta, thinkingDelta
 }
 
 // ProcessResponse extracts the actual token counts and response text
