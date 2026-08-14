@@ -400,7 +400,7 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 			}
 			return nil, fmt.Errorf("invalid thinking_mode %q, use: default, rectify", s)
 		},
-		Format:          func(v any) string { return fmt.Sprintf("%v", v) },
+		Format: func(v any) string { return fmt.Sprintf("%v", v) },
 		Persist: func(tc *TomlConfig, provider string, c *Config, value any) {
 			if c != nil {
 				c.ThinkingMode = value.(string)
@@ -411,15 +411,15 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 			if !ok {
 				return nil, fmt.Errorf("thinking_mode must be a string")
 			}
-			switch strings.TrimSpace(strings.ToLower(s)) {
+			v := strings.TrimSpace(strings.ToLower(s))
+			switch v {
 			case "default", "rectify":
-				ps.(ProviderRuntimeState).SetThinkingMode(s)
-				return s, nil
+				ps.(ProviderRuntimeState).SetThinkingMode(v)
+				return v, nil
 			default:
 				return nil, fmt.Errorf("invalid thinking_mode %q, use: default, rectify", s)
 			}
-		},
-	},
+		}},
 	{
 		Key:             "rectify_thinking_map_to",
 		DisplayName:     "Rectify Thinking Map To",
@@ -456,18 +456,18 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 			if !ok {
 				return nil, fmt.Errorf("rectify_thinking_map_to must be a string")
 			}
-			switch strings.TrimSpace(strings.ToLower(s)) {
+			v := strings.TrimSpace(strings.ToLower(s))
+			switch v {
 			case "enabled", "auto", "disabled":
-				if s == "disabled" {
-					s = ""
+				if v == "disabled" {
+					v = ""
 				}
-				ps.(ProviderRuntimeState).SetRectifyThinkingMapTo(s)
-				return s, nil
+				ps.(ProviderRuntimeState).SetRectifyThinkingMapTo(v)
+				return v, nil
 			default:
 				return nil, fmt.Errorf("invalid rectify_thinking_map_to %q, use: enabled, auto, disabled", s)
 			}
-		},
-	},
+		}},
 	{
 		Key:             "genai_model",
 		DisplayName:     "GenAI Model",
