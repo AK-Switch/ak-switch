@@ -911,6 +911,120 @@ func autoNumberNames(entries []keypool.KeyEntry, store *keypool.KeyStore) []keyp
 	return entries
 }
 
+// parseCSV parses CSV data into KeyEntry slices.
+// Parsing rules:
+// 1. Lines starting with '#' are skipped (comments)
+// 2. If the first non-comment line contains known column headers,
+//    columns are mapped by header name (case-insensitive)
+// 3. If no header is detected, positional inference is used:
+//    - 1 column → key
+//    - 2 columns → name, key
+//    - 3+ columns → error
+// 4. Leading/trailing whitespace is stripped from each cell
+func parseCSV(data []byte) ([]keypool.KeyEntry, error) {
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) == 0 {
+		return nil, fmt.Errorf("empty CSV data")
+	}
+
+	keyColNames := map[string]bool{
+		"key": true, "api_key": true, "api key": true,
+		"token": true, "secret": true, "apikey": true,
+	}
+	nameColNames := map[string]bool{
+		"name": true, "account_name": true, "username": true,
+		"user": true, "account": true, "备注": true,
+	}
+
+	contentStart := 0
+	for contentStart < len(lines) {
+		trimmed := strings.TrimSpace(lines[contentStart])
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			contentStart++
+			continue
+		}
+		break
+	}
+	if contentStart >= len(lines) {
+		return nil, fmt.Errorf("no data found in CSV (all lines are comments or empty)")
+	}
+
+	firstLine := strings.TrimSpace(lines[contentStart])
+	cols := strings.Split(firstLine, ",")
+	for i := range cols {
+		cols[i] = strings.TrimSpace(cols[i])
+	}
+
+	isHeader := false
+	keyCol := -1
+	nameCol := -1
+	for _, c := range cols {
+		lower := strings.ToLower(c)
+		if keyColNames[lower] {
+			isHeader = true
+			break
+		}
+		if nameColNames[lower] {
+			isHeader = true
+			break
+		}
+	}
+
+	dataStart := contentStart
+	if isHeader {
+		for i, c := range cols {
+			lower := strings.ToLower(c)
+			if keyColNames[lower] {
+				keyCol = i
+			}
+			if nameColNames[lower] {
+				nameCol = i
+			}
+		}
+		if keyCol == -1 {
+			return nil, fmt.Errorf("CSV has header but no key column found (known names: key, api_key, token, secret)")
+		}
+		dataStart = contentStart + 1
+	}
+
+	var entries []keypool.KeyEntry
+	for i := dataStart; i < len(lines); i++ {
+		line := strings.TrimSpace(lines[i])
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		cells := strings.Split(line, ",")
+		for j := range cells {
+			cells[j] = strings.TrimSpace(cells[j])
+		}
+
+		if isHeader {
+			if keyCol >= len(cells) {
+				continue
+			}
+			entry := keypool.KeyEntry{Key: cells[keyCol]}
+			if nameCol >= 0 && nameCol < len(cells) {
+				entry.Name = cells[nameCol]
+			}
+			entries = append(entries, entry)
+		} else {
+			switch len(cells) {
+			case 1:
+				entries = append(entries, keypool.KeyEntry{Key: cells[0]})
+			case 2:
+				entries = append(entries, keypool.KeyEntry{Name: cells[0], Key: cells[1]})
+			default:
+				return nil, fmt.Errorf("line %d: cannot infer CSV column mapping with %d columns (no header detected)", i+1, len(cells))
+			}
+		}
+	}
+
+	if len(entries) == 0 {
+		return nil, fmt.Errorf("no valid key entries found in CSV data")
+	}
+	return entries, nil
+}
+
 // parseKeyEntries parses key data into KeyEntry slices.
 // Supports:
 //   - JSON array of strings: ["key1", "key2"]
@@ -941,5 +1055,13 @@ func parseKeyEntries(data []byte) ([]keypool.KeyEntry, error) {
 		}
 	}
 
-	return nil, fmt.Errorf("expected JSON array of strings, key objects, or JSONL format")
+	// Try CSV
+	if len(data) > 0 {
+		csvEntries, csvErr := parseCSV(data)
+		if csvErr == nil {
+			return csvEntries, nil
+		}
+	}
+
+	return nil, fmt.Errorf("expected JSON array of strings, key objects, JSONL, or CSV format")
 }
