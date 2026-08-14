@@ -140,7 +140,7 @@ func TestProviderRuntimeInterface_NoCallers(t *testing.T) {
 }
 
 func TestFieldDescriptor_RuntimeEditableMatchesServer(t *testing.T) {
-	// Server-side runtimeConfigFields handles only these keys (from admin_api.go initRuntimeConfigDescriptors)
+	// Server-side handles only these keys (via config.FindField + RuntimeEditable)
 	serverHandled := map[string]bool{
 		"http_timeout_sec":      true,
 		"max_retries":           true,

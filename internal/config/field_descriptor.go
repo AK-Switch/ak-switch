@@ -458,6 +458,9 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 			}
 			switch strings.TrimSpace(strings.ToLower(s)) {
 			case "enabled", "auto", "disabled":
+				if s == "disabled" {
+					s = ""
+				}
 				ps.(ProviderRuntimeState).SetRectifyThinkingMapTo(s)
 				return s, nil
 			default:
