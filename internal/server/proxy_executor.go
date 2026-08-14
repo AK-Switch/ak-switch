@@ -75,7 +75,6 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 		slog.Debug("proxy request debug", "provider", ps.Name(), "method", r.Method, "path", r.URL.Path, "auth", maskedAuth, "body_size", len(bodyBytes), "body_preview", bodyPreview)
 	}
 
-	pool.AdvanceCounter()
 	for round := 0; round < ps.MaxRetries(); round++ {
 
 		if !upCB.Allow() {
@@ -84,8 +83,8 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 			continue
 		}
 
-		available := pool.AvailableKeys()
-		if len(available) == 0 {
+		idx, key, ok := pool.SelectKey()
+		if !ok {
 			if !pool.AnyActive() {
 				px.writeAllKeysExhausted(w, ps, r.Method, start)
 				return
@@ -95,66 +94,63 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 			continue
 		}
 
-		for _, idx := range available {
+		keyName, _ := pool.Name(idx)
 
-			keyName, _ := pool.Name(idx)
+		req, err := http.NewRequestWithContext(r.Context(), r.Method, target, bytes.NewReader(bodyBytes))
+		if err != nil {
+			px.metrics.UpstreamErrors.WithLabelValues("network").Inc()
+			writeProxyError(w, http.StatusInternalServerError, ErrorUpstreamError, "failed to build upstream request")
+			px.recordProxyMetrics(r.Method, "5xx", "", start)
+			return
+		}
+		copyHeaders(req.Header, r.Header)
+		req.Header.Set("Authorization", "Bearer "+key)
 
-			req, err := http.NewRequestWithContext(r.Context(), r.Method, target, bytes.NewReader(bodyBytes))
-			if err != nil {
-				px.metrics.UpstreamErrors.WithLabelValues("network").Inc()
-				writeProxyError(w, http.StatusInternalServerError, ErrorUpstreamError, "failed to build upstream request")
-				px.recordProxyMetrics(r.Method, "5xx", "", start)
+		resp, err := client.Do(req)
+		if err != nil {
+			pool.Release(idx)
+			switch categorizeError(0, err) {
+			case CatClientAbort:
+				slog.Debug("client aborted request", "provider", ps.Name(), "key_index", idx, "key_name", keyName, "error", err)
 				return
-			}
-			copyHeaders(req.Header, r.Header)
-			req.Header.Set("Authorization", "Bearer "+pool.Keys()[idx])
-
-			resp, err := client.Do(req)
-			if err != nil {
-				pool.Release(idx)
-				switch categorizeError(0, err) {
-				case CatClientAbort:
-					slog.Debug("client aborted request", "provider", ps.Name(), "key_index", idx, "key_name", keyName, "error", err)
-					return
-				default:
-					slog.Warn("key network error", "provider", ps.Name(), "key_index", idx, "key_name", keyName, "error", err)
-					px.metrics.UpstreamErrors.WithLabelValues("network").Inc()
-					upCB.RecordFailure()
-					continue
-				}
-			}
-			ttfb := time.Since(start)
-
-			// ── Response status dispatch ──
-			switch {
-			case resp.StatusCode == http.StatusTooManyRequests:
-				if px.handleRateLimited(w, ps, idx, resp, start, r.Method, target, bodyBytes) {
-					return
-				}
-				continue
-
-			case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
-				if px.handleAuthRejected(w, ps, idx, resp, start, r.Method, target, bodyBytes) {
-					return
-				}
-				continue
-
-			case resp.StatusCode == http.StatusBadGateway || resp.StatusCode == http.StatusServiceUnavailable:
-				px.handleServerError(ps, idx, resp, round)
-				continue
-
-			case (resp.StatusCode >= 400 && resp.StatusCode < 500) || categorizeError(resp.StatusCode, nil) == CatNonRetryable:
-				px.handleNonRetryable(w, ps, idx, resp, start, r.Method, target, bodyBytes, round)
-				return
-
-			case resp.StatusCode >= 500:
-				px.handleServerError(ps, idx, resp, round)
-				continue
-
 			default:
-				px.handleSuccess(w, ps, idx, resp, start, ttfb, r.Method, target, bodyBytes, round, rectified)
+				slog.Warn("key network error", "provider", ps.Name(), "key_index", idx, "key_name", keyName, "error", err)
+				px.metrics.UpstreamErrors.WithLabelValues("network").Inc()
+				upCB.RecordFailure()
+				continue
+			}
+		}
+		ttfb := time.Since(start)
+
+		// ── Response status dispatch ──
+		switch {
+		case resp.StatusCode == http.StatusTooManyRequests:
+			if px.handleRateLimited(w, ps, idx, resp, start, r.Method, target, bodyBytes) {
 				return
 			}
+			continue
+
+		case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
+			if px.handleAuthRejected(w, ps, idx, resp, start, r.Method, target, bodyBytes) {
+				return
+			}
+			continue
+
+		case resp.StatusCode == http.StatusBadGateway || resp.StatusCode == http.StatusServiceUnavailable:
+			px.handleServerError(ps, idx, resp, round)
+			continue
+
+		case (resp.StatusCode >= 400 && resp.StatusCode < 500) || categorizeError(resp.StatusCode, nil) == CatNonRetryable:
+			px.handleNonRetryable(w, ps, idx, resp, start, r.Method, target, bodyBytes, round)
+			return
+
+		case resp.StatusCode >= 500:
+			px.handleServerError(ps, idx, resp, round)
+			continue
+
+		default:
+			px.handleSuccess(w, ps, idx, resp, start, ttfb, r.Method, target, bodyBytes, round, rectified)
+			return
 		}
 	}
 
