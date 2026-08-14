@@ -10,6 +10,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -214,12 +216,15 @@ func TestHandleServerError_RecordsUpstreamFailure(t *testing.T) {
 
 func TestHandleNonRetryable_PassthroughStatus(t *testing.T) {
 	ps := newTestProviderState(t, "test", []string{"key-a"})
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
 	px, _, _ := newProxyExecutor(t)
 
 	w := httptest.NewRecorder()
 	resp := newHTTPResponse(http.StatusBadRequest, `{"error":"bad request"}`)
 
-	px.handleNonRetryable(w, ps, 0, resp, testStartTime(), "GET", "http://upstream/", []byte(`{"error":"bad request"}`), 0)
+	px.handleNonRetryable(w, ps, 0, resp, testStartTime(), "GET", "http://upstream/", []byte(`{"error":"bad request"}`), 0, false)
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("response status = %d, want 400", w.Code)
@@ -335,7 +340,89 @@ func TestStreamSSEAndEstimateTokens_EmptyStream(t *testing.T) {
 	}
 }
 
-// ── Thinking Rectifier integration ──────────────────────
+// ── Execute 4xx error dump ────────────────────────────
+
+func TestExecute_NonRetryable_WritesErrorDump(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"type":"error","error":{"type":"invalid_request_error","message":"bad"}}`))
+	}))
+	defer backend.Close()
+
+	ps := newTestProviderState(t, "test", []string{"sk-key-0"})
+	ps.config.TargetBase = backend.URL
+	ps.SetThinkingMode("rectify")
+	ps.SetRectifyThinkingMapTo("enabled")
+
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
+
+	px, _, _ := newProxyExecutor(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions",
+		strings.NewReader(`{"model":"gpt-4","thinking":{"type":"adaptive"}}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	px.Execute(w, req, ps)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Verify dump file exists with both bodies + metadata.
+	errorsDir := filepath.Join(tmpHome, ".akswitch", "errors")
+	entries, err := os.ReadDir(errorsDir)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("expected 1 dump in %s, got %v (err=%v)", errorsDir, entries, err)
+	}
+	data, err := os.ReadFile(filepath.Join(errorsDir, entries[0].Name()))
+	if err != nil {
+		t.Fatalf("read dump: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, `"thinking":{"type":"enabled"}`) {
+		t.Errorf("dump missing request body:\n%s", content)
+	}
+	if !strings.Contains(content, `invalid_request_error`) {
+		t.Errorf("dump missing response body:\n%s", content)
+	}
+	if !strings.Contains(content, "Rectified: true") {
+		t.Errorf("dump missing rectified flag:\n%s", content)
+	}
+}
+
+func TestExecute_NonRetryable_ClientStillGetsFullBody(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"full upstream error detail"}`))
+	}))
+	defer backend.Close()
+
+	ps := newTestProviderState(t, "test", []string{"sk-key-0"})
+	ps.config.TargetBase = backend.URL
+
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
+
+	px, _, _ := newProxyExecutor(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions",
+		strings.NewReader(`{"model":"gpt-4"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	px.Execute(w, req, ps)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+	if got := w.Body.String(); !strings.Contains(got, "full upstream error detail") {
+		t.Errorf("client body lost upstream error, got: %q", got)
+	}
+}
 
 func TestExecute_ThinkingRectifier_Enabled(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
