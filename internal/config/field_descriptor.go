@@ -22,6 +22,8 @@ type ProviderRuntimeState interface {
 	SetUpstreamProxyCBThreshold(n int)
 	SetUpstreamCBThreshold(n int)
 	SetLogLevel(v string)
+	SetThinkingMode(v string)
+	SetRectifyThinkingMapTo(v string)
 	ConfigurePoolCBs(base, backoffCap time.Duration, multiplier float64)
 
 	CooldownSec() int
@@ -102,7 +104,7 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 		Scope:           FieldScopeProvider,
 		TomlPath:        "provider.%s.cooldown_sec",
 		Type:            FieldTypeInt,
-		Default:         "60",
+		Default:         "15",
 		RuntimeEditable: true,
 		MinInt:          1,
 		Parse:           func(s string) (any, error) { return strconv.Atoi(s) },
@@ -379,6 +381,87 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 		Persist: func(tc *TomlConfig, provider string, c *Config, value any) {
 			if c != nil {
 				c.DisableThinking = value.(bool)
+			}
+		},
+	},
+	{
+		Key:             "thinking_mode",
+		DisplayName:     "Thinking Mode",
+		Scope:           FieldScopeProvider,
+		TomlPath:        "provider.%s.thinking_mode",
+		Type:            FieldTypeString,
+		Default:         "default",
+		RuntimeEditable: true,
+		Parse: func(s string) (any, error) {
+			v := strings.TrimSpace(strings.ToLower(s))
+			switch v {
+			case "default", "rectify":
+				return v, nil
+			}
+			return nil, fmt.Errorf("invalid thinking_mode %q, use: default, rectify", s)
+		},
+		Format:          func(v any) string { return fmt.Sprintf("%v", v) },
+		Persist: func(tc *TomlConfig, provider string, c *Config, value any) {
+			if c != nil {
+				c.ThinkingMode = value.(string)
+			}
+		},
+		ApplyRuntime: func(ps any, provider string, value any) (any, error) {
+			s, ok := value.(string)
+			if !ok {
+				return nil, fmt.Errorf("thinking_mode must be a string")
+			}
+			switch strings.TrimSpace(strings.ToLower(s)) {
+			case "default", "rectify":
+				ps.(ProviderRuntimeState).SetThinkingMode(s)
+				return s, nil
+			default:
+				return nil, fmt.Errorf("invalid thinking_mode %q, use: default, rectify", s)
+			}
+		},
+	},
+	{
+		Key:             "rectify_thinking_map_to",
+		DisplayName:     "Rectify Thinking Map To",
+		Scope:           FieldScopeProvider,
+		TomlPath:        "provider.%s.rectify_thinking_map_to",
+		Type:            FieldTypeString,
+		Default:         "",
+		RuntimeEditable: true,
+		Parse: func(s string) (any, error) {
+			v := strings.TrimSpace(strings.ToLower(s))
+			switch v {
+			case "enabled", "auto", "disabled":
+				if v == "disabled" {
+					v = ""
+				}
+				return v, nil
+			}
+			return nil, fmt.Errorf("invalid rectify_thinking_map_to %q, use: enabled, auto, disabled", s)
+		},
+		Format: func(v any) string {
+			s := v.(string)
+			if s == "" {
+				return "disabled"
+			}
+			return s
+		},
+		Persist: func(tc *TomlConfig, provider string, c *Config, value any) {
+			if c != nil {
+				c.RectifyThinkingMapTo = value.(string)
+			}
+		},
+		ApplyRuntime: func(ps any, provider string, value any) (any, error) {
+			s, ok := value.(string)
+			if !ok {
+				return nil, fmt.Errorf("rectify_thinking_map_to must be a string")
+			}
+			switch strings.TrimSpace(strings.ToLower(s)) {
+			case "enabled", "auto", "disabled":
+				ps.(ProviderRuntimeState).SetRectifyThinkingMapTo(s)
+				return s, nil
+			default:
+				return nil, fmt.Errorf("invalid rectify_thinking_map_to %q, use: enabled, auto, disabled", s)
 			}
 		},
 	},
