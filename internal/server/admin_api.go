@@ -742,11 +742,11 @@ func (api *AdminAPI) handleRuntimeConfigSet(w http.ResponseWriter, r *http.Reque
 // in-memory config and runtime state. Returns the new value and an error
 // if the key is unknown or the value is invalid.
 func (api *AdminAPI) setRuntimeConfigField(ps *ProviderState, key string, value interface{}) (interface{}, error) {
-	f := lookupRuntimeConfigField(key)
-	if f == nil {
+	fd := config.FindField(key)
+	if fd == nil || !fd.RuntimeEditable || fd.ApplyRuntime == nil {
 		return nil, fmt.Errorf("unknown key %q", key)
 	}
-	return f.apply(ps, value)
+	return fd.ApplyRuntime(ps, "", fmt.Sprintf("%v", value))
 }
 
 // getRuntimeParams returns all runtime-configurable parameters for a provider.
@@ -908,9 +908,9 @@ func (api *AdminAPI) persistRuntimeConfigField(ps *ProviderState, key string, va
 	}
 
 	// Only modify the specific field
-	f := lookupRuntimeConfigField(key)
-	if f != nil {
-		f.persist(providerCfg, value)
+	fd := config.FindField(key)
+	if fd != nil && fd.Persist != nil {
+		fd.Persist(tc, ps.Name(), providerCfg, value)
 	}
 
 	return config.SaveTomlConfig(tc, xdgPath)
@@ -932,222 +932,10 @@ func (api *AdminAPI) persistRuntimeConfigFieldToDefault(key string, value interf
 		tc.Default = &config.Config{}
 	}
 
-	f := lookupRuntimeConfigField(key)
-	if f != nil {
-		f.persist(tc.Default, value)
+	fd := config.FindField(key)
+	if fd != nil && fd.Persist != nil {
+		fd.Persist(tc, "", tc.Default, value)
 	}
 
 	return config.SaveTomlConfig(tc, xdgPath)
-}
-
-// ── Runtime Config Field Descriptors ──────────────────────
-
-// runtimeConfigField describes a single runtime-configurable field.
-// Each field is defined once; apply, persist, and persistToDefault
-// are derived from the descriptor.
-type runtimeConfigField struct {
-	key     string
-	apply   func(ps *ProviderState, raw interface{}) (interface{}, error)
-	persist func(cfg *config.Config, val interface{})
-}
-
-// runtimeConfigFields is the single source of truth for all runtime
-// config fields. Adding a new field requires exactly one entry here.
-var runtimeConfigFields = []runtimeConfigField{
-	{
-		key: "http_timeout_sec",
-		apply: func(ps *ProviderState, raw interface{}) (interface{}, error) {
-			v, err := toInt(raw)
-			if err != nil || v < 1 {
-				return nil, fmt.Errorf("http_timeout_sec must be a positive integer")
-			}
-			ps.SetProxyTimeout(time.Duration(v) * time.Second)
-			ps.SetHTTPTimeoutSec(v)
-			return v, nil
-		},
-		persist: func(cfg *config.Config, val interface{}) {
-			v, _ := toInt(val)
-			cfg.HTTPTimeoutSec = v
-		},
-	},
-	{
-		key: "max_retries",
-		apply: func(ps *ProviderState, raw interface{}) (interface{}, error) {
-			v, err := toInt(raw)
-			if err != nil || v < 0 {
-				return nil, fmt.Errorf("max_retries must be a non-negative integer")
-			}
-			ps.SetMaxRetries(v)
-			return v, nil
-		},
-		persist: func(cfg *config.Config, val interface{}) {
-			v, _ := toInt(val)
-			cfg.MaxRetries = v
-		},
-	},
-	{
-		key: "cooldown_sec",
-		apply: func(ps *ProviderState, raw interface{}) (interface{}, error) {
-			v, err := toInt(raw)
-			if err != nil || v < 1 {
-				return nil, fmt.Errorf("cooldown_sec must be a positive integer")
-			}
-			ps.SetCooldownSec(v)
-			ps.ConfigurePoolCBs(
-				time.Duration(v)*time.Second,
-				time.Duration(ps.BackoffCapSec())*time.Second,
-				ps.BackoffMultiplier(),
-			)
-			return v, nil
-		},
-		persist: func(cfg *config.Config, val interface{}) {
-			v, _ := toInt(val)
-			cfg.CooldownSec = v
-		},
-	},
-	{
-		key: "backoff_cap_sec",
-		apply: func(ps *ProviderState, raw interface{}) (interface{}, error) {
-			v, err := toInt(raw)
-			if err != nil || v < 1 {
-				return nil, fmt.Errorf("backoff_cap_sec must be a positive integer")
-			}
-			ps.SetBackoffCapSec(v)
-			ps.ConfigurePoolCBs(
-				time.Duration(ps.CooldownSec())*time.Second,
-				time.Duration(v)*time.Second,
-				ps.BackoffMultiplier(),
-			)
-			return v, nil
-		},
-		persist: func(cfg *config.Config, val interface{}) {
-			v, _ := toInt(val)
-			cfg.BackoffCapSec = v
-		},
-	},
-	{
-		key: "backoff_multiplier",
-		apply: func(ps *ProviderState, raw interface{}) (interface{}, error) {
-			v, err := toFloat64(raw)
-			if err != nil || v < 1.0 {
-				return nil, fmt.Errorf("backoff_multiplier must be a number >= 1.0")
-			}
-			ps.SetBackoffMultiplier(v)
-			ps.ConfigurePoolCBs(
-				time.Duration(ps.CooldownSec())*time.Second,
-				time.Duration(ps.BackoffCapSec())*time.Second,
-				v,
-			)
-			return v, nil
-		},
-		persist: func(cfg *config.Config, val interface{}) {
-			v, _ := toFloat64(val)
-			cfg.BackoffMultiplier = v
-		},
-	},
-	{
-		key: "cb_reset_sec",
-		apply: func(ps *ProviderState, raw interface{}) (interface{}, error) {
-			v, err := toInt(raw)
-			if err != nil || v < 1 {
-				return nil, fmt.Errorf("cb_reset_sec must be a positive integer")
-			}
-			ps.SetUpstreamCBResetTimeout(v)
-			ps.SetCBResetSec(v)
-			return v, nil
-		},
-		persist: func(cfg *config.Config, val interface{}) {
-			v, _ := toInt(val)
-			cfg.CBResetSec = v
-		},
-	},
-	{
-		key: "upstream_cb_threshold",
-		apply: func(ps *ProviderState, raw interface{}) (interface{}, error) {
-			v, err := toInt(raw)
-			if err != nil || v < 1 {
-				return nil, fmt.Errorf("upstream_cb_threshold must be a positive integer")
-			}
-			ps.SetUpstreamProxyCBThreshold(v)
-			ps.SetUpstreamCBThreshold(v)
-			return v, nil
-		},
-		persist: func(cfg *config.Config, val interface{}) {
-			v, _ := toInt(val)
-			cfg.UpstreamCBThreshold = v
-		},
-	},
-	{
-		key: "log_level",
-		apply: func(ps *ProviderState, raw interface{}) (interface{}, error) {
-			s, ok := raw.(string)
-			if !ok {
-				return nil, fmt.Errorf("log_level must be a string")
-			}
-			v := strings.TrimSpace(strings.ToLower(s))
-			switch v {
-			case "debug", "info", "warn", "error":
-				ps.SetLogLevel(v)
-				return v, nil
-			}
-			return nil, fmt.Errorf("invalid log level, use: debug, info, warn, error")
-		},
-		persist: func(cfg *config.Config, val interface{}) {
-			v, _ := val.(string)
-			cfg.LogLevel = v
-		},
-	},
-	{
-		key: "thinking_mode",
-		apply: func(ps *ProviderState, raw interface{}) (interface{}, error) {
-			s, ok := raw.(string)
-			if !ok {
-				return nil, fmt.Errorf("thinking_mode must be a string")
-			}
-			switch strings.TrimSpace(strings.ToLower(s)) {
-			case "default", "rectify":
-				ps.SetThinkingMode(s)
-				return s, nil
-			default:
-				return nil, fmt.Errorf("invalid thinking_mode %q, use: default, rectify", s)
-			}
-		},
-		persist: func(cfg *config.Config, val interface{}) {
-			v, _ := val.(string)
-			cfg.ThinkingMode = v
-		},
-	},
-	{
-		key: "rectify_thinking_map_to",
-		apply: func(ps *ProviderState, raw interface{}) (interface{}, error) {
-			s, ok := raw.(string)
-			if !ok {
-				return nil, fmt.Errorf("rectify_thinking_map_to must be a string")
-			}
-			switch strings.TrimSpace(strings.ToLower(s)) {
-			case "enabled", "auto", "disabled":
-				ps.SetRectifyThinkingMapTo(s)
-				return s, nil
-			default:
-				return nil, fmt.Errorf("invalid rectify_thinking_map_to %q, use: enabled, auto, disabled", s)
-			}
-		},
-		persist: func(cfg *config.Config, val interface{}) {
-			v, _ := val.(string)
-			if v == "disabled" {
-				v = ""
-			}
-			cfg.RectifyThinkingMapTo = v
-		},
-	},
-}
-
-// lookupRuntimeConfigField returns the descriptor for key, or nil.
-func lookupRuntimeConfigField(key string) *runtimeConfigField {
-	for i := range runtimeConfigFields {
-		if runtimeConfigFields[i].key == key {
-			return &runtimeConfigFields[i]
-		}
-	}
-	return nil
 }

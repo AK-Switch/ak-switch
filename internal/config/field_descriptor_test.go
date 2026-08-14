@@ -27,7 +27,8 @@ func TestFindField_AllRegistered(t *testing.T) {
 	expected := []string{
 		"target", "cooldown_sec", "max_retries", "backoff_cap_sec",
 		"backoff_multiplier", "cb_reset_sec", "upstream_cb_threshold",
-		"http_timeout_sec", "log_level", "health_check_interval_sec",
+		"http_timeout_sec", "log_level", "thinking_mode",
+		"rectify_thinking_map_to", "health_check_interval_sec",
 		"admin_token", "disable_thinking", "genai_model", "keys_file",
 		"port", "log_file",
 	}
@@ -139,16 +140,18 @@ func TestProviderRuntimeInterface_NoCallers(t *testing.T) {
 }
 
 func TestFieldDescriptor_RuntimeEditableMatchesServer(t *testing.T) {
-	// Server-side runtimeConfigFields handles only these keys (from admin_api.go initRuntimeConfigDescriptors)
+	// Server-side handles only these keys (via config.FindField + RuntimeEditable)
 	serverHandled := map[string]bool{
-		"http_timeout_sec":      true,
-		"max_retries":           true,
-		"cooldown_sec":          true,
-		"backoff_cap_sec":       true,
-		"backoff_multiplier":    true,
-		"cb_reset_sec":          true,
-		"upstream_cb_threshold": true,
-		"log_level":             true,
+		"http_timeout_sec":        true,
+		"max_retries":             true,
+		"cooldown_sec":            true,
+		"backoff_cap_sec":         true,
+		"backoff_multiplier":      true,
+		"cb_reset_sec":            true,
+		"upstream_cb_threshold":   true,
+		"log_level":               true,
+		"thinking_mode":           true,
+		"rectify_thinking_map_to": true,
 	}
 
 	for _, fd := range ConfigFieldDescriptors {
