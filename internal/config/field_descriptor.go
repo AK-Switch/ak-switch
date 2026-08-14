@@ -45,6 +45,12 @@ type ConfigFieldDescriptor struct {
 	// Persist writes the parsed value into the Config struct. Provider is the
 	// target provider name; for global fields, provider is empty and c is nil.
 	Persist func(tc *TomlConfig, provider string, c *Config, value any)
+
+	// ApplyRuntime applies a validated value to ProviderState at runtime.
+	// Called by the admin API runtime config endpoint.
+	// Provider is the target provider name; ps is the target ProviderState (passed as any).
+	// Nil for non-runtime-editable fields.
+	ApplyRuntime func(ps any, provider string, value any) (any, error)
 }
 
 // ConfigFieldDescriptors is the single source of truth for all configurable fields.
