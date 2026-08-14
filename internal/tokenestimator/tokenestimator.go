@@ -158,8 +158,8 @@ func EstimateInput(bodyBytes []byte, model string) int {
 }
 
 // ParseSSEEvent parses a single SSE "data: " event line and returns
-// the extracted text delta and output token count.
-// Returns (0, "") for non-data lines, unrecognized JSON, or events
+// the extracted text delta, thinking delta, and output token count.
+// Returns (0, "", "") for non-data lines, unrecognized JSON, or events
 // that don't carry text/token information.
 func ParseSSEEvent(raw []byte) (outputTokens int, textDelta string, thinkingDelta string) {
 	if len(raw) == 0 {

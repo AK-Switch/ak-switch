@@ -377,10 +377,11 @@ func TestStreamSSE_RespBodySize(t *testing.T) {
 		// (dropCR), so "data: ...\r\n" produces token "data: ..." (no \r).
 		// w.Write writes line + "\n", turning each token back into "...\n".
 		// The blank "\r\n" line produces an empty token, written back as "\n".
-		// Expected: len("data: {json}") + 1 + len("") + 1 = 90
-		expectedLine := "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hi\"}}"
-		expectedBlank := ""
-		expectedSize := len(expectedLine) + 1 + len(expectedBlank) + 1
+		var expectedSize int
+		scanner := bufio.NewScanner(strings.NewReader(sseData))
+		for scanner.Scan() {
+			expectedSize += len(scanner.Text()) + 1 // +1 for the "\n" added by w.Write
+		}
 		_, _, respBodySize := streamSSEAndEstimateTokens(w, resp, nil, "")
 
 		if respBodySize != int64(expectedSize) {
