@@ -142,15 +142,15 @@ func TestProviderRuntimeInterface_NoCallers(t *testing.T) {
 func TestFieldDescriptor_RuntimeEditableMatchesServer(t *testing.T) {
 	// Server-side handles only these keys (via config.FindField + RuntimeEditable)
 	serverHandled := map[string]bool{
-		"http_timeout_sec":      true,
-		"max_retries":           true,
-		"cooldown_sec":          true,
-		"backoff_cap_sec":       true,
-		"backoff_multiplier":    true,
-		"cb_reset_sec":          true,
-		"upstream_cb_threshold": true,
-		"log_level":             true,
-		"thinking_mode":         true,
+		"http_timeout_sec":        true,
+		"max_retries":             true,
+		"cooldown_sec":            true,
+		"backoff_cap_sec":         true,
+		"backoff_multiplier":      true,
+		"cb_reset_sec":            true,
+		"upstream_cb_threshold":   true,
+		"log_level":               true,
+		"thinking_mode":           true,
 		"rectify_thinking_map_to": true,
 	}
 

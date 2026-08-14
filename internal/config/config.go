@@ -15,21 +15,21 @@ import (
 // ProviderConfig holds all provider-level configuration fields with TOML tags.
 // Embedded in Config so all existing callers can continue using cfg.FieldName.
 type ProviderConfig struct {
-	Port            int      `toml:"port" default:"8080"`
-	Host            string   `toml:"host,omitempty" default:"127.0.0.1"`
-	TargetBase      string   `toml:"target"`                     // Upstream target base URL (required)
-	AdminToken      string   `toml:"admin_token,omitempty"`      // Optional admin authentication token
-	DisableThinking      bool     `toml:"disable_thinking,omitempty"` // Deprecated: use thinking_mode
-	ThinkingMode         string   `toml:"thinking_mode,omitempty"`        // "default" | "rectify"
+	Port                 int      `toml:"port" default:"8080"`
+	Host                 string   `toml:"host,omitempty" default:"127.0.0.1"`
+	TargetBase           string   `toml:"target"`                            // Upstream target base URL (required)
+	AdminToken           string   `toml:"admin_token,omitempty"`             // Optional admin authentication token
+	DisableThinking      bool     `toml:"disable_thinking,omitempty"`        // Deprecated: use thinking_mode
+	ThinkingMode         string   `toml:"thinking_mode,omitempty"`           // "default" | "rectify"
 	RectifyThinkingMapTo string   `toml:"rectify_thinking_map_to,omitempty"` // "enabled" | "auto" | "disabled"
-	GenaiModel      string   `toml:"genai_model,omitempty"`      // Generative AI model name
-	MaxRetries      int      `toml:"max_retries,omitempty" default:"1"`
-	LogLevel        string   `toml:"log_level,omitempty" default:"info"`
-	CooldownSec     int      `toml:"cooldown_sec,omitempty" default:"15"`
-	HTTPTimeoutSec  int      `toml:"http_timeout_sec,omitempty" default:"30"`
-	Keys            []string `toml:"-"` // API keys (at least one required)
-	KeyNames        []string `toml:"-"` // Corresponding key names (empty string if unnamed), same length as Keys
-	KeysFile        string   `toml:"keys_file,omitempty" default:"keys.json"`
+	GenaiModel           string   `toml:"genai_model,omitempty"`             // Generative AI model name
+	MaxRetries           int      `toml:"max_retries,omitempty" default:"1"`
+	LogLevel             string   `toml:"log_level,omitempty" default:"info"`
+	CooldownSec          int      `toml:"cooldown_sec,omitempty" default:"15"`
+	HTTPTimeoutSec       int      `toml:"http_timeout_sec,omitempty" default:"30"`
+	Keys                 []string `toml:"-"` // API keys (at least one required)
+	KeyNames             []string `toml:"-"` // Corresponding key names (empty string if unnamed), same length as Keys
+	KeysFile             string   `toml:"keys_file,omitempty" default:"keys.json"`
 
 	BackoffCapSec       int     `toml:"backoff_cap_sec,omitempty" default:"120"`
 	BackoffMultiplier   float64 `toml:"backoff_multiplier,omitempty" default:"2"`
@@ -222,8 +222,8 @@ func (c *Config) DeepCopy() *Config {
 			TargetBase:             c.TargetBase,
 			AdminToken:             c.AdminToken,
 			DisableThinking:        c.DisableThinking,
-			ThinkingMode:         c.ThinkingMode,
-			RectifyThinkingMapTo: c.RectifyThinkingMapTo,
+			ThinkingMode:           c.ThinkingMode,
+			RectifyThinkingMapTo:   c.RectifyThinkingMapTo,
 			GenaiModel:             c.GenaiModel,
 			MaxRetries:             c.MaxRetries,
 			LogLevel:               c.LogLevel,
@@ -423,4 +423,3 @@ func (pc *ProviderConfig) mergeDefaults() {
 		}
 	}
 }
-
