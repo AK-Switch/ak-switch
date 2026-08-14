@@ -104,11 +104,10 @@ func (api *AdminAPI) logLevelHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		body.Level = strings.TrimSpace(strings.ToLower(body.Level))
-		switch body.Level {
-		case "debug", "info", "warn", "error":
+		if config.IsValidLogLevel(body.Level) {
 			api.logManager.ApplyLevel(body.Level)
 			respondJSON(w, http.StatusOK, map[string]string{"level": body.Level})
-		default:
+		} else {
 			respondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid log level, use: debug, info, warn, error"})
 		}
 
