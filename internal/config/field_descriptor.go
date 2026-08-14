@@ -75,7 +75,7 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 		Type:            FieldTypeInt,
 		Default:         "60",
 		RuntimeEditable: true,
-		MinInt:          -1,
+		MinInt:          1,
 		Parse:           func(s string) (any, error) { return strconv.Atoi(s) },
 		Format:          func(v any) string { return strconv.Itoa(v.(int)) },
 		Persist: func(tc *TomlConfig, provider string, c *Config, value any) {
@@ -109,7 +109,7 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 		Type:            FieldTypeInt,
 		Default:         "120",
 		RuntimeEditable: true,
-		MinInt:          -1,
+		MinInt:          1,
 		Parse:           func(s string) (any, error) { return strconv.Atoi(s) },
 		Format:          func(v any) string { return strconv.Itoa(v.(int)) },
 		Persist: func(tc *TomlConfig, provider string, c *Config, value any) {
@@ -150,7 +150,7 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 		Type:            FieldTypeInt,
 		Default:         "30",
 		RuntimeEditable: true,
-		MinInt:          -1,
+		MinInt:          1,
 		Parse:           func(s string) (any, error) { return strconv.Atoi(s) },
 		Format:          func(v any) string { return strconv.Itoa(v.(int)) },
 		Persist: func(tc *TomlConfig, provider string, c *Config, value any) {
@@ -167,7 +167,7 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 		Type:            FieldTypeInt,
 		Default:         "5",
 		RuntimeEditable: true,
-		MinInt:          -1,
+		MinInt:          1,
 		Parse:           func(s string) (any, error) { return strconv.Atoi(s) },
 		Format:          func(v any) string { return strconv.Itoa(v.(int)) },
 		Persist: func(tc *TomlConfig, provider string, c *Config, value any) {
@@ -184,7 +184,7 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 		Type:            FieldTypeInt,
 		Default:         "30",
 		RuntimeEditable: true,
-		MinInt:          -1,
+		MinInt:          1,
 		Parse:           func(s string) (any, error) { return strconv.Atoi(s) },
 		Format:          func(v any) string { return strconv.Itoa(v.(int)) },
 		Persist: func(tc *TomlConfig, provider string, c *Config, value any) {

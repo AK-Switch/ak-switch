@@ -229,6 +229,21 @@ func TestConfigSetCmd_RangeValidation(t *testing.T) {
 		{"max_retries", "-1", true, "must be >= 0"},
 		{"max_retries", "0", false, ""},
 		{"max_retries", "5", false, ""},
+		{"cooldown_sec", "-1", true, "must be >= 1"},
+		{"cooldown_sec", "0", true, "must be >= 1"},
+		{"cooldown_sec", "60", false, ""},
+		{"backoff_cap_sec", "-1", true, "must be >= 1"},
+		{"backoff_cap_sec", "0", true, "must be >= 1"},
+		{"backoff_cap_sec", "120", false, ""},
+		{"cb_reset_sec", "-1", true, "must be >= 1"},
+		{"cb_reset_sec", "0", true, "must be >= 1"},
+		{"cb_reset_sec", "30", false, ""},
+		{"upstream_cb_threshold", "-1", true, "must be >= 1"},
+		{"upstream_cb_threshold", "0", true, "must be >= 1"},
+		{"upstream_cb_threshold", "5", false, ""},
+		{"http_timeout_sec", "-1", true, "must be >= 1"},
+		{"http_timeout_sec", "0", true, "must be >= 1"},
+		{"http_timeout_sec", "30", false, ""},
 	}
 
 	for _, tt := range tests {
