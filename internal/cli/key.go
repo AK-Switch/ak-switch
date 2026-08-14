@@ -107,6 +107,8 @@ func init() {
 	keyAddCmd.Flags().Bool("insecure-storage", false, "Store keys in plaintext (WARNING: not encrypted)")
 	keyListCmd.Flags().Bool("runtime", false, "Query live status from running server (shows cooldown, RPM)")
 	addKeyIndexFlags(keyCooldownCmd)
+	keyCmd.AddCommand(keyExportCmd)
+	keyExportCmd.Flags().StringP("output", "o", "", "Write to file instead of stdout")
 	keyCmd.AddCommand(keyUpstreamCBResetCmd)
 }
 
@@ -555,6 +557,51 @@ Examples:
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(os.Stderr, "WARNING: 'key upstream-cb-reset' is deprecated, use 'provider upstream-cb-reset' instead")
 		return resetUpstreamCB(args[0])
+	},
+}
+
+var keyExportCmd = &cobra.Command{
+	Use:   "export <provider>",
+	Short: "Export API keys to stdout or a file",
+	Long: `Export all API keys for a provider as JSON.
+
+By default, prints to stdout. Use --output to write to a file.
+Keys are decrypted automatically (supports encrypted storage).
+
+Examples:
+  akswitch key export nvidia
+  akswitch key export nvidia --output keys.json`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		provider := args[0]
+		outputPath, _ := cmd.Flags().GetString("output")
+
+		store, err := keypool.LoadKeys(provider)
+		if err != nil {
+			return fmt.Errorf("failed to load keys for %q: %w", provider, err)
+		}
+		if store == nil || len(store.Keys) == 0 {
+			return fmt.Errorf("no keys found for provider %q", provider)
+		}
+
+		data, err := json.MarshalIndent(store, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to serialize keys: %w", err)
+		}
+
+		if outputPath != "" {
+			// Check if file exists
+			if _, err := os.Stat(outputPath); err == nil {
+				fmt.Fprintf(os.Stderr, "WARNING: %s already exists, overwriting\n", outputPath)
+			}
+			if err := os.WriteFile(outputPath, data, 0600); err != nil {
+				return fmt.Errorf("failed to write %q: %w", outputPath, err)
+			}
+			fmt.Printf("Exported %d keys for provider %q to %s\n", len(store.Keys), provider, outputPath)
+		} else {
+			fmt.Println(string(data))
+		}
+		return nil
 	},
 }
 

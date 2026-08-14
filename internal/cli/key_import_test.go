@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"os"
 	"testing"
 
 	"akswitch/internal/keypool"
@@ -299,5 +300,33 @@ func TestAutoNumberNames_CrossBatchNilStore(t *testing.T) {
 	}
 	if result[2].Name != "auto-reg-3" {
 		t.Errorf("entry 2 name = %q, want %q", result[2].Name, "auto-reg-3")
+	}
+}
+
+// ── keyExportCmd ────────────────────────────────────────
+
+func TestKeyExportCmd(t *testing.T) {
+	// Use os.Args override (matching provider_cmd_test.go pattern) to avoid
+	// contaminating rootCmd.args for other tests that delegate to rootCmd.ExecuteC().
+	tests := []struct {
+		name    string
+		osArgs  []string
+		wantErr bool
+	}{
+		{name: "missing provider", osArgs: []string{"akswitch", "key", "export"}, wantErr: true},
+		{name: "empty provider", osArgs: []string{"akswitch", "key", "export", "nonexistent"}, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			origArgs := os.Args
+			os.Args = tt.osArgs
+			defer func() { os.Args = origArgs }()
+
+			cmd := keyExportCmd
+			err := cmd.Execute()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("export error = %v, wantErr = %v", err, tt.wantErr)
+			}
+		})
 	}
 }
