@@ -80,3 +80,24 @@ func SetupCrashLogDir() string {
 	}
 	return path
 }
+
+// ErrorLogDir is the subdirectory under the user's home/config dir for error dumps.
+const ErrorLogDir = "errors"
+
+// defaultErrorLogDir returns the default error dump directory
+// (~/.akswitch/errors), matching CrashLogDir's home-based convention.
+func defaultErrorLogDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ErrorLogDir
+	}
+	return filepath.Join(home, CrashLogDir, ErrorLogDir)
+}
+
+// SetupErrorLogDir ensures the error dump directory exists.
+// Returns the directory path.
+func SetupErrorLogDir() string {
+	dir := defaultErrorLogDir()
+	_ = os.MkdirAll(dir, 0755)
+	return dir
+}
