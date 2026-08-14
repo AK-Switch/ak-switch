@@ -112,6 +112,10 @@ func init() {
 	keyCmd.AddCommand(keyExportCmd)
 	keyExportCmd.Flags().StringP("output", "o", "", "Write to file instead of stdout")
 	keyCmd.AddCommand(keyUpstreamCBResetCmd)
+	keyCmd.AddCommand(keyRestoreCmd)
+	keyCmd.AddCommand(keyPurgeCmd)
+	keyListCmd.Flags().Bool("all", false, "Show all keys including deleted ones")
+	addKeyIndexFlags(keyRestoreCmd)
 }
 
 var keyCmd = &cobra.Command{
@@ -470,11 +474,18 @@ Example output:
 			return nil
 		}
 
+		showAll, _ := cmd.Flags().GetBool("all")
 		fmt.Printf("Keys for provider %q:\n", provider)
 		for i, entry := range store.Keys {
+			if entry.Deleted && !showAll {
+				continue
+			}
 			status := "active"
 			if entry.Disabled {
 				status = "disabled"
+			}
+			if entry.Deleted {
+				status = "deleted"
 			}
 			line := fmt.Sprintf("  [%d] %s  (%s)", i, logentry.MaskKey(entry.Key), status)
 			if entry.Name != "" {
@@ -489,12 +500,13 @@ Example output:
 
 var keyRemoveCmd = &cobra.Command{
 	Use:   "remove <provider> <index>",
-	Short: "Remove an API key by index or name",
-	Long: `Remove an API key from the provider's key store at the specified index or matching name.
+	Short: "Remove (soft delete) an API key by index or name",
+	Long: `Mark an API key as deleted at the specified index or matching name.
 
 	The index corresponds to the key's position as shown in 'akswitch key list'.
 	Use --by-name to look up a key by its display name instead.
-	This operation cannot be undone.
+	Deleted keys are hidden from 'key list' but can be restored with 'key restore'.
+	Use 'key purge' to permanently delete all marked keys.
 
 	Examples:
 	  akswitch key remove nvidia 0
@@ -505,7 +517,24 @@ var keyRemoveCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		return updateKey(args[0], idx, KeyRemove)
+		store, err := keypool.LoadKeys(args[0])
+		if err != nil {
+			return fmt.Errorf("failed to load keys for %q: %w", args[0], err)
+		}
+		if store == nil || idx >= len(store.Keys) {
+			return fmt.Errorf("index %d out of range", idx)
+		}
+		store.Keys[idx].Deleted = true
+		if err := keypool.SaveKeys(args[0], store); err != nil {
+			return fmt.Errorf("failed to save keys: %w", err)
+		}
+		desc := logentry.MaskKey(store.Keys[idx].Key)
+		if store.Keys[idx].Name != "" {
+			desc += fmt.Sprintf(" (name: %s)", store.Keys[idx].Name)
+		}
+		fmt.Printf("Deleted key [%d] %s for provider %q (use 'key restore' to undo)\n", idx, desc, args[0])
+		triggerReload()
+		return nil
 	},
 }
 
@@ -593,6 +622,81 @@ Examples:
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(os.Stderr, "WARNING: 'key upstream-cb-reset' is deprecated, use 'provider upstream-cb-reset' instead")
 		return resetUpstreamCB(args[0])
+	},
+}
+
+var keyRestoreCmd = &cobra.Command{
+	Use:   "restore <provider> <index>",
+	Short: "Restore a previously deleted API key",
+	Long: `Restore a soft-deleted API key. The key becomes active again.
+Use --by-name to look up a key by its display name.
+Use 'key list --all' to see deleted keys.`,
+	Args: cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		idx, err := resolveKeyIndex(cmd, args)
+		if err != nil {
+			return err
+		}
+		store, err := keypool.LoadKeys(args[0])
+		if err != nil {
+			return fmt.Errorf("failed to load keys for %q: %w", args[0], err)
+		}
+		if store == nil || idx >= len(store.Keys) {
+			return fmt.Errorf("index %d out of range", idx)
+		}
+		if !store.Keys[idx].Deleted {
+			return fmt.Errorf("key [%d] is not deleted", idx)
+		}
+		store.Keys[idx].Deleted = false
+		if err := keypool.SaveKeys(args[0], store); err != nil {
+			return fmt.Errorf("failed to save keys: %w", err)
+		}
+		desc := logentry.MaskKey(store.Keys[idx].Key)
+		if store.Keys[idx].Name != "" {
+			desc += fmt.Sprintf(" (name: %s)", store.Keys[idx].Name)
+		}
+		fmt.Printf("Restored key [%d] %s for provider %q\n", idx, desc, args[0])
+		triggerReload()
+		return nil
+	},
+}
+
+var keyPurgeCmd = &cobra.Command{
+	Use:   "purge <provider>",
+	Short: "Permanently remove all deleted keys",
+	Long: `Remove all soft-deleted API keys permanently. This cannot be undone.`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		provider := args[0]
+		store, err := keypool.LoadKeys(provider)
+		if err != nil {
+			return fmt.Errorf("failed to load keys for %q: %w", provider, err)
+		}
+		if store == nil {
+			return fmt.Errorf("no keys found for provider %q", provider)
+		}
+
+		var remaining []keypool.KeyEntry
+		purged := 0
+		for _, entry := range store.Keys {
+			if entry.Deleted {
+				purged++
+				continue
+			}
+			remaining = append(remaining, entry)
+		}
+		if purged == 0 {
+			fmt.Printf("No deleted keys to purge for provider %q\n", provider)
+			return nil
+		}
+
+		store.Keys = remaining
+		if err := keypool.SaveKeys(provider, store); err != nil {
+			return fmt.Errorf("failed to save keys: %w", err)
+		}
+		fmt.Printf("Purged %d deleted key(s) from provider %q (remaining: %d)\n", purged, provider, len(remaining))
+		triggerReload()
+		return nil
 	},
 }
 
