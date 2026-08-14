@@ -13,6 +13,14 @@ import (
 	"akswitch/internal/logentry"
 )
 
+// KeySelectionMode defines how a key is selected from the pool.
+type KeySelectionMode string
+
+const (
+	KeySelectionPolling KeySelectionMode = "polling"
+	KeySelectionRandom  KeySelectionMode = "random"
+)
+
 // KeyPool is a thread-safe, round-robin key pool with cooldown, disable, and request-tracking support.
 type KeyPool struct {
 	counter        uint64
@@ -23,6 +31,8 @@ type KeyPool struct {
 	lastUsed       []time.Time
 	inUse          []bool // tracks keys currently reserved by a goroutine (prevents concurrent selection)
 	mu             sync.RWMutex
+	selectionMode  KeySelectionMode // 选择策略
+	pollingIndex   uint64           // polling 模式下的轮转索引
 }
 
 // NewKeyPool creates a KeyPool from slices of API keys and optional names.
@@ -46,7 +56,17 @@ func NewKeyPool(keys []string, names []string) *KeyPool {
 		requestHistory: make([][]time.Time, len(keys)),
 		lastUsed:       make([]time.Time, len(keys)),
 		inUse:          make([]bool, len(keys)),
+		selectionMode:  KeySelectionPolling,
+		pollingIndex:   0,
 	}
+}
+
+// SetSelectionMode sets the key selection strategy for the pool.
+// Safe to call before any requests are processed.
+func (p *KeyPool) SetSelectionMode(mode KeySelectionMode) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.selectionMode = mode
 }
 
 // validateIndex checks that the given index is within the valid range of keys.
