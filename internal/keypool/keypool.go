@@ -76,6 +76,8 @@ func (p *KeyPool) SelectKey() (int, string, bool) {
 	switch p.selectionMode {
 	case KeySelectionPolling:
 		return p.selectKeyPolling()
+	case KeySelectionRandom:
+		return p.selectKeyRandom()
 	default:
 		return p.selectKeyPolling()
 	}
@@ -101,6 +103,25 @@ func (p *KeyPool) selectKeyPolling() (int, string, bool) {
 		}
 	}
 	return -1, "", false
+}
+
+// selectKeyRandom implements the "random" strategy.
+// It collects all available keys and picks one uniformly at random.
+func (p *KeyPool) selectKeyRandom() (int, string, bool) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	var available []int
+	for i, cb := range p.cbs {
+		if cb.Allow() {
+			available = append(available, i)
+		}
+	}
+	if len(available) == 0 {
+		return -1, "", false
+	}
+	idx := available[rand.Intn(len(available))]
+	return idx, p.keys[idx], true
 }
 
 // validateIndex checks that the given index is within the valid range of keys.
