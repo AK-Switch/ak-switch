@@ -91,7 +91,6 @@ func init() {
 	keyCmd.AddCommand(keyDisableCmd)
 	keyCmd.AddCommand(keyEnableCmd)
 	keyCmd.AddCommand(keyUpdateCmd)
-	keyCmd.AddCommand(keyRenameCmd)
 	keyCmd.AddCommand(keyImportCmd)
 	keyCmd.AddCommand(keyCooldownCmd)
 	keyImportCmd.Flags().StringP("file", "f", "", "Import keys from a JSON file")
@@ -103,7 +102,6 @@ func init() {
 	addKeyIndexFlags(keyDisableCmd)
 	addKeyIndexFlags(keyEnableCmd)
 	addKeyIndexFlags(keyUpdateCmd)
-	addKeyIndexFlags(keyRenameCmd)
 
 	keyAddCmd.Flags().StringP("name", "n", "", "Display name for the key")
 	keyAddCmd.Flags().Bool("insecure-storage", false, "Store keys in plaintext (WARNING: not encrypted)")
@@ -115,7 +113,7 @@ func init() {
 var keyCmd = &cobra.Command{
 	Use:   "key",
 	Short: "Manage API keys",
-	Long:  `Add, list, remove, update, rename, disable, and enable API keys for a provider.`,
+	Long:  `Add, list, remove, update, disable, and enable API keys for a provider.`,
 }
 
 var keyAddCmd = &cobra.Command{
@@ -300,22 +298,21 @@ Examples:
 }
 
 var keyUpdateCmd = &cobra.Command{
-	Use:   "update <provider> <index> <key>",
+	Use:   "update <provider> <index> [key]",
 	Short: "Update an API key at the specified index",
-	Long: `Replace an existing API key at the specified index with a new key value.
+	Long: `Replace an existing API key at the specified index with a new key value,
+or rename it without changing the value.
 
 The key's position, disabled state, and circuit breaker state are preserved.
-Use --name to optionally rename the key.
+Only --name without [key] renames the key without changing its value.
 
 Examples:
   akswitch key update sensenova 0 sk-xxxxxxxxxxxxxxxx
-  akswitch key update sensenova 0 sk-xxxxxxxxxxxxxxxx --name d1-2
+  akswitch key update sensenova 0 --name d1-2
   akswitch key update sensenova d1-2 sk-xxxxxxxxxxxxxxxx --by-name`,
-	Args: cobra.ExactArgs(3),
+	Args: cobra.RangeArgs(2, 3),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		provider := args[0]
-		newKey := args[2]
-
 		store, err := keypool.LoadKeys(provider)
 		if err != nil {
 			return fmt.Errorf("failed to load keys for %q: %w", provider, err)
@@ -342,76 +339,33 @@ Examples:
 				idx, provider, len(store.Keys), len(store.Keys)-1)
 		}
 
-		oldMasked := logentry.MaskKey(store.Keys[idx].Key)
-		store.Keys[idx].Key = newKey
+		// Handle optional key value
+		if len(args) == 3 {
+			newKey := args[2]
+			oldMasked := logentry.MaskKey(store.Keys[idx].Key)
+			store.Keys[idx].Key = newKey
+			fmt.Printf("Updated key [%d] %s -> %s for provider %q\n",
+				idx, oldMasked, logentry.MaskKey(newKey), provider)
+		}
 
+		// Handle --name (always works, with or without key)
 		if cmd.Flags().Changed("name") {
 			newName, _ := cmd.Flags().GetString("name")
+			oldName := store.Keys[idx].Name
 			store.Keys[idx].Name = newName
+			fmt.Printf("Renamed key [%d] from %q to %q for provider %q\n",
+				idx, oldName, newName, provider)
+		}
+
+		// No changes at all? Error
+		if len(args) == 2 && !cmd.Flags().Changed("name") {
+			return fmt.Errorf("nothing to update: provide a new key value or --name")
 		}
 
 		if err := keypool.SaveKeys(provider, store); err != nil {
 			return fmt.Errorf("failed to save keys for %q: %w", provider, err)
 		}
 
-		fmt.Printf("Updated key [%d] %s -> %s for provider %q\n",
-			idx, oldMasked, logentry.MaskKey(newKey), provider)
-		triggerReload()
-		return nil
-	},
-}
-
-var keyRenameCmd = &cobra.Command{
-	Use:   "rename <provider> <index> <new-name>",
-	Short: "Rename an API key",
-	Long: `Change the display name of an API key at the specified index or matching name.
-
-By default, the second argument is treated as an index.
-Use --by-name to treat it as a name to match.
-
-Examples:
-  akswitch key rename sensenova 0 d1-2
-  akswitch key rename sensenova d1-2 d1-3 --by-name`,
-	Args: cobra.ExactArgs(3),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		provider := args[0]
-		newName := args[2]
-
-		store, err := keypool.LoadKeys(provider)
-		if err != nil {
-			return fmt.Errorf("failed to load keys for %q: %w", provider, err)
-		}
-		if store == nil {
-			return fmt.Errorf("no keys found for provider %q", provider)
-		}
-
-		var idx int
-		if byName, _ := cmd.Flags().GetBool("by-name"); byName {
-			idx, err = findKeyIndexByName(store, args[1])
-			if err != nil {
-				return err
-			}
-		} else {
-			idx, err = strconv.Atoi(args[1])
-			if err != nil {
-				return fmt.Errorf("invalid index %q: must be a non-negative integer", args[1])
-			}
-		}
-
-		if idx < 0 || idx >= len(store.Keys) {
-			return fmt.Errorf("index %d out of range: provider %q has %d keys (valid: 0-%d)",
-				idx, provider, len(store.Keys), len(store.Keys)-1)
-		}
-
-		oldName := store.Keys[idx].Name
-		store.Keys[idx].Name = newName
-
-		if err := keypool.SaveKeys(provider, store); err != nil {
-			return fmt.Errorf("failed to save keys for %q: %w", provider, err)
-		}
-
-		fmt.Printf("Renamed key [%d] from %q to %q for provider %q\n",
-			idx, oldName, newName, provider)
 		triggerReload()
 		return nil
 	},
