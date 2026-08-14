@@ -201,6 +201,62 @@ func TestParseSSEEvent_PartialJSON(t *testing.T) {
 	}
 }
 
+func TestParseSSEEvent_ThinkingDelta(t *testing.T) {
+	raw := []byte(`{"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"Let me think step by step"}}`)
+	_, delta := ParseSSEEvent(raw)
+	if delta != "Let me think step by step" {
+		t.Errorf("expected `Let me think step by step`, got %q", delta)
+	}
+}
+
+func TestParseSSEEvent_ContentBlockStartThinking(t *testing.T) {
+	raw := []byte(`{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"deep reasoning"}}`)
+	_, delta := ParseSSEEvent(raw)
+	if delta != "deep reasoning" {
+		t.Errorf("expected `deep reasoning`, got %q", delta)
+	}
+}
+
+func TestParseSSEEvent_ThinkingAndTextDelta(t *testing.T) {
+	raw := []byte(`{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"reasoning","text":"answer"}}`)
+	_, delta := ParseSSEEvent(raw)
+	// Accumulation order: Text, PartialJSON, Thinking
+	if delta != "answerreasoning" {
+		t.Errorf("expected `answerreasoning`, got %q", delta)
+	}
+}
+
+func TestParseSSEEvent_ThinkingAndTextCombined(t *testing.T) {
+	events := []struct {
+		name string
+		raw  []byte
+	}{
+		{"thinking_start", []byte(`{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"Let me think"}}`)},
+		{"thinking_delta", []byte(`{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" step by step"}}`)},
+		{"text_start", []byte(`{"type":"content_block_start","index":1,"content_block":{"type":"text","text":"Here is"}}`)},
+		{"text_delta", []byte(`{"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" the answer"}}`)},
+		{"message_delta", []byte(`{"type":"message_delta","usage":{"output_tokens":50}}`)},
+	}
+
+	var accumulated string
+	var apiTokens int
+	for _, ev := range events {
+		tokens, delta := ParseSSEEvent(ev.raw)
+		accumulated += delta
+		if tokens > 0 {
+			apiTokens = tokens
+		}
+	}
+
+	expected := "Let me think step by stepHere is the answer"
+	if accumulated != expected {
+		t.Errorf("accumulated text = %q, want %q", accumulated, expected)
+	}
+	if apiTokens != 50 {
+		t.Errorf("apiTokens = %d, want 50", apiTokens)
+	}
+}
+
 // ── ProcessResponse ──────────────────────────
 
 func TestProcessResponse_AnthropicFormat(t *testing.T) {
