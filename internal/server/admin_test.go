@@ -380,6 +380,8 @@ func TestRuntimeConfigField_Apply(t *testing.T) {
 	origCBReset := ps.config.CBResetSec
 	origUpThreshold := ps.config.UpstreamCBThreshold
 	origLogLevel := ps.config.LogLevel
+	origThinkingMode := ps.config.ThinkingMode
+	origRectifyMapTo := ps.config.RectifyThinkingMapTo
 	defer func() {
 		ps.SetHTTPTimeoutSec(origTimeout)
 		ps.SetMaxRetries(origRetries)
@@ -389,6 +391,8 @@ func TestRuntimeConfigField_Apply(t *testing.T) {
 		ps.SetCBResetSec(origCBReset)
 		ps.SetUpstreamCBThreshold(origUpThreshold)
 		ps.SetLogLevel(origLogLevel)
+		ps.SetThinkingMode(origThinkingMode)
+		ps.SetRectifyThinkingMapTo(origRectifyMapTo)
 	}()
 
 	tests := []struct {
@@ -449,6 +453,38 @@ func TestRuntimeConfigField_Apply(t *testing.T) {
 					t.Errorf("LogLevel = %q, want debug", ps.config.LogLevel)
 				}
 			}},
+		{name: "thinking_mode valid rectify", key: "thinking_mode", value: "rectify", wantErr: false,
+			check: func(t *testing.T, ps *ProviderState) {
+				if ps.ThinkingMode() != "rectify" {
+					t.Errorf("ThinkingMode = %q, want rectify", ps.ThinkingMode())
+				}
+			}},
+		{name: "thinking_mode valid default", key: "thinking_mode", value: "default", wantErr: false,
+			check: func(t *testing.T, ps *ProviderState) {
+				if ps.ThinkingMode() != "default" {
+					t.Errorf("ThinkingMode = %q, want default", ps.ThinkingMode())
+				}
+			}},
+		{name: "thinking_mode invalid", key: "thinking_mode", value: "invalid", wantErr: true},
+		{name: "rectify_thinking_map_to valid enabled", key: "rectify_thinking_map_to", value: "enabled", wantErr: false,
+			check: func(t *testing.T, ps *ProviderState) {
+				if ps.RectifyThinkingMapTo() != "enabled" {
+					t.Errorf("RectifyThinkingMapTo = %q, want enabled", ps.RectifyThinkingMapTo())
+				}
+			}},
+		{name: "rectify_thinking_map_to valid auto", key: "rectify_thinking_map_to", value: "auto", wantErr: false,
+			check: func(t *testing.T, ps *ProviderState) {
+				if ps.RectifyThinkingMapTo() != "auto" {
+					t.Errorf("RectifyThinkingMapTo = %q, want auto", ps.RectifyThinkingMapTo())
+				}
+			}},
+		{name: "rectify_thinking_map_to valid disabled", key: "rectify_thinking_map_to", value: "disabled", wantErr: false,
+			check: func(t *testing.T, ps *ProviderState) {
+				if ps.RectifyThinkingMapTo() != "disabled" {
+					t.Errorf("RectifyThinkingMapTo = %q, want disabled", ps.RectifyThinkingMapTo())
+				}
+			}},
+		{name: "rectify_thinking_map_to invalid", key: "rectify_thinking_map_to", value: "invalid", wantErr: true},
 		{name: "unknown key", key: "nonexistent", value: "x", wantErr: true},
 	}
 

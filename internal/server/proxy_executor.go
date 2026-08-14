@@ -48,6 +48,12 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 		return
 	}
 
+	var rectified bool
+
+	if ps.ThinkingMode() == "rectify" {
+		bodyBytes, rectified = NewThinkingRectifier(true, ps.RectifyThinkingMapTo()).Process(bodyBytes)
+	}
+
 	// Build target URL
 	target := buildTargetURL(ps.config, r.URL.Path, r.URL.RawQuery)
 
@@ -145,7 +151,7 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 				continue
 
 			default:
-				px.handleSuccess(w, ps, idx, resp, start, r.Method, target, bodyBytes, round)
+				px.handleSuccess(w, ps, idx, resp, start, r.Method, target, bodyBytes, round, rectified)
 				return
 			}
 		}
@@ -259,7 +265,7 @@ func (px *ProxyExecutor) handleNonRetryable(w http.ResponseWriter, ps *ProviderS
 // handleSuccess processes a successful 2xx/3xx response, including streaming
 // for SSE and chunked responses. For non-streaming responses, it extracts
 // token usage from the response body and records it in the log entry.
-func (px *ProxyExecutor) handleSuccess(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, method, target string, bodyBytes []byte, attempt int) {
+func (px *ProxyExecutor) handleSuccess(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, method, target string, bodyBytes []byte, attempt int, rectified bool) {
 	pool := ps.pool
 	keyName, _ := pool.Name(idx)
 	pool.RecordSuccess(idx)
@@ -330,6 +336,7 @@ func (px *ProxyExecutor) handleSuccess(w http.ResponseWriter, ps *ProviderState,
 		"ttfb_ms", time.Since(start).Milliseconds(),
 		"request_body_size", len(bodyBytes),
 		"response_body_size", respBodySize,
+		"rectified", rectified,
 	)
 	slog.Debug("proxy response debug", "status", resp.StatusCode, "duration_ms", time.Since(start).Seconds()*1000, "retries", attempt+1)
 	px.recordProxyMetrics(method, akswitchmetrics.StatusLabel(resp.StatusCode), fmt.Sprintf("%d", idx), start)

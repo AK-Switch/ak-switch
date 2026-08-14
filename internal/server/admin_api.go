@@ -752,14 +752,16 @@ func (api *AdminAPI) setRuntimeConfigField(ps *ProviderState, key string, value 
 // getRuntimeParams returns all runtime-configurable parameters for a provider.
 func (api *AdminAPI) getRuntimeParams(ps *ProviderState) map[string]interface{} {
 	return map[string]interface{}{
-		"http_timeout_sec":      ps.HTTPTimeoutSec(),
-		"max_retries":           ps.MaxRetries(),
-		"cooldown_sec":          ps.CooldownSec(),
-		"backoff_cap_sec":       ps.BackoffCapSec(),
-		"backoff_multiplier":    ps.BackoffMultiplier(),
-		"cb_reset_sec":          ps.CBResetSec(),
-		"upstream_cb_threshold": ps.UpstreamCBThreshold(),
-		"log_level":             ps.LogLevel(),
+		"http_timeout_sec":        ps.HTTPTimeoutSec(),
+		"max_retries":             ps.MaxRetries(),
+		"cooldown_sec":            ps.CooldownSec(),
+		"backoff_cap_sec":         ps.BackoffCapSec(),
+		"backoff_multiplier":      ps.BackoffMultiplier(),
+		"cb_reset_sec":            ps.CBResetSec(),
+		"upstream_cb_threshold":   ps.UpstreamCBThreshold(),
+		"log_level":               ps.LogLevel(),
+		"thinking_mode":           ps.ThinkingMode(),
+		"rectify_thinking_map_to": ps.RectifyThinkingMapTo(),
 	}
 }
 
@@ -1093,6 +1095,49 @@ var runtimeConfigFields = []runtimeConfigField{
 		persist: func(cfg *config.Config, val interface{}) {
 			v, _ := val.(string)
 			cfg.LogLevel = v
+		},
+	},
+	{
+		key: "thinking_mode",
+		apply: func(ps *ProviderState, raw interface{}) (interface{}, error) {
+			s, ok := raw.(string)
+			if !ok {
+				return nil, fmt.Errorf("thinking_mode must be a string")
+			}
+			switch strings.TrimSpace(strings.ToLower(s)) {
+			case "default", "rectify":
+				ps.SetThinkingMode(s)
+				return s, nil
+			default:
+				return nil, fmt.Errorf("invalid thinking_mode %q, use: default, rectify", s)
+			}
+		},
+		persist: func(cfg *config.Config, val interface{}) {
+			v, _ := val.(string)
+			cfg.ThinkingMode = v
+		},
+	},
+	{
+		key: "rectify_thinking_map_to",
+		apply: func(ps *ProviderState, raw interface{}) (interface{}, error) {
+			s, ok := raw.(string)
+			if !ok {
+				return nil, fmt.Errorf("rectify_thinking_map_to must be a string")
+			}
+			switch strings.TrimSpace(strings.ToLower(s)) {
+			case "enabled", "auto", "disabled":
+				ps.SetRectifyThinkingMapTo(s)
+				return s, nil
+			default:
+				return nil, fmt.Errorf("invalid rectify_thinking_map_to %q, use: enabled, auto, disabled", s)
+			}
+		},
+		persist: func(cfg *config.Config, val interface{}) {
+			v, _ := val.(string)
+			if v == "disabled" {
+				v = ""
+			}
+			cfg.RectifyThinkingMapTo = v
 		},
 	},
 }
