@@ -29,6 +29,7 @@ type ProviderConfig struct {
 	HTTPTimeoutSec       int      `toml:"http_timeout_sec,omitempty" default:"30"`
 	Keys                 []string `toml:"-"` // API keys (at least one required)
 	KeyNames             []string `toml:"-"` // Corresponding key names (empty string if unnamed), same length as Keys
+	KeySelection         string   `toml:"key_selection,omitempty" default:"polling"`
 	KeysFile             string   `toml:"keys_file,omitempty" default:"keys.json"`
 
 	BackoffCapSec       int     `toml:"backoff_cap_sec,omitempty" default:"120"`
