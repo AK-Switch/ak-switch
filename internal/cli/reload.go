@@ -7,8 +7,6 @@ import (
 	"os"
 	"time"
 
-	"akswitch/internal/config"
-
 	"github.com/spf13/cobra"
 )
 
@@ -36,29 +34,6 @@ func triggerReload() bool {
 		return false
 	}
 	return true
-}
-
-// loadAdminTokenFromConfig loads any admin token from the TOML config file.
-// Returns the first non-empty token found across all providers.
-// Used for global endpoints (checkAnyAdminToken on the server side).
-func loadAdminTokenFromConfig() (string, error) {
-	xdgPath, err := config.XDGConfigPath()
-	if err != nil {
-		return "", err
-	}
-	tc, err := config.LoadTomlConfig(xdgPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return "", nil
-		}
-		return "", err
-	}
-	for _, p := range tc.Provider {
-		if p.AdminToken != "" {
-			return p.AdminToken, nil
-		}
-	}
-	return "", nil
 }
 
 var reloadCmd = &cobra.Command{

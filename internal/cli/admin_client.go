@@ -25,11 +25,7 @@ func NewAdminClient(timeout time.Duration, provider string) (*AdminClient, error
 
 	token := ""
 	var err error
-	if provider != "" {
-		token, err = loadAdminToken(provider)
-	} else {
-		token, err = loadAdminTokenFromConfig()
-	}
+	token, err = loadAdminToken(provider)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "warning: failed to load admin token: %v\n", err)
 	}
