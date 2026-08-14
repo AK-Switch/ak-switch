@@ -480,11 +480,35 @@ func TestRuntimeConfigField_Apply(t *testing.T) {
 			}},
 		{name: "rectify_thinking_map_to valid disabled", key: "rectify_thinking_map_to", value: "disabled", wantErr: false,
 			check: func(t *testing.T, ps *ProviderState) {
-				if ps.RectifyThinkingMapTo() != "disabled" {
-					t.Errorf("RectifyThinkingMapTo = %q, want disabled", ps.RectifyThinkingMapTo())
+				if ps.RectifyThinkingMapTo() != "" {
+					t.Errorf("RectifyThinkingMapTo = %q, want \"\" (normalized from disabled)", ps.RectifyThinkingMapTo())
 				}
 			}},
 		{name: "rectify_thinking_map_to invalid", key: "rectify_thinking_map_to", value: "invalid", wantErr: true},
+		{name: "thinking_mode valid RECTIFY normalized", key: "thinking_mode", value: "RECTIFY", wantErr: false,
+			check: func(t *testing.T, ps *ProviderState) {
+				if ps.ThinkingMode() != "rectify" {
+					t.Errorf("ThinkingMode = %q, want rectify", ps.ThinkingMode())
+				}
+			}},
+		{name: "thinking_mode valid Default normalized", key: "thinking_mode", value: " Default ", wantErr: false,
+			check: func(t *testing.T, ps *ProviderState) {
+				if ps.ThinkingMode() != "default" {
+					t.Errorf("ThinkingMode = %q, want default", ps.ThinkingMode())
+				}
+			}},
+		{name: "rectify DISABLED normalized", key: "rectify_thinking_map_to", value: "DISABLED", wantErr: false,
+			check: func(t *testing.T, ps *ProviderState) {
+				if ps.RectifyThinkingMapTo() != "" {
+					t.Errorf("RectifyThinkingMapTo = %q, want \"\" (normalized)", ps.RectifyThinkingMapTo())
+				}
+			}},
+		{name: "rectify Enabled normalized", key: "rectify_thinking_map_to", value: " Enabled ", wantErr: false,
+			check: func(t *testing.T, ps *ProviderState) {
+				if ps.RectifyThinkingMapTo() != "enabled" {
+					t.Errorf("RectifyThinkingMapTo = %q, want enabled", ps.RectifyThinkingMapTo())
+				}
+			}},
 		{name: "unknown key", key: "nonexistent", value: "x", wantErr: true},
 	}
 

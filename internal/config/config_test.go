@@ -454,7 +454,7 @@ target = "https://api.example.com"
 	}
 	// CooldownSec should use default from DefaultConfig
 	if cfg.CooldownSec != 15 {
-		t.Errorf("CooldownSec = %d, want default 60", cfg.CooldownSec)
+		t.Errorf("CooldownSec = %d, want default 15", cfg.CooldownSec)
 	}
 	// MaxRetries should use default from DefaultConfig
 	if cfg.MaxRetries != 1 {
@@ -584,7 +584,7 @@ target = "https://myapi.example.com"
 		t.Errorf("Port = %d, want default 8080", cfg.Port)
 	}
 	if cfg.CooldownSec != 15 {
-		t.Errorf("CooldownSec = %d, want default 60", cfg.CooldownSec)
+		t.Errorf("CooldownSec = %d, want default 15", cfg.CooldownSec)
 	}
 	if cfg.MaxRetries != 1 {
 		t.Errorf("MaxRetries = %d, want default 1", cfg.MaxRetries)
@@ -966,7 +966,7 @@ target = "https://api.example.com"
 		t.Errorf("Port = %d, want default 8080", cfg.Port)
 	}
 	if cfg.CooldownSec != 15 {
-		t.Errorf("CooldownSec = %d, want default 60", cfg.CooldownSec)
+		t.Errorf("CooldownSec = %d, want default 15", cfg.CooldownSec)
 	}
 	if cfg.MaxRetries != 1 {
 		t.Errorf("MaxRetries = %d, want default 1", cfg.MaxRetries)
