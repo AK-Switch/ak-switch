@@ -171,9 +171,11 @@ func ParseSSEEvent(raw []byte) (outputTokens int, textDelta string) {
 		Delta *struct {
 			Text        string `json:"text"`
 			PartialJSON string `json:"partial_json"`
+			Thinking    string `json:"thinking"`
 		} `json:"delta,omitempty"`
 		ContentBlock *struct {
-			Text string `json:"text"`
+			Text     string `json:"text"`
+			Thinking string `json:"thinking"`
 		} `json:"content_block,omitempty"`
 		Usage *struct {
 			OutputTokens int `json:"output_tokens"`
@@ -202,10 +204,12 @@ func ParseSSEEvent(raw []byte) (outputTokens int, textDelta string) {
 		if result.Delta != nil {
 			textDelta += result.Delta.Text
 			textDelta += result.Delta.PartialJSON
+			textDelta += result.Delta.Thinking
 		}
 	case "content_block_start":
 		if result.ContentBlock != nil {
 			textDelta += result.ContentBlock.Text
+			textDelta += result.ContentBlock.Thinking
 		}
 	case "message_delta":
 		if result.Usage != nil && result.Usage.OutputTokens > 0 {

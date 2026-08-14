@@ -392,9 +392,11 @@ func streamSSEAndEstimateTokens(w http.ResponseWriter, resp *http.Response, body
 			slog.Debug("sse raw line", "preview", preview, "len", len(line))
 		}
 
-		// Write to client immediately
-		if _, err := w.Write([]byte(line + "\n")); err != nil {
+		// Write to client immediately and track response body size
+		if n, err := w.Write([]byte(line + "\n")); err != nil {
 			break
+		} else {
+			respBodySize += int64(n)
 		}
 
 		// Parse data: lines for SSE events
