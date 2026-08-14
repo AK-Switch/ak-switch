@@ -403,16 +403,19 @@ func streamSSEAndEstimateTokens(w http.ResponseWriter, resp *http.Response, body
 			slog.Debug("sse raw line", "preview", preview, "len", len(line))
 		}
 
-		// Write to client immediately
-		if _, err := w.Write([]byte(line + "\n")); err != nil {
+		// Write to client immediately and track response body size
+		if n, err := w.Write([]byte(line + "\n")); err != nil {
+			respBodySize += int64(n) // count partial write before breaking
 			break
+		} else {
+			respBodySize += int64(n)
 		}
 
 		// Parse data: lines for SSE events
 		if strings.HasPrefix(line, "data: ") {
 			raw := line[6:]
-			tokens, delta := tokenestimator.ParseSSEEvent([]byte(raw))
-			outputBuf.WriteString(delta)
+			tokens, textDelta, _ := tokenestimator.ParseSSEEvent([]byte(raw))
+			outputBuf.WriteString(textDelta)
 			if tokens > 0 {
 				apiOutputTokens = tokens
 			}
