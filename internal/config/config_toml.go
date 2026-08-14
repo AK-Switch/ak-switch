@@ -13,11 +13,11 @@ type TomlConfig struct {
 	Port            int                `toml:"port"`
 	Host            string             `toml:"host,omitempty"`
 	DefaultProvider string             `toml:"default_provider,omitempty"`
-	Default         *Config            `toml:"provider.default"`
+	Default         *Config            `toml:"provider.default,omitempty"`
 	CredentialsDir  string             `toml:"credentials_dir,omitempty"` // Directory containing provider credential files (JSONL)
 	LogFile         string             `toml:"log_file,omitempty"`
-	LogMaxSize      int                `toml:"log_max_size"`
-	LogMaxAge       int                `toml:"log_max_age"`
+	LogMaxSize      int                `toml:"log_max_size,omitempty"`
+	LogMaxAge       int                `toml:"log_max_age,omitempty"`
 	Provider        map[string]*Config `toml:"provider"`
 }
 

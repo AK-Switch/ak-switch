@@ -23,28 +23,28 @@ type ProviderConfig struct {
 	ThinkingMode         string   `toml:"thinking_mode,omitempty"`        // "default" | "rectify"
 	RectifyThinkingMapTo string   `toml:"rectify_thinking_map_to,omitempty"` // "enabled" | "auto" | "disabled"
 	GenaiModel      string   `toml:"genai_model,omitempty"`      // Generative AI model name
-	MaxRetries      int      `toml:"max_retries" default:"1"`
+	MaxRetries      int      `toml:"max_retries,omitempty" default:"1"`
 	LogLevel        string   `toml:"log_level,omitempty" default:"info"`
-	CooldownSec     int      `toml:"cooldown_sec" default:"15"`
-	HTTPTimeoutSec  int      `toml:"http_timeout_sec" default:"30"`
+	CooldownSec     int      `toml:"cooldown_sec,omitempty" default:"15"`
+	HTTPTimeoutSec  int      `toml:"http_timeout_sec,omitempty" default:"30"`
 	Keys            []string `toml:"-"` // API keys (at least one required)
 	KeyNames        []string `toml:"-"` // Corresponding key names (empty string if unnamed), same length as Keys
 	KeysFile        string   `toml:"keys_file,omitempty" default:"keys.json"`
 
-	BackoffCapSec       int     `toml:"backoff_cap_sec" default:"120"`
-	BackoffMultiplier   float64 `toml:"backoff_multiplier" default:"2"`
-	CBResetSec          int     `toml:"cb_reset_sec" default:"30"`
-	UpstreamCBThreshold int     `toml:"upstream_cb_threshold" default:"5"`
+	BackoffCapSec       int     `toml:"backoff_cap_sec,omitempty" default:"120"`
+	BackoffMultiplier   float64 `toml:"backoff_multiplier,omitempty" default:"2"`
+	CBResetSec          int     `toml:"cb_reset_sec,omitempty" default:"30"`
+	UpstreamCBThreshold int     `toml:"upstream_cb_threshold,omitempty" default:"5"`
 
-	HealthCheckIntervalSec int    `toml:"health_check_interval_sec" default:"30"`
+	HealthCheckIntervalSec int    `toml:"health_check_interval_sec,omitempty" default:"30"`
 	HealthCheckPath        string `toml:"-" default:"/health"`
 	HealthCheckTimeoutSec  int    `toml:"-" default:"5"`
 
 	LogFile    string `toml:"log_file,omitempty"` // 日志文件路径（空 = 不启用文件日志）
-	LogMaxSize int    `toml:"log_max_size" default:"100"`
-	LogMaxAge  int    `toml:"log_max_age" default:"7"`
+	LogMaxSize int    `toml:"log_max_size,omitempty" default:"100"`
+	LogMaxAge  int    `toml:"log_max_age,omitempty" default:"7"`
 
-	CalibrationIntervalSec int `toml:"calibration_interval_sec" default:"3600"` // Token 校准间隔（秒，默认 1 小时）
+	CalibrationIntervalSec int `toml:"calibration_interval_sec,omitempty" default:"3600"` // Token 校准间隔（秒，默认 1 小时）
 }
 
 // Config holds all provider-level configuration via embedded ProviderConfig.
@@ -423,3 +423,4 @@ func (pc *ProviderConfig) mergeDefaults() {
 		}
 	}
 }
+

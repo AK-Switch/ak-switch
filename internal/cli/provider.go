@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -27,6 +28,7 @@ func init() {
 	providerCmd.AddCommand(providerDefaultCmd)
 	providerCmd.AddCommand(providerInfoCmd)
 	providerCmd.AddCommand(providerUpdateCmd)
+	providerCmd.AddCommand(providerUpstreamCBResetCmd)
 
 	providerAddCmd.Flags().StringP("target", "t", "", "Upstream target URL (required)")
 	providerAddCmd.Flags().IntP("port", "p", 0, "HTTP listen port (required for first provider)")
@@ -46,6 +48,7 @@ func init() {
 	providerUpdateCmd.Flags().String("admin-token", "", "Admin authentication token (empty to clear)")
 	providerUpdateCmd.Flags().Bool("disable-thinking", false, "Disable thinking mode")
 	providerUpdateCmd.Flags().String("genai-model", "", "Generative AI model name")
+	providerUpdateCmd.Flags().String("log-level", "", "Log level (debug, info, warn, error)")
 	providerUpdateCmd.Flags().String("keys-file", "", "Keys file path (empty for default)")
 	providerUpdateCmd.Flags().Bool("default", false, "Set this provider as the default")
 }
@@ -332,93 +335,76 @@ Example:
 		// Read flags via os.Args scan to avoid Cobra Changed() persistence (Cobra #1398)
 		changes := 0
 
-		if hasCLIFlag("target") {
-			target := getCLIFlagValue("target")
-			if target == "" {
-				return fmt.Errorf("--target/-t cannot be empty")
-			}
-			prov.TargetBase = target
-			changes++
+		// Map CLI flag names (kebab-case) to descriptor keys (snake_case).
+		// Iterating the descriptor table directly would require snake_case hasCLIFlag lookups,
+		// which don't match the registered kebab-case flag names.
+		flagToFieldKey := map[string]string{
+			"target":                    "target",
+			"cooldown-sec":              "cooldown_sec",
+			"max-retries":               "max_retries",
+			"backoff-cap-sec":           "backoff_cap_sec",
+			"backoff-multiplier":        "backoff_multiplier",
+			"cb-reset-sec":              "cb_reset_sec",
+			"upstream-cb-threshold":     "upstream_cb_threshold",
+			"http-timeout-sec":          "http_timeout_sec",
+			"health-check-interval-sec": "health_check_interval_sec",
+			"admin-token":               "admin_token",
+			"disable-thinking":          "disable_thinking",
+			"genai-model":               "genai_model",
+			"keys-file":                 "keys_file",
+			"log-level":                 "log_level",
 		}
 
-		if hasCLIFlag("cooldown-sec") {
-			v, _ := cmd.Flags().GetInt("cooldown-sec")
-			if v < -1 {
-				return fmt.Errorf("--cooldown-sec must be >= -1")
+		// Fail-fast: check --target before any field is persisted
+		if hasCLIFlag("target") {
+			if getCLIFlagValue("target") == "" {
+				return fmt.Errorf("--target/-t cannot be empty")
 			}
-			prov.CooldownSec = v
-			changes++
 		}
-		if hasCLIFlag("max-retries") {
-			v, _ := cmd.Flags().GetInt("max-retries")
-			if v < -1 {
-				return fmt.Errorf("--max-retries must be >= -1")
+
+		for flagName, fieldKey := range flagToFieldKey {
+			if !hasCLIFlag(flagName) {
+				continue
 			}
-			prov.MaxRetries = v
-			changes++
-		}
-		if hasCLIFlag("backoff-cap-sec") {
-			v, _ := cmd.Flags().GetInt("backoff-cap-sec")
-			if v < -1 {
-				return fmt.Errorf("--backoff-cap-sec must be >= -1")
+
+			fd := config.FindField(fieldKey)
+			if fd == nil {
+				continue
 			}
-			prov.BackoffCapSec = v
-			changes++
-		}
-		if hasCLIFlag("backoff-multiplier") {
-			v, _ := cmd.Flags().GetFloat64("backoff-multiplier")
-			if v < -1 {
-				return fmt.Errorf("--backoff-multiplier must be >= -1")
+
+			// Guard: ReadOnly fields cannot be changed via provider update
+			if fd.ReadOnly {
+				return fmt.Errorf("%s cannot be changed via provider update — edit the TOML config file and reload", fd.Key)
 			}
-			prov.BackoffMultiplier = v
-			changes++
-		}
-		if hasCLIFlag("cb-reset-sec") {
-			v, _ := cmd.Flags().GetInt("cb-reset-sec")
-			if v < -1 {
-				return fmt.Errorf("--cb-reset-sec must be >= -1")
+
+			valueStr := getCLIFlagValue(flagName)
+
+			// Boolean flags: if Changed() but value is empty, the flag was present without a value
+			if valueStr == "" && fd.Type == "bool" && cmd.Flags().Changed(flagName) {
+				valueStr = "true"
 			}
-			prov.CBResetSec = v
-			changes++
-		}
-		if hasCLIFlag("upstream-cb-threshold") {
-			v, _ := cmd.Flags().GetInt("upstream-cb-threshold")
-			if v < -1 {
-				return fmt.Errorf("--upstream-cb-threshold must be >= -1")
+
+			parsed, err := fd.Parse(valueStr)
+			if err != nil {
+				return fmt.Errorf("invalid --%s value: %w", flagName, err)
 			}
-			prov.UpstreamCBThreshold = v
-			changes++
-		}
-		if hasCLIFlag("http-timeout-sec") {
-			v, _ := cmd.Flags().GetInt("http-timeout-sec")
-			if v < -1 {
-				return fmt.Errorf("--http-timeout-sec must be >= -1")
+
+			switch v := parsed.(type) {
+			case int:
+				if v < -1 {
+					return fmt.Errorf("--%s must be >= -1", flagName)
+				}
+			case float64:
+				if v < 1 {
+					return fmt.Errorf("--%s must be >= %g", flagName, 1.0)
+				}
 			}
-			prov.HTTPTimeoutSec = v
-			changes++
-		}
-		if hasCLIFlag("health-check-interval-sec") {
-			v, _ := cmd.Flags().GetInt("health-check-interval-sec")
-			if v < -1 {
-				return fmt.Errorf("--health-check-interval-sec must be >= -1")
+
+			if !fd.RuntimeEditable {
+				slog.Warn("not runtime-editable — change will only take effect after reload", "key", fd.Key)
 			}
-			prov.HealthCheckIntervalSec = v
-			changes++
-		}
-		if hasCLIFlag("admin-token") {
-			prov.AdminToken, _ = cmd.Flags().GetString("admin-token")
-			changes++
-		}
-		if hasCLIFlag("disable-thinking") {
-			prov.DisableThinking, _ = cmd.Flags().GetBool("disable-thinking")
-			changes++
-		}
-		if hasCLIFlag("genai-model") {
-			prov.GenaiModel = getCLIFlagValue("genai-model")
-			changes++
-		}
-		if hasCLIFlag("keys-file") {
-			prov.KeysFile = getCLIFlagValue("keys-file")
+
+			fd.Persist(tc, name, prov, parsed)
 			changes++
 		}
 
@@ -606,6 +592,16 @@ Example:
 		}
 
 		return nil
+	},
+}
+
+var providerUpstreamCBResetCmd = &cobra.Command{
+	Use:   "upstream-cb-reset <name>",
+	Short: "Reset the upstream circuit breaker for a provider",
+	Long:  `Force-close the upstream circuit breaker for a provider.`,
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return resetUpstreamCB(args[0])
 	},
 }
 
