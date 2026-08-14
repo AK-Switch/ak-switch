@@ -3,11 +3,15 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -232,7 +236,7 @@ func TestHandleSuccess_PassthroughBody(t *testing.T) {
 	resp := newHTTPResponse(http.StatusOK, string(body))
 	w := httptest.NewRecorder()
 
-	px.handleSuccess(w, ps, 0, resp, testStartTime(), "POST", "http://upstream/v1/chat", body, 0, false)
+	px.handleSuccess(w, ps, 0, resp, testStartTime(), 0, "POST", "http://upstream/v1/chat", body, 0, false)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("response status = %d, want 200", w.Code)
@@ -363,6 +367,82 @@ func TestExecute_ThinkingRectifier_Enabled(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
+}
+
+// ── TTFB regression ───────────────────────────────────
+
+// TestExecute_TtfbLessThanDuration verifies that ttfb_ms is sampled when the
+// upstream response headers arrive (client.Do returns), not after the full
+// stream has been consumed. Regression for commit 3479eb8 where ttfb_ms was
+// computed with time.Since(start) at the end of handleSuccess, making
+// ttfb_ms always equal to duration_ms.
+func TestExecute_TtfbLessThanDuration(t *testing.T) {
+	// Backend: send headers + flush immediately, then delay the body to
+	// simulate a streaming LLM response.
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		time.Sleep(500 * time.Millisecond)
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}" + "\n\n"))
+	}))
+	defer backend.Close()
+
+	ps := newTestProviderState(t, "test", []string{"sk-key-0"})
+	ps.config.TargetBase = backend.URL
+
+	px, _, _ := newProxyExecutor(t)
+
+	// Capture slog output to inspect ttfb_ms / duration_ms.
+	var logBuf bytes.Buffer
+	orig := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	defer slog.SetDefault(orig)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions",
+		strings.NewReader(`{"model":"gpt-4"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	px.Execute(w, req, ps)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Parse ttfb_ms / duration_ms from the "proxy success" log line.
+	ttfb, dur := parseTtfbAndDuration(t, logBuf.String())
+	if dur <= ttfb {
+		t.Fatalf("ttfb_ms=%d should be strictly less than duration_ms=%d for streaming responses", ttfb, dur)
+	}
+	if ttfb < 0 || dur < 0 {
+		t.Fatalf("failed to parse timing from log: %q", logBuf.String())
+	}
+}
+
+// parseTtfbAndDuration extracts ttfb_ms and duration_ms from a slog
+// TextHandler output line containing "proxy success".
+// Returns (-1, -1) when the log line is missing or unparsable.
+func parseTtfbAndDuration(t *testing.T, logOutput string) (int64, int64) {
+	t.Helper()
+	ttfbRe := regexp.MustCompile(`ttfb_ms=(\d+)`)
+	durRe := regexp.MustCompile(`duration_ms=(\d+)`)
+
+	var ttfb, dur = int64(-1), int64(-1)
+	for _, line := range strings.Split(logOutput, "\n") {
+		if !strings.Contains(line, "proxy success") {
+			continue
+		}
+		if m := ttfbRe.FindStringSubmatch(line); m != nil {
+			ttfb, _ = strconv.ParseInt(m[1], 10, 64)
+		}
+		if m := durRe.FindStringSubmatch(line); m != nil {
+			dur, _ = strconv.ParseInt(m[1], 10, 64)
+		}
+	}
+	return ttfb, dur
 }
 
 func TestExecute_ThinkingRectifier_Disabled(t *testing.T) {

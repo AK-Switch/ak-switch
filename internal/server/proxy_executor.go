@@ -123,6 +123,7 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 					continue
 				}
 			}
+			ttfb := time.Since(start)
 
 			// ── Response status dispatch ──
 			switch {
@@ -151,7 +152,7 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 				continue
 
 			default:
-				px.handleSuccess(w, ps, idx, resp, start, r.Method, target, bodyBytes, round, rectified)
+				px.handleSuccess(w, ps, idx, resp, start, ttfb, r.Method, target, bodyBytes, round, rectified)
 				return
 			}
 		}
@@ -265,7 +266,7 @@ func (px *ProxyExecutor) handleNonRetryable(w http.ResponseWriter, ps *ProviderS
 // handleSuccess processes a successful 2xx/3xx response, including streaming
 // for SSE and chunked responses. For non-streaming responses, it extracts
 // token usage from the response body and records it in the log entry.
-func (px *ProxyExecutor) handleSuccess(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, method, target string, bodyBytes []byte, attempt int, rectified bool) {
+func (px *ProxyExecutor) handleSuccess(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, ttfb time.Duration, method, target string, bodyBytes []byte, attempt int, rectified bool) {
 	pool := ps.pool
 	keyName, _ := pool.Name(idx)
 	pool.RecordSuccess(idx)
@@ -333,7 +334,7 @@ func (px *ProxyExecutor) handleSuccess(w http.ResponseWriter, ps *ProviderState,
 		"input_tokens", inputTokens,
 		"output_tokens", outputTokens,
 		"duration_ms", durationMs,
-		"ttfb_ms", time.Since(start).Milliseconds(),
+		"ttfb_ms", ttfb.Milliseconds(),
 		"request_body_size", len(bodyBytes),
 		"response_body_size", respBodySize,
 		"rectified", rectified,
