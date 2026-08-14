@@ -352,7 +352,7 @@ Example:
 			"disable-thinking":          "disable_thinking",
 			"genai-model":               "genai_model",
 			"keys-file":                 "keys_file",
-		"log-level":                 "log_level",
+			"log-level":                 "log_level",
 		}
 
 		// Fail-fast: check --target before any field is persisted
