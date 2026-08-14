@@ -31,6 +31,7 @@ type ProviderConfig struct {
 	KeyNames             []string `toml:"-"` // Corresponding key names (empty string if unnamed), same length as Keys
 	KeySelection         string   `toml:"key_selection,omitempty" default:"polling"`
 	KeysFile             string   `toml:"keys_file,omitempty" default:"keys.json"`
+	KeySelection         string   `toml:"key_selection,omitempty" default:"polling"`
 
 	BackoffCapSec       int     `toml:"backoff_cap_sec,omitempty" default:"120"`
 	BackoffMultiplier   float64 `toml:"backoff_multiplier,omitempty" default:"2"`

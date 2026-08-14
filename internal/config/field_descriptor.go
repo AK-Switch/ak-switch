@@ -501,6 +501,29 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 			}
 		},
 	},
+		{
+			Key:             "key_selection",
+			DisplayName:     "Key Selection Mode",
+			Scope:           FieldScopeProvider,
+			TomlPath:        "provider.%s.key_selection",
+			Type:            FieldTypeString,
+			Default:         "polling",
+			RuntimeEditable: false,
+			Parse: func(s string) (any, error) {
+				v := strings.TrimSpace(strings.ToLower(s))
+				switch v {
+				case "polling", "random":
+					return v, nil
+				}
+				return nil, fmt.Errorf("invalid key_selection %q, use: polling, random", s)
+			},
+			Format: func(v any) string { return fmt.Sprintf("%v", v) },
+			Persist: func(tc *TomlConfig, provider string, c *Config, value any) {
+				if c != nil {
+					c.KeySelection = value.(string)
+				}
+			},
+		},
 
 	// ── Global fields ───────────────────────────────────────────────
 	{
