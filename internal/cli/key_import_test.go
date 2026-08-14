@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -502,6 +503,247 @@ func TestParseCSV(t *testing.T) {
 						t.Errorf("entry[%d] = %+v, want %+v", i, got[i], tt.want[i])
 					}
 				}
+			}
+		})
+	}
+}
+
+// ── keyRestoreCmd / keyPurgeCmd ──────────────────────────
+
+var testKeyDir string
+
+func init() {
+	// Set up a shared temp config directory with a master.key file so that
+	// keypool.SaveKeys / LoadKeys (encrypted storage) work in CLI tests.
+	// getMasterKey() caches the key via sync.Once; all tests in this package
+	// share the same cached master key.
+	// NOTE: do NOT set config.ConfigDir here — that would override
+	// AKSWITCH_CONFIG_DIR set by individual tests (e.g. TestKeyImportCreateFlag).
+	testKeyDir = tTempDirForPackage()
+	keysDir := filepath.Join(testKeyDir, "keys")
+	if err := os.MkdirAll(keysDir, 0700); err != nil {
+		panic("failed to create keys dir for CLI tests: " + err.Error())
+	}
+	// Write a 32-byte master key so getMasterKey() reads it from file.
+	if err := os.WriteFile(filepath.Join(keysDir, "master.key"), []byte("12345678901234567890123456789012"), 0600); err != nil {
+		panic("failed to write master.key for CLI tests: " + err.Error())
+	}
+}
+
+// tTempDirForPackage creates a temp directory that lives until process exit.
+// Go's t.TempDir is per-test and cleaned up after each test, which is too early
+// because getMasterKey() caches the master key globally (sync.Once).
+func tTempDirForPackage() string {
+	dir, err := os.MkdirTemp("", "akswitch-cli-tests-*")
+	if err != nil {
+		panic("failed to create package temp dir: " + err.Error())
+	}
+	return dir
+}
+
+// setupKeyStore creates a provider with the given keys and soft-deletes the one
+// at delIndex (if >= 0). Returns the provider name.
+func setupKeyStore(t *testing.T, entries []keypool.KeyEntry, delIndex int) string {
+	t.Helper()
+	provider := "test-restore-purge"
+	store := &keypool.KeyStore{Keys: entries}
+	if delIndex >= 0 && delIndex < len(entries) {
+		store.Keys[delIndex].Deleted = true
+	}
+	// Ensure config dir is set (previous test's cleanup may have reset it)
+	origConfigDir := config.ConfigDir
+	config.ConfigDir = testKeyDir
+	t.Cleanup(func() { config.ConfigDir = origConfigDir })
+	if err := keypool.SaveKeys(provider, store); err != nil {
+		t.Fatalf("SaveKeys: %v", err)
+	}
+	// Verify the encrypted file exists at the expected path
+	xdgPath, err := config.XDGConfigPath()
+	if err != nil {
+		t.Fatalf("XDGConfigPath: %v", err)
+	}
+	encPath := filepath.Join(filepath.Dir(xdgPath), "keys", provider+".enc")
+	if _, statErr := os.Stat(encPath); statErr != nil {
+		t.Fatalf("encrypted file not found at %s (ConfigDir=%q): %v", encPath, config.ConfigDir, statErr)
+	}
+	// Verify by reloading
+	loaded, loadErr := keypool.LoadKeys(provider)
+	if loadErr != nil {
+		t.Fatalf("LoadKeys verify after SaveKeys: %v", loadErr)
+	}
+	if loaded == nil || len(loaded.Keys) != len(entries) {
+		t.Fatalf("verify: LoadKeys returned %d keys, want %d (provider=%q dir=%s)",
+			len(loaded.Keys), len(entries), provider, config.ConfigDir)
+	}
+	return provider
+}
+
+// runKeyCommand runs a key subcommand with the given os.Args override.
+// Returns captured stdout and error.
+func runKeyCommand(t *testing.T, osArgs []string) (string, error) {
+	t.Helper()
+	origArgs := os.Args
+	origConfigDir := config.ConfigDir
+	os.Args = osArgs
+	// Always use testKeyDir so keypool finds the encrypted files written by setupKeyStore.
+	// This takes precedence over any AKSWITCH_CONFIG_DIR set by other tests.
+	config.ConfigDir = testKeyDir
+	t.Cleanup(func() {
+		os.Args = origArgs
+		config.ConfigDir = origConfigDir
+	})
+
+	// Create a pipe to capture stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	t.Cleanup(func() { w.Close() })
+
+	oldStdout := os.Stdout
+	os.Stdout = w
+	t.Cleanup(func() { os.Stdout = oldStdout })
+
+	// Read captured output in background
+	done := make(chan string)
+	go func() {
+		var out strings.Builder
+		_, _ = io.Copy(&out, r)
+		done <- out.String()
+	}()
+
+	subcmd := osArgs[2] // "akswitch", "key", <subcmd>
+	// Execute via the command's RunE (skip "akswitch key" prefix)
+	var runErr error
+	switch subcmd {
+	case "restore":
+		runErr = keyRestoreCmd.RunE(keyRestoreCmd, osArgs[3:])
+	case "purge":
+		runErr = keyPurgeCmd.RunE(keyPurgeCmd, osArgs[3:])
+	default:
+		t.Fatalf("unsupported command: %s", subcmd)
+	}
+
+	w.Close()
+	out := <-done
+	return out, runErr
+}
+
+func TestKeyRestoreCmd(t *testing.T) {
+	tests := []struct {
+		name    string
+		setup   func(t *testing.T) string // returns provider name
+		args    []string
+		wantErr bool
+		wantOut string
+	}{
+		{
+			name: "nonexistent provider",
+			setup: func(t *testing.T) string { return "" },
+			args:    []string{"akswitch", "key", "restore", "no-such-provider", "0"},
+			wantErr: true,
+		},
+		{
+			name: "not deleted",
+			setup: func(t *testing.T) string {
+				return setupKeyStore(t, []keypool.KeyEntry{
+					{Key: "sk-111", Name: "active-key"},
+					{Key: "sk-222", Name: "another-key"},
+				}, -1)
+			},
+			args:    []string{"akswitch", "key", "restore", "TEST", "0"},
+			wantErr: true,
+		},
+		{
+			name: "restore deleted key",
+			setup: func(t *testing.T) string {
+				return setupKeyStore(t, []keypool.KeyEntry{
+					{Key: "sk-111", Name: "keep-key"},
+					{Key: "sk-222", Name: "deleted-key"},
+					{Key: "sk-333", Name: "also-keep"},
+				}, 1) // soft-delete index 1
+			},
+			args:    []string{"akswitch", "key", "restore", "TEST", "1"},
+			wantErr: false,
+			wantOut: "Restored key [1]",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			provider := tt.setup(t)
+			if provider != "" {
+				// Replace placeholder provider name
+				for i, a := range tt.args {
+					if a == "TEST" {
+						tt.args[i] = provider
+					}
+				}
+			}
+
+			out, err := runKeyCommand(t, tt.args)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("error = %v, wantErr = %v\noutput: %s", err, tt.wantErr, out)
+			}
+			if !tt.wantErr && !strings.Contains(out, tt.wantOut) {
+				t.Errorf("output = %q, want it to contain %q", out, tt.wantOut)
+			}
+		})
+	}
+}
+
+func TestKeyPurgeCmd(t *testing.T) {
+	tests := []struct {
+		name    string
+		setup   func(t *testing.T) string
+		args    []string
+		wantErr bool
+		wantOut string
+	}{
+		{
+			name: "no deleted keys",
+			setup: func(t *testing.T) string {
+				return setupKeyStore(t, []keypool.KeyEntry{
+					{Key: "sk-111", Name: "key1"},
+					{Key: "sk-222", Name: "key2"},
+				}, -1)
+			},
+			args:    []string{"akswitch", "key", "purge", "TEST"},
+			wantErr: false,
+			wantOut: "No deleted keys to purge",
+		},
+		{
+			name: "purge deleted keys",
+			setup: func(t *testing.T) string {
+				return setupKeyStore(t, []keypool.KeyEntry{
+					{Key: "sk-111", Name: "keep-1"},
+					{Key: "sk-222", Name: "purge-me"},
+					{Key: "sk-333", Name: "keep-2"},
+				}, 1) // soft-delete index 1
+			},
+			args:    []string{"akswitch", "key", "purge", "TEST"},
+			wantErr: false,
+			wantOut: "Purged 1 deleted key(s)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			provider := tt.setup(t)
+			if provider != "" {
+				for i, a := range tt.args {
+					if a == "TEST" {
+						tt.args[i] = provider
+					}
+				}
+			}
+
+			out, err := runKeyCommand(t, tt.args)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("error = %v, wantErr = %v\noutput: %s", err, tt.wantErr, out)
+			}
+			if !tt.wantErr && !strings.Contains(out, tt.wantOut) {
+				t.Errorf("output = %q, want it to contain %q", out, tt.wantOut)
 			}
 		})
 	}
