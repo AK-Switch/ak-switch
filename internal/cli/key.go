@@ -96,6 +96,8 @@ func init() {
 	keyImportCmd.Flags().StringP("file", "f", "", "Import keys from a JSON file")
 	keyImportCmd.Flags().StringP("name", "n", "", "Display name for imported keys")
 	keyImportCmd.Flags().Bool("insecure-storage", false, "Store keys in plaintext (WARNING: not encrypted)")
+	keyImportCmd.Flags().StringP("target", "t", "", "Upstream target base URL (required with --create when provider is missing)")
+	keyImportCmd.Flags().Bool("create", false, "Auto-create the provider if it doesn't exist")
 
 	keyUpdateCmd.Flags().StringP("name", "n", "", "New display name for the key")
 	addKeyIndexFlags(keyRemoveCmd)
@@ -248,6 +250,40 @@ Examples:
 			fmt.Fprintln(os.Stderr, "WARNING: API keys will be stored in plaintext (not encrypted).")
 			fmt.Fprintln(os.Stderr, "Use this only in CI or environments without a system keyring.")
 			fmt.Fprintln(os.Stderr, "Do not use this on a shared machine.")
+		}
+
+		create, _ := cmd.Flags().GetBool("create")
+		target, _ := cmd.Flags().GetString("target")
+
+		if create {
+			xdgPath, err := config.XDGConfigPath()
+			if err != nil {
+				return fmt.Errorf("failed to determine config path: %w", err)
+			}
+			tc, err := config.LoadTomlConfig(xdgPath)
+			if err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("failed to load config: %w", err)
+			}
+			providerExists := false
+			if tc != nil {
+				_, providerExists = tc.Provider[provider]
+			}
+			if !providerExists {
+				if target == "" {
+					return fmt.Errorf("--target is required when --create creates a new provider")
+				}
+				// Add provider to config
+				if tc == nil {
+					tc = &config.TomlConfig{Provider: make(map[string]*config.Config)}
+				} else if tc.Provider == nil {
+					tc.Provider = make(map[string]*config.Config)
+				}
+				tc.Provider[provider] = &config.Config{ProviderConfig: config.ProviderConfig{TargetBase: target}}
+				if err := config.SaveTomlConfig(tc, xdgPath); err != nil {
+					return fmt.Errorf("failed to save config with new provider: %w", err)
+				}
+				fmt.Printf("Created provider %q with target %q\n", provider, target)
+			}
 		}
 
 		store, err := keypool.LoadKeys(provider)

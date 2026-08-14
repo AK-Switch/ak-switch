@@ -4,8 +4,11 @@ package cli
 
 import (
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
+	"akswitch/internal/config"
 	"akswitch/internal/keypool"
 )
 
@@ -329,4 +332,94 @@ func TestKeyExportCmd(t *testing.T) {
 			}
 		})
 	}
+}
+
+// ── keyImportCmd --create flag ──────────────────────────
+
+func TestKeyImportCreateFlag(t *testing.T) {
+	t.Run("create without target", func(t *testing.T) {
+		origArgs := os.Args
+		os.Args = []string{"akswitch", "key", "import", "--create", "test-provider", "sk-key1"}
+		defer func() { os.Args = origArgs }()
+
+		err := keyImportCmd.Execute()
+		if err == nil {
+			t.Fatal("expected error when --create used without --target, got nil")
+		}
+		if !strings.Contains(err.Error(), "--target") {
+			t.Errorf("error = %q, want it to mention --target", err.Error())
+		}
+	})
+
+	t.Run("create target nonexistent provider", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		t.Setenv("AKSWITCH_CONFIG_DIR", tmpDir)
+
+		// Create empty config with no providers
+		tc := &config.TomlConfig{Provider: make(map[string]*config.Config)}
+		configPath := filepath.Join(tmpDir, "config.toml")
+		if err := config.SaveTomlConfig(tc, configPath); err != nil {
+			t.Fatalf("failed to save test config: %v", err)
+		}
+
+		origArgs := os.Args
+		os.Args = []string{"akswitch", "key", "import", "--create", "--target", "https://api.test.com", "--insecure-storage", "test-provider", "sk-key1"}
+		defer func() { os.Args = origArgs }()
+
+		err := keyImportCmd.Execute()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Verify provider was created in config
+		loaded, err := config.LoadTomlConfig(configPath)
+		if err != nil {
+			t.Fatalf("failed to load config: %v", err)
+		}
+		p, ok := loaded.Provider["test-provider"]
+		if !ok {
+			t.Fatal("provider 'test-provider' was not created in config")
+		}
+		if p.TargetBase != "https://api.test.com" {
+			t.Errorf("target = %q, want %q", p.TargetBase, "https://api.test.com")
+		}
+	})
+
+	t.Run("create with existing provider", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		t.Setenv("AKSWITCH_CONFIG_DIR", tmpDir)
+
+		// Create config with existing provider
+		tc := &config.TomlConfig{
+			Provider: map[string]*config.Config{
+				"existing-provider": {ProviderConfig: config.ProviderConfig{TargetBase: "https://original.com"}},
+			},
+		}
+		configPath := filepath.Join(tmpDir, "config.toml")
+		if err := config.SaveTomlConfig(tc, configPath); err != nil {
+			t.Fatalf("failed to save test config: %v", err)
+		}
+
+		origArgs := os.Args
+		os.Args = []string{"akswitch", "key", "import", "--create", "--target", "https://api.test.com", "--insecure-storage", "existing-provider", "sk-key1"}
+		defer func() { os.Args = origArgs }()
+
+		err := keyImportCmd.Execute()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Verify provider config is unchanged (original target preserved)
+		loaded, err := config.LoadTomlConfig(configPath)
+		if err != nil {
+			t.Fatalf("failed to load config: %v", err)
+		}
+		p, ok := loaded.Provider["existing-provider"]
+		if !ok {
+			t.Fatal("provider 'existing-provider' should still exist")
+		}
+		if p.TargetBase != "https://original.com" {
+			t.Errorf("target = %q, want %q (should be unchanged)", p.TargetBase, "https://original.com")
+		}
+	})
 }
