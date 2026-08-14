@@ -471,18 +471,18 @@ func TestParseCSV(t *testing.T) {
 			},
 		},
 		{
-			name: "no header 3 cols error",
-			data: "a,b,c",
+			name:    "no header 3 cols error",
+			data:    "a,b,c",
 			wantErr: true,
 		},
 		{
-			name: "empty data",
-			data: "",
+			name:    "empty data",
+			data:    "",
 			wantErr: true,
 		},
 		{
-			name: "all comments",
-			data: "# comment 1\n# comment 2\n  ",
+			name:    "all comments",
+			data:    "# comment 1\n# comment 2\n  ",
 			wantErr: true,
 		},
 	}
@@ -638,8 +638,8 @@ func TestKeyRestoreCmd(t *testing.T) {
 		wantOut string
 	}{
 		{
-			name: "nonexistent provider",
-			setup: func(t *testing.T) string { return "" },
+			name:    "nonexistent provider",
+			setup:   func(t *testing.T) string { return "" },
 			args:    []string{"akswitch", "key", "restore", "no-such-provider", "0"},
 			wantErr: true,
 		},

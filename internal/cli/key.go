@@ -664,8 +664,8 @@ Use 'key list --all' to see deleted keys.`,
 var keyPurgeCmd = &cobra.Command{
 	Use:   "purge <provider>",
 	Short: "Permanently remove all deleted keys",
-	Long: `Remove all soft-deleted API keys permanently. This cannot be undone.`,
-	Args: cobra.ExactArgs(1),
+	Long:  `Remove all soft-deleted API keys permanently. This cannot be undone.`,
+	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		provider := args[0]
 		store, err := keypool.LoadKeys(provider)
@@ -1017,14 +1017,14 @@ func autoNumberNames(entries []keypool.KeyEntry, store *keypool.KeyStore) []keyp
 
 // parseCSV parses CSV data into KeyEntry slices.
 // Parsing rules:
-// 1. Lines starting with '#' are skipped (comments)
-// 2. If the first non-comment line contains known column headers,
-//    columns are mapped by header name (case-insensitive)
-// 3. If no header is detected, positional inference is used:
-//    - 1 column → key
-//    - 2 columns → name, key
-//    - 3+ columns → error
-// 4. Leading/trailing whitespace is stripped from each cell
+//  1. Lines starting with '#' are skipped (comments)
+//  2. If the first non-comment line contains known column headers,
+//     columns are mapped by header name (case-insensitive)
+//  3. If no header is detected, positional inference is used:
+//     - 1 column → key
+//     - 2 columns → name, key
+//     - 3+ columns → error
+//  4. Leading/trailing whitespace is stripped from each cell
 func parseCSV(data []byte) ([]keypool.KeyEntry, error) {
 	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
 	if len(lines) == 0 {
