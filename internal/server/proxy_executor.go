@@ -143,7 +143,7 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 				continue
 
 			case (resp.StatusCode >= 400 && resp.StatusCode < 500) || categorizeError(resp.StatusCode, nil) == CatNonRetryable:
-				px.handleNonRetryable(w, ps, idx, resp, start, r.Method, target, bodyBytes, round)
+				px.handleNonRetryable(w, ps, idx, resp, start, r.Method, target, bodyBytes, round, rectified)
 				return
 
 			case resp.StatusCode >= 500:
@@ -246,15 +246,26 @@ func (px *ProxyExecutor) handleServerError(ps *ProviderState, idx int, resp *htt
 }
 
 // handleNonRetryable copies a non-retryable 4xx response through to the client
-// without further retry attempts.
-func (px *ProxyExecutor) handleNonRetryable(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, method, target string, bodyBytes []byte, attempt int) {
+// without further retry attempts. It also persists the request/response pair
+// to ~/.akswitch/errors/ for post-hoc debugging (e.g. rectifier 400s).
+func (px *ProxyExecutor) handleNonRetryable(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, method, target string, bodyBytes []byte, attempt int, rectified bool) {
 	defer func() { _ = resp.Body.Close() }()
 	keyName, _ := ps.PoolName(idx)
+
 	copyHeaders(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
-	_, _ = io.Copy(w, resp.Body)
 
-	slog.Warn("non-retryable client error", "provider", ps.Name(), "method", method, "url", target, "status", resp.StatusCode, "key_name", keyName)
+	// Stream body to client while capturing it for the dump (client gets partial data on read error)
+	var buf bytes.Buffer
+	tee := io.TeeReader(resp.Body, &buf)
+	_, _ = io.Copy(w, tee)
+	body := buf.Bytes()
+
+	if err := writeErrorDump(SetupErrorLogDir(), ps, keyName, method, target, resp.StatusCode, attempt, start, bodyBytes, body, rectified); err != nil {
+		slog.Warn("failed to write error dump", "provider", ps.Name(), "status", resp.StatusCode, "error", err)
+	}
+
+	slog.Warn("non-retryable client error", "provider", ps.Name(), "method", method, "url", target, "status", resp.StatusCode, "key_name", keyName, "body_preview", MaskSensitiveData(string(body), 1024))
 	slog.Debug("proxy response debug", "status", resp.StatusCode, "duration_ms", time.Since(start).Seconds()*1000, "retries", attempt+1)
 	px.recordProxyMetrics(method, "4xx", fmt.Sprintf("%d", idx), start)
 	if attempt > 0 {

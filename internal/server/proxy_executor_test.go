@@ -210,12 +210,15 @@ func TestHandleServerError_RecordsUpstreamFailure(t *testing.T) {
 
 func TestHandleNonRetryable_PassthroughStatus(t *testing.T) {
 	ps := newTestProviderState(t, "test", []string{"key-a"})
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
 	px, _, _ := newProxyExecutor(t)
 
 	w := httptest.NewRecorder()
 	resp := newHTTPResponse(http.StatusBadRequest, `{"error":"bad request"}`)
 
-	px.handleNonRetryable(w, ps, 0, resp, testStartTime(), "GET", "http://upstream/", []byte(`{"error":"bad request"}`), 0)
+	px.handleNonRetryable(w, ps, 0, resp, testStartTime(), "GET", "http://upstream/", []byte(`{"error":"bad request"}`), 0, false)
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("response status = %d, want 400", w.Code)
