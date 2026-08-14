@@ -295,6 +295,20 @@ func TestStreamSSE_InputJsonDelta(t *testing.T) {
 	}
 }
 
+type failAfterWriter struct {
+	http.ResponseWriter
+	writeCount int
+	failAfter  int
+}
+
+func (w *failAfterWriter) Write(b []byte) (int, error) {
+	w.writeCount++
+	if w.writeCount > w.failAfter {
+		return 0, io.ErrUnexpectedEOF
+	}
+	return w.ResponseWriter.Write(b)
+}
+
 func TestStreamSSE_RespBodySize(t *testing.T) {
 	// SSE data lines (each line ends with LF in the raw stream)
 	lines := []string{
@@ -331,4 +345,59 @@ func TestStreamSSE_RespBodySize(t *testing.T) {
 	if respBodySize != int64(expectedSize) {
 		t.Errorf("respBodySize = %d, want %d", respBodySize, expectedSize)
 	}
+
+	t.Run("write_error_mid_stream", func(t *testing.T) {
+		inner := httptest.NewRecorder()
+		w := &failAfterWriter{ResponseWriter: inner, failAfter: 1}
+		sseData := "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hello\"}}\n\n" +
+			"data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" world\"}}\n\n"
+		respBody := io.NopCloser(strings.NewReader(sseData))
+		resp := &http.Response{Body: respBody, Header: make(http.Header)}
+		resp.Header.Set("Content-Type", "text/event-stream")
+
+		_, _, respBodySize := streamSSEAndEstimateTokens(w, resp, nil, "")
+
+		if respBodySize <= 0 {
+			t.Errorf("respBodySize = %d, want > 0 (partial write)", respBodySize)
+		}
+		if respBodySize >= int64(len(sseData)) {
+			t.Errorf("respBodySize = %d, want < %d (should be truncated)", respBodySize, len(sseData))
+		}
+	})
+
+	t.Run("crlf_line_endings", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		// SSE data with \r\n line endings
+		sseData := "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hi\"}}\r\n\r\n"
+		respBody := io.NopCloser(strings.NewReader(sseData))
+		resp := &http.Response{Body: respBody, Header: make(http.Header)}
+		resp.Header.Set("Content-Type", "text/event-stream")
+
+		// Expected: bufio.Scanner's default ScanLines split strips trailing \r
+		// (dropCR), so "data: ...\r\n" produces token "data: ..." (no \r).
+		// w.Write writes line + "\n", turning each token back into "...\n".
+		// The blank "\r\n" line produces an empty token, written back as "\n".
+		// Expected: len("data: {json}") + 1 + len("") + 1 = 90
+		expectedLine := "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hi\"}}"
+		expectedBlank := ""
+		expectedSize := len(expectedLine) + 1 + len(expectedBlank) + 1
+		_, _, respBodySize := streamSSEAndEstimateTokens(w, resp, nil, "")
+
+		if respBodySize != int64(expectedSize) {
+			t.Errorf("respBodySize = %d, want %d (\\r\\n endings)", respBodySize, expectedSize)
+		}
+	})
+
+	t.Run("empty_stream", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		respBody := io.NopCloser(strings.NewReader(""))
+		resp := &http.Response{Body: respBody, Header: make(http.Header)}
+		resp.Header.Set("Content-Type", "text/event-stream")
+
+		_, _, respBodySize := streamSSEAndEstimateTokens(w, resp, nil, "")
+
+		if respBodySize != 0 {
+			t.Errorf("respBodySize = %d, want 0 for empty stream", respBodySize)
+		}
+	})
 }
