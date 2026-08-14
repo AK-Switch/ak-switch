@@ -742,11 +742,11 @@ func (api *AdminAPI) handleRuntimeConfigSet(w http.ResponseWriter, r *http.Reque
 // in-memory config and runtime state. Returns the new value and an error
 // if the key is unknown or the value is invalid.
 func (api *AdminAPI) setRuntimeConfigField(ps *ProviderState, key string, value interface{}) (interface{}, error) {
-	f := lookupRuntimeConfigField(key)
-	if f == nil {
+	fd := config.FindField(key)
+	if fd == nil || !fd.RuntimeEditable || fd.ApplyRuntime == nil {
 		return nil, fmt.Errorf("unknown key %q", key)
 	}
-	return f.apply(ps, value)
+	return fd.ApplyRuntime(ps, "", fmt.Sprintf("%v", value))
 }
 
 // getRuntimeParams returns all runtime-configurable parameters for a provider.
@@ -908,9 +908,9 @@ func (api *AdminAPI) persistRuntimeConfigField(ps *ProviderState, key string, va
 	}
 
 	// Only modify the specific field
-	f := lookupRuntimeConfigField(key)
-	if f != nil {
-		f.persist(providerCfg, value)
+	fd := config.FindField(key)
+	if fd != nil && fd.Persist != nil {
+		fd.Persist(tc, ps.Name(), providerCfg, value)
 	}
 
 	return config.SaveTomlConfig(tc, xdgPath)
@@ -932,9 +932,9 @@ func (api *AdminAPI) persistRuntimeConfigFieldToDefault(key string, value interf
 		tc.Default = &config.Config{}
 	}
 
-	f := lookupRuntimeConfigField(key)
-	if f != nil {
-		f.persist(tc.Default, value)
+	fd := config.FindField(key)
+	if fd != nil && fd.Persist != nil {
+		fd.Persist(tc, "", tc.Default, value)
 	}
 
 	return config.SaveTomlConfig(tc, xdgPath)
