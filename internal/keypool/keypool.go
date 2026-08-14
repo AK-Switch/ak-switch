@@ -69,6 +69,40 @@ func (p *KeyPool) SetSelectionMode(mode KeySelectionMode) {
 	p.selectionMode = mode
 }
 
+// SelectKey returns the next available key according to the configured selection strategy.
+// Returns index, key value, and ok=false if no key is available.
+// The caller must Release(idx) when the key is no longer needed.
+func (p *KeyPool) SelectKey() (int, string, bool) {
+	switch p.selectionMode {
+	case KeySelectionPolling:
+		return p.selectKeyPolling()
+	default:
+		return p.selectKeyPolling()
+	}
+}
+
+// selectKeyPolling implements the "polling" (round-robin) strategy.
+// It starts from the stored pollingIndex and scans forward to find the first available key.
+func (p *KeyPool) selectKeyPolling() (int, string, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	n := len(p.keys)
+	if n == 0 {
+		return -1, "", false
+	}
+
+	start := int(p.pollingIndex % uint64(n))
+	for i := 0; i < n; i++ {
+		idx := (start + i) % n
+		if p.cbs[idx].Allow() {
+			p.pollingIndex = uint64(idx+1) % uint64(n)
+			return idx, p.keys[idx], true
+		}
+	}
+	return -1, "", false
+}
+
 // validateIndex checks that the given index is within the valid range of keys.
 // Returns an error if the index is out of range.
 func (p *KeyPool) validateIndex(idx int) error {
