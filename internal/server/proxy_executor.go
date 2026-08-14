@@ -371,7 +371,7 @@ func (px *ProxyExecutor) writeAllKeysExhausted(w http.ResponseWriter, ps *Provid
 func streamSSEAndEstimateTokens(w http.ResponseWriter, resp *http.Response, bodyBytes []byte, model string) (int, int, int64) {
 	defer func() { _ = resp.Body.Close() }()
 
-	var outputBuf strings.Builder
+	var outputBuf, thinkingBuf strings.Builder
 	var respBodySize int64
 	var apiOutputTokens int
 
@@ -403,7 +403,8 @@ func streamSSEAndEstimateTokens(w http.ResponseWriter, resp *http.Response, body
 		if strings.HasPrefix(line, "data: ") {
 			raw := line[6:]
 			tokens, textDelta, thinkingDelta := tokenestimator.ParseSSEEvent([]byte(raw))
-			outputBuf.WriteString(textDelta + thinkingDelta)
+			outputBuf.WriteString(textDelta)
+			thinkingBuf.WriteString(thinkingDelta)
 			if tokens > 0 {
 				apiOutputTokens = tokens
 			}
