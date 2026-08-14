@@ -53,6 +53,8 @@ func NewProviderState(name string, cfg *config.Config, pool *keypool.KeyPool, da
 	base := time.Duration(cfg.CooldownSec) * time.Second
 	cap_ := time.Duration(backoffCapSec) * time.Second
 	pool.ConfigureCBs(base, cap_, backoffMult)
+	// 设置 key 选择策略
+	pool.SetSelectionMode(keypool.KeySelectionMode(cfg.KeySelection))
 
 	upCB := circuitbreaker.NewUpstreamCircuitBreaker(
 		upstreamThreshold,
