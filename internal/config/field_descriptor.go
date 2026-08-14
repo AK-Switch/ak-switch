@@ -4,7 +4,30 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 )
+
+// ProviderRuntimeState is a subset of ProviderState methods needed for runtime config.
+// Defined here to avoid importing internal/server (would create circular dependency).
+// ProviderState (in internal/server) satisfies this interface structurally.
+type ProviderRuntimeState interface {
+	SetCooldownSec(v int)
+	SetBackoffCapSec(v int)
+	SetBackoffMultiplier(v float64)
+	SetMaxRetries(v int)
+	SetHTTPTimeoutSec(v int)
+	SetProxyTimeout(d time.Duration)
+	SetUpstreamCBResetTimeout(sec int)
+	SetCBResetSec(v int)
+	SetUpstreamProxyCBThreshold(n int)
+	SetUpstreamCBThreshold(n int)
+	SetLogLevel(v string)
+	ConfigurePoolCBs(base, backoffCap time.Duration, multiplier float64)
+
+	CooldownSec() int
+	BackoffCapSec() int
+	BackoffMultiplier() float64
+}
 
 // FieldScope identifies whether a field belongs to a provider or is global.
 type FieldScope string
@@ -89,6 +112,19 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 				c.CooldownSec = value.(int)
 			}
 		},
+		ApplyRuntime: func(ps any, provider string, value any) (any, error) {
+			v, err := strconv.Atoi(value.(string))
+			if err != nil || v < 1 {
+				return nil, fmt.Errorf("cooldown_sec must be a positive integer")
+			}
+			ps.(ProviderRuntimeState).SetCooldownSec(v)
+			ps.(ProviderRuntimeState).ConfigurePoolCBs(
+				time.Duration(v)*time.Second,
+				time.Duration(ps.(ProviderRuntimeState).BackoffCapSec())*time.Second,
+				ps.(ProviderRuntimeState).BackoffMultiplier(),
+			)
+			return v, nil
+		},
 	},
 	{
 		Key:             "max_retries",
@@ -106,6 +142,14 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 				c.MaxRetries = value.(int)
 			}
 		},
+		ApplyRuntime: func(ps any, provider string, value any) (any, error) {
+			v, err := strconv.Atoi(value.(string))
+			if err != nil || v < 0 {
+				return nil, fmt.Errorf("max_retries must be a non-negative integer")
+			}
+			ps.(ProviderRuntimeState).SetMaxRetries(v)
+			return v, nil
+		},
 	},
 	{
 		Key:             "backoff_cap_sec",
@@ -122,6 +166,19 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 			if c != nil {
 				c.BackoffCapSec = value.(int)
 			}
+		},
+		ApplyRuntime: func(ps any, provider string, value any) (any, error) {
+			v, err := strconv.Atoi(value.(string))
+			if err != nil || v < 1 {
+				return nil, fmt.Errorf("backoff_cap_sec must be a positive integer")
+			}
+			ps.(ProviderRuntimeState).SetBackoffCapSec(v)
+			ps.(ProviderRuntimeState).ConfigurePoolCBs(
+				time.Duration(ps.(ProviderRuntimeState).CooldownSec())*time.Second,
+				time.Duration(v)*time.Second,
+				ps.(ProviderRuntimeState).BackoffMultiplier(),
+			)
+			return v, nil
 		},
 	},
 	{
@@ -147,6 +204,19 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 				c.BackoffMultiplier = value.(float64)
 			}
 		},
+		ApplyRuntime: func(ps any, provider string, value any) (any, error) {
+			v, err := strconv.ParseFloat(value.(string), 64)
+			if err != nil || v < 1.0 {
+				return nil, fmt.Errorf("backoff_multiplier must be a number >= 1.0")
+			}
+			ps.(ProviderRuntimeState).SetBackoffMultiplier(v)
+			ps.(ProviderRuntimeState).ConfigurePoolCBs(
+				time.Duration(ps.(ProviderRuntimeState).CooldownSec())*time.Second,
+				time.Duration(ps.(ProviderRuntimeState).BackoffCapSec())*time.Second,
+				v,
+			)
+			return v, nil
+		},
 	},
 	{
 		Key:             "cb_reset_sec",
@@ -163,6 +233,15 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 			if c != nil {
 				c.CBResetSec = value.(int)
 			}
+		},
+		ApplyRuntime: func(ps any, provider string, value any) (any, error) {
+			v, err := strconv.Atoi(value.(string))
+			if err != nil || v < 1 {
+				return nil, fmt.Errorf("cb_reset_sec must be a positive integer")
+			}
+			ps.(ProviderRuntimeState).SetUpstreamCBResetTimeout(v)
+			ps.(ProviderRuntimeState).SetCBResetSec(v)
+			return v, nil
 		},
 	},
 	{
@@ -181,6 +260,15 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 				c.UpstreamCBThreshold = value.(int)
 			}
 		},
+		ApplyRuntime: func(ps any, provider string, value any) (any, error) {
+			v, err := strconv.Atoi(value.(string))
+			if err != nil || v < 1 {
+				return nil, fmt.Errorf("upstream_cb_threshold must be a positive integer")
+			}
+			ps.(ProviderRuntimeState).SetUpstreamProxyCBThreshold(v)
+			ps.(ProviderRuntimeState).SetUpstreamCBThreshold(v)
+			return v, nil
+		},
 	},
 	{
 		Key:             "http_timeout_sec",
@@ -197,6 +285,15 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 			if c != nil {
 				c.HTTPTimeoutSec = value.(int)
 			}
+		},
+		ApplyRuntime: func(ps any, provider string, value any) (any, error) {
+			v, err := strconv.Atoi(value.(string))
+			if err != nil || v < 1 {
+				return nil, fmt.Errorf("http_timeout_sec must be a positive integer")
+			}
+			ps.(ProviderRuntimeState).SetProxyTimeout(time.Duration(v) * time.Second)
+			ps.(ProviderRuntimeState).SetHTTPTimeoutSec(v)
+			return v, nil
 		},
 	},
 	{
@@ -220,6 +317,19 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 			if c != nil {
 				c.LogLevel = value.(string)
 			}
+		},
+		ApplyRuntime: func(ps any, provider string, value any) (any, error) {
+			s, ok := value.(string)
+			if !ok {
+				return nil, fmt.Errorf("log_level must be a string")
+			}
+			v := strings.TrimSpace(strings.ToLower(s))
+			switch v {
+			case "debug", "info", "warn", "error":
+				ps.(ProviderRuntimeState).SetLogLevel(v)
+				return v, nil
+			}
+			return nil, fmt.Errorf("invalid log level, use: debug, info, warn, error")
 		},
 	},
 	{
