@@ -120,7 +120,7 @@ func TestSetupErrorLogDir_CreatesDirectory(t *testing.T) {
 	t.Setenv("HOME", tmp)
 	t.Setenv("USERPROFILE", tmp)
 
-	dir := SetupErrorLogDir()
+	dir := SetupErrorLogDir(7)
 	if !strings.HasSuffix(dir, filepath.Join(".akswitch", "errors")) {
 		t.Errorf("SetupErrorLogDir() = %q, want suffix %q", dir, filepath.Join(".akswitch", "errors"))
 	}
