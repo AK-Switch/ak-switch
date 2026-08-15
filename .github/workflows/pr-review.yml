@@ -1,0 +1,33 @@
+name: PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review]
+  issue_comment:
+    types: [created]
+
+jobs:
+  review:
+    if: |
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@openhands-agent')) ||
+      github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Checkout extensions repo
+        uses: actions/checkout@v4
+        with:
+          repository: OpenHands/extensions
+          ref: main
+          sparse-checkout: .github/actions/pr-review
+
+      - name: Run PR Review
+        uses: ./.github/actions/pr-review
+        with:
+          llm-model: anthropic/claude-sonnet-4-5-20250929
+          llm-api-key: ${{ secrets.LLM_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
