@@ -178,7 +178,7 @@ func TestCLI_ConfigView(t *testing.T) {
 	assertOutputContains(t, output, []string{
 		"Configuration source:",
 		"Port:",
-		"Target base URL:",
+		"Target URL:",
 	})
 }
 
