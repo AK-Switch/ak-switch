@@ -151,7 +151,6 @@ func (h *ColorHandler) handleNonCompact(ctx context.Context, r slog.Record) erro
 	return nil
 }
 
-
 // handleCompact formats proxy-related log messages in a compact one-line format.
 // Falls back to handleNonCompact for unrecognized messages.
 func (h *ColorHandler) handleCompact(ctx context.Context, r slog.Record) error {
@@ -283,6 +282,7 @@ func (h *ColorHandler) handleCompact(ctx context.Context, r slog.Record) error {
 		return h.handleNonCompact(ctx, r)
 	}
 }
+
 // methodColor returns an ANSI color code for an HTTP method.
 func methodColor(method string) string {
 	switch method {

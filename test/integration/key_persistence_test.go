@@ -50,13 +50,13 @@ func TestKeyPersistence_AddKeyRestart(t *testing.T) {
 
 	srv.Close()
 
-	// Verify keys are persisted via keyring
-	store, err := keypool.LoadStoreFromKeyring("test")
+	// Verify keys are persisted to encrypted file
+	store, err := keypool.LoadKeys("test")
 	if err != nil {
-		t.Fatalf("LoadStoreFromKeyring: %v", err)
+		t.Fatalf("LoadKeys: %v", err)
 	}
 	if store == nil {
-		t.Fatal("keys should be persisted to keyring after adding a key")
+		t.Fatal("keys should be persisted after adding a key")
 	}
 
 	found := false
@@ -153,13 +153,13 @@ func TestKeyPersistence_DeleteKeyRestart(t *testing.T) {
 
 	srv.Close()
 
-	// Verify keys are persisted via keyring
-	store, err := keypool.LoadStoreFromKeyring("test")
+	// Verify keys are persisted to encrypted file
+	store, err := keypool.LoadKeys("test")
 	if err != nil {
-		t.Fatalf("LoadStoreFromKeyring: %v", err)
+		t.Fatalf("LoadKeys: %v", err)
 	}
 	if store == nil {
-		t.Fatal("keys should be persisted to keyring after deletion")
+		t.Fatal("keys should be persisted after deletion")
 	}
 
 	for _, entry := range store.Keys {
@@ -213,13 +213,13 @@ func TestKeyPersistence_DisableKeyAndPersist(t *testing.T) {
 
 	srv.Close()
 
-	// Verify keys are persisted via keyring with disabled state
-	store, err := keypool.LoadStoreFromKeyring("test")
+	// Verify keys are persisted to encrypted file with disabled state
+	store, err := keypool.LoadKeys("test")
 	if err != nil {
-		t.Fatalf("LoadStoreFromKeyring: %v", err)
+		t.Fatalf("LoadKeys: %v", err)
 	}
 	if store == nil {
-		t.Fatal("keys should be persisted to keyring after disabling a key")
+		t.Fatal("keys should be persisted after disabling a key")
 	}
 
 	t.Logf("store contents: %+v", store.Keys)
@@ -262,13 +262,13 @@ func TestKeyEncryption_NoEncryption_BackwardCompatible(t *testing.T) {
 	resp.Body.Close()
 	srv.Close()
 
-	// Verify keys are persisted via keyring
-	store, err := keypool.LoadStoreFromKeyring("test")
+	// Verify keys are persisted to encrypted file
+	store, err := keypool.LoadKeys("test")
 	if err != nil {
-		t.Fatalf("LoadStoreFromKeyring: %v", err)
+		t.Fatalf("LoadKeys: %v", err)
 	}
 	if store == nil {
-		t.Fatal("keys should be persisted to keyring")
+		t.Fatal("keys should be persisted")
 	}
 
 	foundA := false

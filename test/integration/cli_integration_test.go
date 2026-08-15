@@ -1584,7 +1584,8 @@ func TestProviderUpdate_OutputNotMarkedDefault(t *testing.T) {
 	}
 }
 
-// TestProviderUpdate_AdminToken verifies --admin-token flag sets and clears admin token.
+// TestProviderUpdate_AdminToken verifies --admin-token is rejected via provider update
+// and must be changed by editing the TOML config file directly.
 func TestProviderUpdate_AdminToken(t *testing.T) {
 	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
@@ -1600,34 +1601,23 @@ func TestProviderUpdate_AdminToken(t *testing.T) {
 		"--port", "9605",
 	)
 
-	// Set admin token
+	// provider update --admin-token must be rejected (read-only field)
 	err = runAkswitch(t, "akswitch", "provider", "update", "admintoken",
 		"--admin-token", "secret123")
-	if err != nil {
-		t.Fatalf("provider update --admin-token set failed: %v", err)
+	if err == nil {
+		t.Fatal("provider update --admin-token should be rejected, got nil error")
+	}
+	if !strings.Contains(err.Error(), "cannot be changed via provider update") {
+		t.Fatalf("unexpected error message: %v", err)
 	}
 
+	// Verify TOML was not modified
 	tc, err := config.LoadTomlConfig(xdgPath)
 	if err != nil {
 		t.Fatalf("LoadTomlConfig failed: %v", err)
 	}
-	if tc.Provider["admintoken"].AdminToken != "secret123" {
-		t.Errorf("AdminToken = %q, want %q", tc.Provider["admintoken"].AdminToken, "secret123")
-	}
-
-	// Clear admin token
-	err = runAkswitch(t, "akswitch", "provider", "update", "admintoken",
-		"--admin-token", "")
-	if err != nil {
-		t.Fatalf("provider update --admin-token clear failed: %v", err)
-	}
-
-	tc, err = config.LoadTomlConfig(xdgPath)
-	if err != nil {
-		t.Fatalf("LoadTomlConfig failed: %v", err)
-	}
 	if tc.Provider["admintoken"].AdminToken != "" {
-		t.Errorf("AdminToken = %q, want empty after clear", tc.Provider["admintoken"].AdminToken)
+		t.Errorf("AdminToken = %q, want empty (TOML should not be modified)", tc.Provider["admintoken"].AdminToken)
 	}
 }
 
@@ -1712,12 +1702,13 @@ func TestProviderUpdate_ZeroValues(t *testing.T) {
 		"--max-retries", "3",
 	)
 
-	// Set all int/float fields to zero
+	// Set fields to boundary values (cooldown_sec/backoff_cap_sec/backoff_multiplier
+	// have min=1, so use 1 instead of 0)
 	err = runAkswitch(t, "akswitch", "provider", "update", "zerovals",
-		"--cooldown-sec", "0",
+		"--cooldown-sec", "1",
 		"--max-retries", "0",
-		"--backoff-cap-sec", "0",
-		"--backoff-multiplier", "0",
+		"--backoff-cap-sec", "1",
+		"--backoff-multiplier", "1",
 	)
 	if err != nil {
 		t.Fatalf("provider update zero values failed: %v", err)
@@ -1728,16 +1719,16 @@ func TestProviderUpdate_ZeroValues(t *testing.T) {
 		t.Fatalf("LoadTomlConfig failed: %v", err)
 	}
 	p := tc.Provider["zerovals"]
-	if p.CooldownSec != 0 {
-		t.Errorf("CooldownSec = %d, want 0", p.CooldownSec)
+	if p.CooldownSec != 1 {
+		t.Errorf("CooldownSec = %d, want 1", p.CooldownSec)
 	}
 	if p.MaxRetries != 0 {
 		t.Errorf("MaxRetries = %d, want 0", p.MaxRetries)
 	}
-	if p.BackoffCapSec != 0 {
-		t.Errorf("BackoffCapSec = %d, want 0", p.BackoffCapSec)
+	if p.BackoffCapSec != 1 {
+		t.Errorf("BackoffCapSec = %d, want 1", p.BackoffCapSec)
 	}
-	if p.BackoffMultiplier != 0 {
-		t.Errorf("BackoffMultiplier = %f, want 0", p.BackoffMultiplier)
+	if p.BackoffMultiplier != 1 {
+		t.Errorf("BackoffMultiplier = %f, want 1", p.BackoffMultiplier)
 	}
 }

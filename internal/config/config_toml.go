@@ -10,15 +10,16 @@ import (
 
 // TomlConfig 对应整个 config.toml 文件结构。
 type TomlConfig struct {
-	Port              int                  `toml:"port"`
-	Host              string               `toml:"host,omitempty"`
-	DefaultProvider   string               `toml:"default_provider,omitempty"`
-	Default           *Config              `toml:"provider.default"`
-	CredentialsDir    string               `toml:"credentials_dir,omitempty"` // Directory containing provider credential files (JSONL)
-	LogFile           string               `toml:"log_file,omitempty"`
-	LogMaxSize        int                  `toml:"log_max_size"`
-	LogMaxAge         int                  `toml:"log_max_age"`
-	Provider          map[string]*Config   `toml:"provider"`
+	Port            int                `toml:"port"`
+	Host            string             `toml:"host,omitempty"`
+	DefaultProvider string             `toml:"default_provider,omitempty"`
+	Default         *Config            `toml:"provider.default,omitempty"`
+	CredentialsDir  string             `toml:"credentials_dir,omitempty"` // Directory containing provider credential files (JSONL)
+	LogFile         string             `toml:"log_file,omitempty"`
+	LogMaxSize      int                `toml:"log_max_size,omitempty"`
+	LogMaxAge       int                `toml:"log_max_age,omitempty"`
+	ErrorDumpMaxAge int                `toml:"error_dump_max_age,omitempty"`
+	Provider        map[string]*Config `toml:"provider"`
 }
 
 // DefaultProviderName 保存从 TOML 配置中读取的默认 provider 名称。
@@ -50,5 +51,5 @@ func SaveTomlConfig(tc *TomlConfig, path string) error {
 	if err := encoder.Encode(tc); err != nil {
 		return fmt.Errorf("TOML 编码失败: %w", err)
 	}
-	return os.WriteFile(path, buf.Bytes(), 0644)
+	return os.WriteFile(path, buf.Bytes(), 0600)
 }

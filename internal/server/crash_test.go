@@ -5,6 +5,7 @@ package server
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -100,4 +101,30 @@ func stringContains(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+func TestDefaultErrorLogDir(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
+
+	got := defaultErrorLogDir()
+	want := filepath.Join(tmp, ".akswitch", "errors")
+	if got != want {
+		t.Errorf("defaultErrorLogDir() = %q, want %q", got, want)
+	}
+}
+
+func TestSetupErrorLogDir_CreatesDirectory(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
+
+	dir := SetupErrorLogDir(7)
+	if !strings.HasSuffix(dir, filepath.Join(".akswitch", "errors")) {
+		t.Errorf("SetupErrorLogDir() = %q, want suffix %q", dir, filepath.Join(".akswitch", "errors"))
+	}
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		t.Errorf("error log dir not created: %s", dir)
+	}
 }

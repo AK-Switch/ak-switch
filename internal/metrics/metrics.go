@@ -13,11 +13,10 @@ type Metrics struct {
 	KeyPoolKeys     *prometheus.GaugeVec
 	UpstreamErrors  *prometheus.CounterVec
 
-	UpstreamCBState     *prometheus.GaugeVec   // akswitch_upstream_cb_state, labels: {"provider"} (0=CLOSED, 1=OPEN, 2=HALF_OPEN)
-	HealthCheckProbes   *prometheus.CounterVec // akswitch_healthcheck_probes_total, labels: {"provider","status":"ok"|"fail"}
+	UpstreamCBState     *prometheus.GaugeVec     // akswitch_upstream_cb_state, labels: {"provider"} (0=CLOSED, 1=OPEN, 2=HALF_OPEN)
+	HealthCheckProbes   *prometheus.CounterVec   // akswitch_healthcheck_probes_total, labels: {"provider","status":"ok"|"fail"}
 	HealthCheckDuration *prometheus.HistogramVec // akswitch_healthcheck_duration_seconds, labels: {"provider"}
 
-	
 	// Token usage metrics
 	TokenUsage *prometheus.CounterVec // akswitch_token_usage_total, labels: {"provider", "direction"}
 
@@ -90,7 +89,7 @@ func NewRegistry() (*prometheus.Registry, *Metrics) {
 			},
 			[]string{"provider"},
 		),
-				TokenUsage: factory.NewCounterVec(
+		TokenUsage: factory.NewCounterVec(
 			prometheus.CounterOpts{
 				Namespace: "akswitch",
 				Name:      "token_usage_total",

@@ -48,6 +48,12 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 		return
 	}
 
+	var rectified bool
+
+	if ps.ThinkingMode() == "rectify" {
+		bodyBytes, rectified = NewThinkingRectifier(true, ps.RectifyThinkingMapTo()).Process(bodyBytes)
+	}
+
 	// Build target URL
 	target := buildTargetURL(ps.config, r.URL.Path, r.URL.RawQuery)
 
@@ -69,7 +75,6 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 		slog.Debug("proxy request debug", "provider", ps.Name(), "method", r.Method, "path", r.URL.Path, "auth", maskedAuth, "body_size", len(bodyBytes), "body_preview", bodyPreview)
 	}
 
-	pool.AdvanceCounter()
 	for round := 0; round < ps.MaxRetries(); round++ {
 
 		if !upCB.Allow() {
@@ -78,8 +83,8 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 			continue
 		}
 
-		available := pool.AvailableKeys()
-		if len(available) == 0 {
+		idx, key, ok := pool.SelectKey()
+		if !ok {
 			if !pool.AnyActive() {
 				px.writeAllKeysExhausted(w, ps, r.Method, start)
 				return
@@ -89,65 +94,63 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 			continue
 		}
 
-		for _, idx := range available {
+		keyName, _ := pool.Name(idx)
 
-			keyName, _ := pool.Name(idx)
+		req, err := http.NewRequestWithContext(r.Context(), r.Method, target, bytes.NewReader(bodyBytes))
+		if err != nil {
+			px.metrics.UpstreamErrors.WithLabelValues("network").Inc()
+			writeProxyError(w, http.StatusInternalServerError, ErrorUpstreamError, "failed to build upstream request")
+			px.recordProxyMetrics(r.Method, "5xx", "", start)
+			return
+		}
+		copyHeaders(req.Header, r.Header)
+		req.Header.Set("Authorization", "Bearer "+key)
 
-			req, err := http.NewRequestWithContext(r.Context(), r.Method, target, bytes.NewReader(bodyBytes))
-			if err != nil {
-				px.metrics.UpstreamErrors.WithLabelValues("network").Inc()
-				writeProxyError(w, http.StatusInternalServerError, ErrorUpstreamError, "failed to build upstream request")
-				px.recordProxyMetrics(r.Method, "5xx", "", start)
+		resp, err := client.Do(req)
+		if err != nil {
+			pool.Release(idx)
+			switch categorizeError(0, err) {
+			case CatClientAbort:
+				slog.Debug("client aborted request", "provider", ps.Name(), "key_index", idx, "key_name", keyName, "error", err)
 				return
-			}
-			copyHeaders(req.Header, r.Header)
-			req.Header.Set("Authorization", "Bearer "+pool.Keys()[idx])
-
-			resp, err := client.Do(req)
-			if err != nil {
-				pool.Release(idx)
-				switch categorizeError(0, err) {
-				case CatClientAbort:
-					slog.Debug("client aborted request", "provider", ps.Name(), "key_index", idx, "key_name", keyName, "error", err)
-					return
-				default:
-					slog.Warn("key network error", "provider", ps.Name(), "key_index", idx, "key_name", keyName, "error", err)
-					px.metrics.UpstreamErrors.WithLabelValues("network").Inc()
-					upCB.RecordFailure()
-					continue
-				}
-			}
-
-			// ── Response status dispatch ──
-			switch {
-			case resp.StatusCode == http.StatusTooManyRequests:
-				if px.handleRateLimited(w, ps, idx, resp, start, r.Method, target, bodyBytes) {
-					return
-				}
-				continue
-
-			case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
-				if px.handleAuthRejected(w, ps, idx, resp, start, r.Method, target, bodyBytes) {
-					return
-				}
-				continue
-
-			case resp.StatusCode == http.StatusBadGateway || resp.StatusCode == http.StatusServiceUnavailable:
-				px.handleServerError(ps, idx, resp, round)
-				continue
-
-			case (resp.StatusCode >= 400 && resp.StatusCode < 500) || categorizeError(resp.StatusCode, nil) == CatNonRetryable:
-				px.handleNonRetryable(w, ps, idx, resp, start, r.Method, target, bodyBytes, round)
-				return
-
-			case resp.StatusCode >= 500:
-				px.handleServerError(ps, idx, resp, round)
-				continue
-
 			default:
-				px.handleSuccess(w, ps, idx, resp, start, r.Method, target, bodyBytes, round)
+				slog.Warn("key network error", "provider", ps.Name(), "key_index", idx, "key_name", keyName, "error", err)
+				px.metrics.UpstreamErrors.WithLabelValues("network").Inc()
+				upCB.RecordFailure()
+				continue
+			}
+		}
+		ttfb := time.Since(start)
+
+		// ── Response status dispatch ──
+		switch {
+		case resp.StatusCode == http.StatusTooManyRequests:
+			if px.handleRateLimited(w, ps, idx, resp, start, r.Method, target, bodyBytes) {
 				return
 			}
+			continue
+
+		case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
+			if px.handleAuthRejected(w, ps, idx, resp, start, r.Method, target, bodyBytes) {
+				return
+			}
+			continue
+
+		case resp.StatusCode == http.StatusBadGateway || resp.StatusCode == http.StatusServiceUnavailable:
+			px.handleServerError(ps, idx, resp, round)
+			continue
+
+		case (resp.StatusCode >= 400 && resp.StatusCode < 500) || categorizeError(resp.StatusCode, nil) == CatNonRetryable:
+			px.handleNonRetryable(w, ps, idx, resp, start, r.Method, target, bodyBytes, round, rectified)
+			return
+
+		case resp.StatusCode >= 500:
+			px.handleServerError(ps, idx, resp, round)
+			continue
+
+		default:
+			px.handleSuccess(w, ps, idx, resp, start, ttfb, r.Method, target, bodyBytes, round, rectified)
+			return
 		}
 	}
 
@@ -240,15 +243,27 @@ func (px *ProxyExecutor) handleServerError(ps *ProviderState, idx int, resp *htt
 }
 
 // handleNonRetryable copies a non-retryable 4xx response through to the client
-// without further retry attempts.
-func (px *ProxyExecutor) handleNonRetryable(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, method, target string, bodyBytes []byte, attempt int) {
+// without further retry attempts. It also persists the request/response pair
+// to ~/.akswitch/errors/ for post-hoc debugging (e.g. rectifier 400s).
+func (px *ProxyExecutor) handleNonRetryable(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, method, target string, bodyBytes []byte, attempt int, rectified bool) {
 	defer func() { _ = resp.Body.Close() }()
 	keyName, _ := ps.PoolName(idx)
+
 	copyHeaders(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
-	_, _ = io.Copy(w, resp.Body)
 
-	slog.Warn("non-retryable client error", "provider", ps.Name(), "method", method, "url", target, "status", resp.StatusCode, "key_name", keyName)
+	// Stream body to client while capturing it for the dump (client gets partial data on read error)
+	var buf bytes.Buffer
+	tee := io.TeeReader(resp.Body, &buf)
+	_, _ = io.Copy(w, tee)
+	body := buf.Bytes()
+
+	maxAge := ps.ErrorDumpMaxAge()
+	if err := writeErrorDump(SetupErrorLogDir(maxAge), ps, keyName, method, target, resp.StatusCode, attempt, start, bodyBytes, body, rectified, maxAge); err != nil {
+		slog.Warn("failed to write error dump", "provider", ps.Name(), "status", resp.StatusCode, "error", err)
+	}
+
+	slog.Warn("non-retryable client error", "provider", ps.Name(), "method", method, "url", target, "status", resp.StatusCode, "key_name", keyName, "body_preview", MaskSensitiveData(string(body), 1024))
 	slog.Debug("proxy response debug", "status", resp.StatusCode, "duration_ms", time.Since(start).Seconds()*1000, "retries", attempt+1)
 	px.recordProxyMetrics(method, "4xx", fmt.Sprintf("%d", idx), start)
 	if attempt > 0 {
@@ -259,7 +274,7 @@ func (px *ProxyExecutor) handleNonRetryable(w http.ResponseWriter, ps *ProviderS
 // handleSuccess processes a successful 2xx/3xx response, including streaming
 // for SSE and chunked responses. For non-streaming responses, it extracts
 // token usage from the response body and records it in the log entry.
-func (px *ProxyExecutor) handleSuccess(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, method, target string, bodyBytes []byte, attempt int) {
+func (px *ProxyExecutor) handleSuccess(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, ttfb time.Duration, method, target string, bodyBytes []byte, attempt int, rectified bool) {
 	pool := ps.pool
 	keyName, _ := pool.Name(idx)
 	pool.RecordSuccess(idx)
@@ -327,9 +342,10 @@ func (px *ProxyExecutor) handleSuccess(w http.ResponseWriter, ps *ProviderState,
 		"input_tokens", inputTokens,
 		"output_tokens", outputTokens,
 		"duration_ms", durationMs,
-		"ttfb_ms", time.Since(start).Milliseconds(),
+		"ttfb_ms", ttfb.Milliseconds(),
 		"request_body_size", len(bodyBytes),
 		"response_body_size", respBodySize,
+		"rectified", rectified,
 	)
 	slog.Debug("proxy response debug", "status", resp.StatusCode, "duration_ms", time.Since(start).Seconds()*1000, "retries", attempt+1)
 	px.recordProxyMetrics(method, akswitchmetrics.StatusLabel(resp.StatusCode), fmt.Sprintf("%d", idx), start)
@@ -384,16 +400,19 @@ func streamSSEAndEstimateTokens(w http.ResponseWriter, resp *http.Response, body
 			slog.Debug("sse raw line", "preview", preview, "len", len(line))
 		}
 
-		// Write to client immediately
-		if _, err := w.Write([]byte(line + "\n")); err != nil {
+		// Write to client immediately and track response body size
+		if n, err := w.Write([]byte(line + "\n")); err != nil {
+			respBodySize += int64(n) // count partial write before breaking
 			break
+		} else {
+			respBodySize += int64(n)
 		}
 
 		// Parse data: lines for SSE events
 		if strings.HasPrefix(line, "data: ") {
 			raw := line[6:]
-			tokens, delta := tokenestimator.ParseSSEEvent([]byte(raw))
-			outputBuf.WriteString(delta)
+			tokens, textDelta, _ := tokenestimator.ParseSSEEvent([]byte(raw))
+			outputBuf.WriteString(textDelta)
 			if tokens > 0 {
 				apiOutputTokens = tokens
 			}

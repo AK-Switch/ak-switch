@@ -22,11 +22,7 @@ var startCmd = &cobra.Command{
 
 		restartLogFormat = logFormat
 
-		var rc server.RestartController
-		if devMode {
-			rc = &selfRestartCtrl{}
-		}
-
+		rc := &selfRestartCtrl{}
 		sl := server.NewServerLauncher(dashHTML, providerFilter, logFormat, logLevel, startAll, devMode)
 		sl.SetRestartController(rc)
 		if err := sl.Launch(); err != nil {
@@ -35,7 +31,6 @@ var startCmd = &cobra.Command{
 		}
 	},
 }
-
 
 // pidFilePath delegates to the server package for the PID file path.
 // This preserves the existing selfrestart.go call without modifying it.

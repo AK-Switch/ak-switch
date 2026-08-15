@@ -366,6 +366,89 @@ func TestTimeUntilAvailable_SomeActive(t *testing.T) {
 	}
 }
 
+// ── SelectKey 策略测试 ──────────────────────────────────────
+
+func TestSelectKey_Polling(t *testing.T) {
+	keys := []string{"key-a", "key-b", "key-c", "key-d"}
+	p := NewKeyPool(keys, nil)
+	p.SetSelectionMode(KeySelectionPolling)
+
+	expected := []string{"key-a", "key-b", "key-c", "key-d"}
+	for i, exp := range expected {
+		idx, key, ok := p.SelectKey()
+		if !ok {
+			t.Fatalf("round %d: SelectKey() returned ok=false, want true", i)
+		}
+		if key != exp {
+			t.Errorf("round %d: got key %q, want %q", i, key, exp)
+		}
+		p.Release(idx)
+	}
+
+	idx, key, ok := p.SelectKey()
+	if !ok {
+		t.Fatal("round 5: SelectKey() returned ok=false, want true")
+	}
+	if key != "key-a" {
+		t.Errorf("round 5: got key %q, want %q", key, "key-a")
+	}
+	p.Release(idx)
+}
+
+func TestSelectKey_Polling_SkipDisabled(t *testing.T) {
+	keys := []string{"key-a", "key-b", "key-c"}
+	p := NewKeyPool(keys, nil)
+	p.SetSelectionMode(KeySelectionPolling)
+
+	_ = p.Disable(1)
+
+	expected := []string{"key-a", "key-c", "key-a", "key-c"}
+	for i, exp := range expected {
+		idx, key, ok := p.SelectKey()
+		if !ok {
+			t.Fatalf("round %d: SelectKey() returned ok=false, want true", i)
+		}
+		if key != exp {
+			t.Errorf("round %d: got key %q, want %q", i, key, exp)
+		}
+		p.Release(idx)
+	}
+}
+
+func TestSelectKey_Polling_AllDisabled(t *testing.T) {
+	p := NewKeyPool([]string{"key-a", "key-b"}, nil)
+	p.SetSelectionMode(KeySelectionPolling)
+	_ = p.Disable(0)
+	_ = p.Disable(1)
+
+	_, _, ok := p.SelectKey()
+	if ok {
+		t.Error("SelectKey() on fully disabled pool returned ok=true, want false")
+	}
+}
+
+func TestSelectKey_Random(t *testing.T) {
+	keys := []string{"key-a", "key-b", "key-c"}
+	p := NewKeyPool(keys, nil)
+	p.SetSelectionMode(KeySelectionRandom)
+
+	counts := make(map[string]int)
+	for i := 0; i < 30; i++ {
+		idx, key, ok := p.SelectKey()
+		if !ok {
+			t.Fatalf("iteration %d: SelectKey() returned ok=false", i)
+		}
+		counts[key]++
+		p.Release(idx)
+	}
+
+	for _, k := range keys {
+		if counts[k] == 0 {
+			t.Errorf("key %q was never selected in 30 iterations", k)
+		}
+	}
+}
+
 func BenchmarkKeyPoolNext(b *testing.B) {
 	keySet := []string{"ka", "kb", "kc", "kd", "ke", "kf", "kg", "kh", "ki", "kj"}
 	for _, n := range []int{1, 5, 10} {

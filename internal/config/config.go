@@ -17,32 +17,35 @@ import (
 type ProviderConfig struct {
 	Port                 int      `toml:"port" default:"8080"`
 	Host                 string   `toml:"host,omitempty" default:"127.0.0.1"`
-	TargetBase           string   `toml:"target"`                    // Upstream target base URL (required)
-	AdminToken           string   `toml:"admin_token,omitempty"`     // Optional admin authentication token
-	DisableThinking      bool     `toml:"disable_thinking,omitempty"` // Disable thinking mode
-	GenaiModel           string   `toml:"genai_model,omitempty"`     // Generative AI model name
-	MaxRetries           int      `toml:"max_retries" default:"1"`
+	TargetBase           string   `toml:"target"`                            // Upstream target base URL (required)
+	AdminToken           string   `toml:"admin_token,omitempty"`             // Optional admin authentication token
+	DisableThinking      bool     `toml:"disable_thinking,omitempty"`        // Deprecated: use thinking_mode
+	ThinkingMode         string   `toml:"thinking_mode,omitempty"`           // "default" | "rectify"
+	RectifyThinkingMapTo string   `toml:"rectify_thinking_map_to,omitempty"` // "enabled" | "auto" | "disabled"
+	GenaiModel           string   `toml:"genai_model,omitempty"`             // Generative AI model name
+	MaxRetries           int      `toml:"max_retries,omitempty" default:"1"`
 	LogLevel             string   `toml:"log_level,omitempty" default:"info"`
-	CooldownSec          int      `toml:"cooldown_sec" default:"15"`
-	HTTPTimeoutSec       int      `toml:"http_timeout_sec" default:"30"`
-	Keys                 []string `toml:"-"`                         // API keys (at least one required)
-	KeyNames             []string `toml:"-"`                         // Corresponding key names (empty string if unnamed), same length as Keys
+	CooldownSec          int      `toml:"cooldown_sec,omitempty" default:"15"`
+	HTTPTimeoutSec       int      `toml:"http_timeout_sec,omitempty" default:"30"`
+	Keys                 []string `toml:"-"` // API keys (at least one required)
+	KeyNames             []string `toml:"-"` // Corresponding key names (empty string if unnamed), same length as Keys
+	KeySelection         string   `toml:"key_selection,omitempty" default:"polling"`
 	KeysFile             string   `toml:"keys_file,omitempty" default:"keys.json"`
 
-	BackoffCapSec        int     `toml:"backoff_cap_sec" default:"120"`
-	BackoffMultiplier    float64 `toml:"backoff_multiplier" default:"2"`
-	CBResetSec           int     `toml:"cb_reset_sec" default:"30"`
-	UpstreamCBThreshold  int     `toml:"upstream_cb_threshold" default:"5"`
+	BackoffCapSec       int     `toml:"backoff_cap_sec,omitempty" default:"120"`
+	BackoffMultiplier   float64 `toml:"backoff_multiplier,omitempty" default:"2"`
+	CBResetSec          int     `toml:"cb_reset_sec,omitempty" default:"30"`
+	UpstreamCBThreshold int     `toml:"upstream_cb_threshold,omitempty" default:"5"`
 
-	HealthCheckIntervalSec int    `toml:"health_check_interval_sec" default:"30"`
-	HealthCheckPath       string `toml:"-" default:"/health"`
-	HealthCheckTimeoutSec int    `toml:"-" default:"5"`
+	HealthCheckIntervalSec int    `toml:"health_check_interval_sec,omitempty" default:"30"`
+	HealthCheckPath        string `toml:"-" default:"/health"`
+	HealthCheckTimeoutSec  int    `toml:"-" default:"5"`
 
-	LogFile    string `toml:"log_file,omitempty"`    // 日志文件路径（空 = 不启用文件日志）
-	LogMaxSize int    `toml:"log_max_size" default:"100"`
-	LogMaxAge  int    `toml:"log_max_age" default:"7"`
-
-	CalibrationIntervalSec int `toml:"calibration_interval_sec" default:"3600"` // Token 校准间隔（秒，默认 1 小时）
+	LogFile                string `toml:"log_file,omitempty"` // 日志文件路径（空 = 不启用文件日志）
+	LogMaxSize             int    `toml:"log_max_size,omitempty" default:"100"`
+	LogMaxAge              int    `toml:"log_max_age,omitempty" default:"7"`
+	ErrorDumpMaxAge        int    `toml:"error_dump_max_age,omitempty" default:"7"`
+	CalibrationIntervalSec int    `toml:"calibration_interval_sec,omitempty" default:"3600"` // Token 校准间隔（秒，默认 1 小时）
 }
 
 // Config holds all provider-level configuration via embedded ProviderConfig.
@@ -90,22 +93,23 @@ func (e *ConfigError) Error() string { return e.Message }
 // DefaultProviderConfig returns a ProviderConfig with all optional fields set to their defaults.
 func DefaultProviderConfig() *ProviderConfig {
 	return &ProviderConfig{
-		Port:                 8080,
-		Host:                 "127.0.0.1",
-		MaxRetries:           1,
-		LogLevel:             "info",
-		CooldownSec:          15,
-		HTTPTimeoutSec:       30,
-		BackoffCapSec:        120,
-		BackoffMultiplier:    2,
-		CBResetSec:           30,
-		UpstreamCBThreshold:  5,
+		Port:                   8080,
+		Host:                   "127.0.0.1",
+		MaxRetries:             1,
+		LogLevel:               "info",
+		CooldownSec:            15,
+		HTTPTimeoutSec:         30,
+		BackoffCapSec:          120,
+		BackoffMultiplier:      2,
+		CBResetSec:             30,
+		UpstreamCBThreshold:    5,
 		HealthCheckIntervalSec: 30,
-		HealthCheckPath:       "/health",
-		HealthCheckTimeoutSec: 5,
-		KeysFile:             "keys.json",
-		LogMaxSize:           100,
-		LogMaxAge:            7,
+		HealthCheckPath:        "/health",
+		HealthCheckTimeoutSec:  5,
+		KeysFile:               "keys.json",
+		LogMaxSize:             100,
+		LogMaxAge:              7,
+		ErrorDumpMaxAge:        7,
 		CalibrationIntervalSec: 3600,
 	}
 }
@@ -215,29 +219,32 @@ func (c *Config) DeepCopy() *Config {
 	copy(keyNames, c.KeyNames)
 	return &Config{
 		ProviderConfig: ProviderConfig{
-			Port:                 c.Port,
-			Host:                 c.Host,
-			TargetBase:           c.TargetBase,
-			AdminToken:           c.AdminToken,
-			DisableThinking:      c.DisableThinking,
-			GenaiModel:           c.GenaiModel,
-			MaxRetries:           c.MaxRetries,
-			LogLevel:             c.LogLevel,
-			CooldownSec:          c.CooldownSec,
-			HTTPTimeoutSec:       c.HTTPTimeoutSec,
-			Keys:                 keys,
-			KeyNames:             keyNames,
-			KeysFile:             c.KeysFile,
-			BackoffCapSec:        c.BackoffCapSec,
-			BackoffMultiplier:    c.BackoffMultiplier,
-			CBResetSec:           c.CBResetSec,
-			UpstreamCBThreshold:  c.UpstreamCBThreshold,
+			Port:                   c.Port,
+			Host:                   c.Host,
+			TargetBase:             c.TargetBase,
+			AdminToken:             c.AdminToken,
+			DisableThinking:        c.DisableThinking,
+			ThinkingMode:           c.ThinkingMode,
+			RectifyThinkingMapTo:   c.RectifyThinkingMapTo,
+			GenaiModel:             c.GenaiModel,
+			MaxRetries:             c.MaxRetries,
+			LogLevel:               c.LogLevel,
+			CooldownSec:            c.CooldownSec,
+			HTTPTimeoutSec:         c.HTTPTimeoutSec,
+			Keys:                   keys,
+			KeyNames:               keyNames,
+			KeysFile:               c.KeysFile,
+			BackoffCapSec:          c.BackoffCapSec,
+			BackoffMultiplier:      c.BackoffMultiplier,
+			CBResetSec:             c.CBResetSec,
+			UpstreamCBThreshold:    c.UpstreamCBThreshold,
 			HealthCheckIntervalSec: c.HealthCheckIntervalSec,
-			HealthCheckPath:      c.HealthCheckPath,
-			HealthCheckTimeoutSec: c.HealthCheckTimeoutSec,
-			LogFile:              c.LogFile,
-			LogMaxSize:           c.LogMaxSize,
-			LogMaxAge:            c.LogMaxAge,
+			HealthCheckPath:        c.HealthCheckPath,
+			HealthCheckTimeoutSec:  c.HealthCheckTimeoutSec,
+			LogFile:                c.LogFile,
+			LogMaxSize:             c.LogMaxSize,
+			LogMaxAge:              c.LogMaxAge,
+			ErrorDumpMaxAge:        c.ErrorDumpMaxAge,
 			CalibrationIntervalSec: c.CalibrationIntervalSec,
 		},
 		RuntimeConfig: RuntimeConfig{
@@ -307,6 +314,12 @@ func mergeWithDefaults(base, override *Config) *Config {
 	if override.DisableThinking {
 		result.DisableThinking = true
 	}
+	if override.ThinkingMode != "" {
+		result.ThinkingMode = override.ThinkingMode
+	}
+	if override.RectifyThinkingMapTo != "" {
+		result.RectifyThinkingMapTo = override.RectifyThinkingMapTo
+	}
 	if override.GenaiModel != "" {
 		result.GenaiModel = override.GenaiModel
 	}
@@ -334,6 +347,9 @@ func mergeWithDefaults(base, override *Config) *Config {
 	if override.LogMaxAge != 0 {
 		result.LogMaxAge = override.LogMaxAge
 	}
+	if override.ErrorDumpMaxAge != 0 {
+		result.ErrorDumpMaxAge = override.ErrorDumpMaxAge
+	}
 	if override.CalibrationIntervalSec != 0 {
 		result.CalibrationIntervalSec = override.CalibrationIntervalSec
 	}
@@ -347,6 +363,16 @@ func mergeWithDefaults(base, override *Config) *Config {
 	result.RuntimeConfig.UpstreamCBThreshold = result.UpstreamCBThreshold
 	result.RuntimeConfig.LogLevel = result.LogLevel
 	return result
+}
+
+// migrateDisableThinking handles backward compatibility for the deprecated
+// DisableThinking field. When DisableThinking is true and ThinkingMode is
+// unset, it maps to the new field names.
+func (pc *ProviderConfig) migrateDisableThinking() {
+	if pc.DisableThinking && pc.ThinkingMode == "" {
+		pc.ThinkingMode = "rectify"
+		pc.RectifyThinkingMapTo = "enabled"
+	}
 }
 
 // mergeDefaults fills in zero-value fields with their default values using
@@ -403,4 +429,3 @@ func (pc *ProviderConfig) mergeDefaults() {
 		}
 	}
 }
-

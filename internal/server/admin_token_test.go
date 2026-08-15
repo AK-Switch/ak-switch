@@ -225,7 +225,7 @@ func TestCheckAnyAdminToken_AllNoToken(t *testing.T) {
 
 	got := pr.api.checkAnyAdminToken(w, r)
 	if !got {
-		t.Errorf("expected true (no tokens anywhere), got false")
+		t.Errorf("expected true (no tokens configured, access allowed), got false")
 	}
 }
 

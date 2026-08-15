@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,14 +10,35 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
-	"strings"
 	"time"
 
 	"akswitch/internal/config"
 
 	"github.com/spf13/cobra"
 )
+
+// validateFieldRange checks numeric range constraints for config fields.
+func validateFieldRange(fd *config.ConfigFieldDescriptor, valueStr string) error {
+	parsed, err := fd.Parse(valueStr)
+	if err != nil {
+		return fmt.Errorf("validateFieldRange: invalid --%s value: %w", fd.Key, err)
+	}
+	switch v := parsed.(type) {
+	case int:
+		min := -1
+		if fd.MinInt >= 0 {
+			min = fd.MinInt
+		}
+		if v < min {
+			return fmt.Errorf("--%s must be >= %d", fd.Key, min)
+		}
+	case float64:
+		if v < 1 {
+			return fmt.Errorf("--%s must be >= %g", fd.Key, 1.0)
+		}
+	}
+	return nil
+}
 
 func init() {
 	rootCmd.AddCommand(configCmd)
@@ -29,8 +51,8 @@ func init() {
 	configInitCmd.Flags().StringP("path", "p", "", "Output path for config.toml (default: XDG config directory)")
 	configListCmd.Flags().Bool("all", false, "Show all providers")
 	configGetCmd.Flags().Bool("all", false, "Show value from all providers")
-	configSetCmd.Flags().Bool("persist", false, "Persist the change to the config file")
-	configSetCmd.Flags().Bool("all", false, "Apply to all providers (writes to [provider.default] when used with --persist)")
+	configSetCmd.Flags().Bool("runtime-only", false, "Apply to runtime only, do not persist to config file")
+	configSetCmd.Flags().Bool("all", false, "Apply to all providers")
 }
 
 var configCmd = &cobra.Command{
@@ -150,6 +172,7 @@ var configViewCmd = &cobra.Command{
 			fmt.Printf("  Health check path: %s\n", sanitized.HealthCheckPath)
 			fmt.Printf("  Health check timeout seconds: %d\n", sanitized.HealthCheckTimeoutSec)
 			fmt.Printf("  Keys file: %s\n", sanitized.KeysFile)
+			fmt.Printf("  Key selection mode: %s\n", sanitized.KeySelection)
 			for i, key := range sanitized.Keys {
 				keyName := ""
 				if i < len(sanitized.KeyNames) {
@@ -172,91 +195,81 @@ var configViewCmd = &cobra.Command{
 var configListCmd = &cobra.Command{
 	Use:   "list [provider]",
 	Short: "List runtime-configurable parameters",
-	Long: `Display all runtime-configurable parameters and their current values.
+	Long: `Display all runtime-configurable parameters and their current values from the config file.
 
 	If a provider name is given, shows parameters for that provider only.
 	Use --all to show parameters for all providers.
 	Otherwise, shows the first (or only) provider.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := NewAdminClient(5*time.Second, "")
-		if err != nil {
-			return fmt.Errorf("server not reachable: %w", err)
-		}
 		all, _ := cmd.Flags().GetBool("all")
-
-		path := "/api/runtime-config"
+		var targetProvider string
 		if len(args) > 0 {
-			path += "?provider=" + url.QueryEscape(args[0])
+			targetProvider = args[0]
 		}
 
-		resp, err := client.Get(path)
+		// Load TOML for persistent values
+		source, err := config.XDGConfigPath()
 		if err != nil {
-			return fmt.Errorf("server not reachable: %w", err)
+			return fmt.Errorf("failed to determine config path: %w", err)
 		}
-		defer func() { _ = resp.Body.Close() }()
-
-		body, _ := io.ReadAll(resp.Body)
-
-		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-			return fmt.Errorf("auth failed (HTTP %d): check X-Admin-Token in server config", resp.StatusCode)
-		}
-		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("API error (HTTP %d): %s", resp.StatusCode, string(body))
+		tc, err := config.LoadTomlConfig(source)
+		if err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("failed to load config: %w", err)
 		}
 
-		// Server returns {"providers": {"name": {TargetBase, Keys}}} for all providers
-		var raw map[string]json.RawMessage
-		if err := json.Unmarshal(body, &raw); err == nil {
-			if providersJSON, ok := raw["providers"]; ok {
-				var providers map[string]config.ConfigPayload
-				if err := json.Unmarshal(providersJSON, &providers); err == nil && len(providers) > 0 {
-					names := make([]string, 0, len(providers))
-					for n := range providers {
-						names = append(names, n)
-					}
-					sort.Strings(names)
-
-					if all || len(args) == 0 {
-						target := names
-						if !all && len(names) > 0 {
-							target = names[:1]
-						}
-						for i, n := range target {
-							if i > 0 {
-								fmt.Println()
-							}
-							printProviderParams(n, providers[n])
-						}
-						return nil
-					}
-					// args[0] specified — fall through to single-provider handling
+		// Build provider list
+		var names []string
+		if all {
+			if tc != nil {
+				for n := range tc.Provider {
+					names = append(names, n)
 				}
 			}
-		}
-
-		// Server returns {"TargetBase": "...", "Keys": [...]} for single provider
-		var cp config.ConfigPayload
-		if err := json.Unmarshal(body, &cp); err == nil && cp.TargetBase != "" {
-			name := ""
-			if len(args) > 0 {
-				name = args[0]
+			sort.Strings(names)
+			if len(names) == 0 {
+				return fmt.Errorf("no providers configured")
 			}
-			printProviderParams(name, cp)
-			return nil
+		} else if targetProvider != "" {
+			names = []string{targetProvider}
+		} else {
+			// No args, no --all: show the first (or only) provider
+			if tc != nil {
+				for n := range tc.Provider {
+					names = append(names, n)
+				}
+				sort.Strings(names)
+			}
+			if len(names) == 0 {
+				return fmt.Errorf("no providers configured")
+			}
+			names = []string{names[0]}
 		}
 
-		return fmt.Errorf("failed to parse response: %s", string(body))
+		for _, name := range names {
+			fmt.Printf("Provider: %s\n", name)
+			fmt.Println()
+			for _, fd := range config.ConfigFieldDescriptors {
+				if fd.Scope != config.FieldScopeProvider {
+					continue
+				}
+				val, _ := getFieldValue(tc, name, &fd)
+				fmt.Printf("  %-30s %s\n", fd.DisplayName+":", maskSensitiveValue(&fd, val))
+			}
+		}
+		return nil
 	},
 }
 
 var configGetCmd = &cobra.Command{
 	Use:   "get <key> [provider]",
 	Short: "Get a runtime parameter",
-	Long: `Display the current value of a single runtime-configurable parameter.
+	Long: `Display the current value of a single runtime-configurable parameter from the config file.
 
-	Valid keys: http_timeout_sec, max_retries, cooldown_sec, backoff_cap_sec,
-	backoff_multiplier, cb_reset_sec, upstream_cb_threshold, log_level
+	Valid keys: port, log_file, target, cooldown_sec, max_retries,
+	backoff_cap_sec, backoff_multiplier, cb_reset_sec, upstream_cb_threshold,
+	http_timeout_sec, health_check_interval_sec, log_level,
+	disable_thinking, genai_model, admin_token, keys_file, key_selection
 
 	Examples:
 	  akswitch config get http_timeout_sec
@@ -264,94 +277,67 @@ var configGetCmd = &cobra.Command{
 	  akswitch config get log_level --all`,
 	Args: cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := NewAdminClient(5*time.Second, "")
-		if err != nil {
-			return fmt.Errorf("server not reachable: %w", err)
-		}
 		key := args[0]
 		all, _ := cmd.Flags().GetBool("all")
 
+		fd := config.FindField(key)
+		if fd == nil {
+			return fmt.Errorf("unknown config key %q (use 'config list' to see available keys)", key)
+		}
+
+		var providers []string
+		var tc *config.TomlConfig
 		if all {
-			providers, err := doRuntimeConfigGet(client, "?provider=all")
+			source, err := config.XDGConfigPath()
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to determine config path: %w", err)
 			}
-
-			names := make([]string, 0, len(providers))
-			for n := range providers {
-				names = append(names, n)
+			tc, err = config.LoadTomlConfig(source)
+			if err != nil {
+				return fmt.Errorf("failed to load config: %w", err)
 			}
-			sort.Strings(names)
-
-			for _, name := range names {
-				params, ok := providers[name].(map[string]interface{})
-				if !ok {
-					continue
-				}
-				val, hasKey := params[key]
-				if !hasKey {
-					continue
-				}
-				switch v := val.(type) {
-				case float64:
-					if v == float64(int(v)) {
-						fmt.Printf("%s: %d\n", name, int(v))
-					} else {
-						fmt.Printf("%s: %.1f\n", name, v)
-					}
-				default:
-					fmt.Printf("%s: %v\n", name, v)
+			if tc != nil {
+				for n := range tc.Provider {
+					providers = append(providers, n)
 				}
 			}
+			sort.Strings(providers)
+		} else if fd.Scope == config.FieldScopeProvider {
+			if len(args) < 2 {
+				return fmt.Errorf("%s requires a provider name (or --all)", key)
+			}
+			providers = []string{args[1]}
+			source, err := config.XDGConfigPath()
+			if err != nil {
+				return fmt.Errorf("failed to determine config path: %w", err)
+			}
+			tc, err = config.LoadTomlConfig(source)
+			if err != nil {
+				return fmt.Errorf("failed to load config: %w", err)
+			}
+		} else {
+			// Global field — no provider needed
+			source, err := config.XDGConfigPath()
+			if err != nil {
+				return fmt.Errorf("failed to determine config path: %w", err)
+			}
+			tc, err := config.LoadTomlConfig(source)
+			if err != nil {
+				return fmt.Errorf("failed to load config: %w", err)
+			}
+			val, _ := getGlobalFieldValue(tc, fd)
+			fmt.Println(maskSensitiveValue(fd, val))
 			return nil
 		}
 
-		params := url.Values{}
-		params.Set("key", key)
-		if len(args) > 1 {
-			params.Set("provider", args[1])
-		}
-		path := "/api/runtime-config?" + params.Encode()
-
-		resp, err := client.Get(path)
-		if err != nil {
-			return fmt.Errorf("server not reachable: %w", err)
-		}
-		defer func() { _ = resp.Body.Close() }()
-
-		body, _ := io.ReadAll(resp.Body)
-
-		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-			return fmt.Errorf("auth failed (HTTP %d): check X-Admin-Token in server config", resp.StatusCode)
-		}
-		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("API error (HTTP %d): %s", resp.StatusCode, string(body))
-		}
-
-		var result struct {
-			Provider string      `json:"provider"`
-			Key      string      `json:"key"`
-			Value    interface{} `json:"value"`
-		}
-		if err := json.Unmarshal(body, &result); err != nil {
-			return fmt.Errorf("failed to parse response: %w", err)
-		}
-
-		if result.Value == nil {
-			return fmt.Errorf("unknown key %q for provider %q", key, result.Provider)
-		}
-
-		switch val := result.Value.(type) {
-		case float64:
-			if val == float64(int(val)) {
-				fmt.Printf("%d\n", int(val))
+		for _, p := range providers {
+			val, _ := getFieldValue(tc, p, fd)
+			if all {
+				fmt.Printf("%s: %s\n", p, maskSensitiveValue(fd, val))
 			} else {
-				fmt.Printf("%.1f\n", val)
+				fmt.Println(maskSensitiveValue(fd, val))
 			}
-		default:
-			fmt.Printf("%v\n", result.Value)
 		}
-
 		return nil
 	},
 }
@@ -361,143 +347,273 @@ var configSetCmd = &cobra.Command{
 	Short: "Set a runtime parameter",
 	Long: `Change a runtime-configurable parameter immediately.
 
-	Use --persist to also write the change to the config file.
+	Use --runtime-only to apply without persisting to the config file.
 
-	Valid keys: http_timeout_sec, max_retries, cooldown_sec, backoff_cap_sec,
-	backoff_multiplier, cb_reset_sec, upstream_cb_threshold, log_level
+	Valid keys: port, log_file, target, cooldown_sec, max_retries,
+	backoff_cap_sec, backoff_multiplier, cb_reset_sec, upstream_cb_threshold,
+	http_timeout_sec, health_check_interval_sec, log_level,
+	disable_thinking, genai_model, admin_token, keys_file, key_selection
 
 	Examples:
 	  akswitch config set http_timeout_sec 60
-	  akswitch config set max_retries 5 --persist
+	  akswitch config set max_retries 5 --runtime-only
 	  akswitch config set log_level debug sensenova
-	  akswitch config set log_level info --all --persist`,
+	  akswitch config set log_level info --all`,
 	Args: cobra.RangeArgs(2, 3),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := NewAdminClient(5*time.Second, "")
-		if err != nil {
-			return fmt.Errorf("server not reachable: %w", err)
-		}
 		key := args[0]
-		value := args[1]
+		valueStr := args[1]
+		runtimeOnly, _ := cmd.Flags().GetBool("runtime-only")
 
-		all, _ := cmd.Flags().GetBool("all")
-		persist, _ := cmd.Flags().GetBool("persist")
-
-		params := url.Values{}
-		if all {
-			params.Set("provider", "all")
-		} else if len(args) > 2 {
-			params.Set("provider", args[2])
-		}
-		if persist {
-			params.Set("persist", "true")
+		fd := config.FindField(key)
+		if fd == nil {
+			return fmt.Errorf("unknown config key %q (use 'config list' to see available keys)", key)
 		}
 
-		path := "/api/runtime-config?" + params.Encode()
-
-		// Build payload using json.Marshal for proper escaping
-		payloadMap := map[string]interface{}{"key": key}
-		if v, err := strconv.ParseFloat(value, 64); err == nil {
-			payloadMap["value"] = v
-		} else {
-			payloadMap["value"] = value
-		}
-		payloadBytes, _ := json.Marshal(payloadMap)
-		payload := string(payloadBytes)
-
-		resp, err := client.Post(path, "application/json", strings.NewReader(payload))
+		parsed, err := fd.Parse(valueStr)
 		if err != nil {
-			return fmt.Errorf("server not reachable: %w", err)
-		}
-		defer func() { _ = resp.Body.Close() }()
-
-		body, _ := io.ReadAll(resp.Body)
-		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-			return fmt.Errorf("auth failed (HTTP %d): check X-Admin-Token in server config", resp.StatusCode)
-		}
-		if resp.StatusCode != http.StatusOK {
-			var errResult struct {
-				Error string `json:"error"`
-			}
-			if json.Unmarshal(body, &errResult) == nil {
-				return fmt.Errorf("failed to set %s: %s", key, errResult.Error)
-			}
-			return fmt.Errorf("failed to set %s (HTTP %d)", key, resp.StatusCode)
+			return fmt.Errorf("invalid value for %s: %w", key, err)
 		}
 
-		var result struct {
-			Provider  string      `json:"provider"`
-			Key       string      `json:"key"`
-			Value     interface{} `json:"value"`
-			Persisted bool        `json:"persisted"`
-		}
-		if err := json.Unmarshal(body, &result); err != nil {
-			return fmt.Errorf("failed to parse response: %w", err)
+		if err := validateFieldRange(fd, valueStr); err != nil {
+			return err
 		}
 
-		switch val := result.Value.(type) {
-		case float64:
-			if val == float64(int(val)) {
-				fmt.Printf("set %s = %d", result.Key, int(val))
+		if fd.ReadOnly {
+			return fmt.Errorf("%s cannot be changed at runtime — edit the TOML config file and reload", key)
+		}
+
+		// For provider-scoped fields, require provider argument
+		provider := ""
+		if fd.Scope == config.FieldScopeProvider {
+			all, _ := cmd.Flags().GetBool("all")
+			if all {
+				provider = "all"
+			} else if len(args) > 2 {
+				provider = args[2]
 			} else {
-				fmt.Printf("set %s = %.1f", result.Key, val)
+				return fmt.Errorf("%s requires a provider name (or --all)", key)
 			}
-		default:
-			fmt.Printf("set %s = %v", result.Key, result.Value)
-		}
-		if result.Persisted {
-			fmt.Println(" (persisted)")
-		} else {
-			fmt.Println()
 		}
 
+		// Resolve provider list (expand "all" to actual provider names)
+		var providerList []string
+		if provider == "all" {
+			source, err := config.XDGConfigPath()
+			if err != nil {
+				return fmt.Errorf("failed to determine config path: %w", err)
+			}
+			tc, err := config.LoadTomlConfig(source)
+			if err != nil {
+				return fmt.Errorf("failed to load config: %w", err)
+			}
+			for name := range tc.Provider {
+				providerList = append(providerList, name)
+			}
+			if len(providerList) == 0 {
+				return fmt.Errorf("no providers configured for --all")
+			}
+			sort.Strings(providerList)
+		} else {
+			providerList = []string{provider}
+		}
+
+		// Validate providers exist before any modifications
+		if fd.Scope == config.FieldScopeProvider && provider != "all" {
+			source, err := config.XDGConfigPath()
+			if err != nil {
+				return fmt.Errorf("failed to determine config path: %w", err)
+			}
+			tc, err := config.LoadTomlConfig(source)
+			if err != nil {
+				return fmt.Errorf("failed to load config: %w", err)
+			}
+			for _, p := range providerList {
+				if _, ok := tc.Provider[p]; !ok {
+					return fmt.Errorf("provider %q not found in config — run 'provider add' first", p)
+				}
+			}
+		}
+
+		// 1. Apply to runtime (call server API for provider-scoped runtime-editable fields)
+		if fd.Scope == config.FieldScopeProvider && fd.RuntimeEditable {
+			for _, p := range providerList {
+				if err := applyRuntimeField(p, fd, parsed); err != nil {
+					return err
+				}
+			}
+		}
+
+		// 2. Persist to TOML
+		if !runtimeOnly {
+			for _, p := range providerList {
+				if err := persistFieldToToml(p, fd, parsed); err != nil {
+					return err
+				}
+			}
+		}
+
+		fmt.Printf("set %s = %s", key, fd.Format(parsed))
+		if runtimeOnly {
+			fmt.Println(" (runtime only)")
+		} else {
+			fmt.Println(" (persisted)")
+		}
 		return nil
 	},
 }
 
-// doRuntimeConfigGet sends a GET to the runtime-config endpoint and returns
-// the providers map (provider_name -> params_map). The baseURL param contains
-// only the query string portion (e.g. "?provider=all").
-func doRuntimeConfigGet(client *AdminClient, baseURL string) (map[string]interface{}, error) {
-	req, err := http.NewRequest(http.MethodGet, client.baseURL+baseURL, nil)
+// applyRuntimeField sends a runtime-config update to the server for a provider-scoped field.
+func applyRuntimeField(provider string, fd *config.ConfigFieldDescriptor, value any) error {
+	client, err := NewAdminClient(5*time.Second, provider)
 	if err != nil {
-		return nil, fmt.Errorf("server not reachable: %w", err)
+		return fmt.Errorf("server not reachable: %w", err)
 	}
 
-	resp, err := client.Do(req)
+	// Build POST to /api/runtime-config
+	payloadMap := map[string]interface{}{"key": fd.Key}
+	switch v := value.(type) {
+	case int:
+		payloadMap["value"] = float64(v)
+	case float64:
+		payloadMap["value"] = v
+	default:
+		payloadMap["value"] = value
+	}
+	payloadBytes, _ := json.Marshal(payloadMap)
+
+	path := "/api/runtime-config"
+	if provider != "" && provider != "all" {
+		path += "?provider=" + url.QueryEscape(provider)
+	} else if provider == "all" {
+		path += "?provider=all"
+	}
+
+	resp, err := client.Post(path, "application/json", bytes.NewReader(payloadBytes))
 	if err != nil {
-		return nil, fmt.Errorf("server not reachable: %w", err)
+		return fmt.Errorf("server not reachable: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
-
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		return nil, fmt.Errorf("auth failed (HTTP %d): check X-Admin-Token in server config", resp.StatusCode)
+		return fmt.Errorf("auth failed (HTTP %d): check X-Admin-Token in server config", resp.StatusCode)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API error (HTTP %d): %s", resp.StatusCode, string(body))
+		return fmt.Errorf("API error (HTTP %d): %s", resp.StatusCode, string(body))
 	}
-
-	var providers map[string]interface{}
-	if err := json.Unmarshal(body, &providers); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %s", string(body))
-	}
-	return providers, nil
+	return nil
 }
 
-// printProviderParams prints a provider's runtime parameters.
-func printProviderParams(provider string, cp config.ConfigPayload) {
-	fmt.Printf("Provider: %s\n", provider)
-	fmt.Println()
-
-	fields := []struct{ label, value string }{
-		{"TargetBase:", cp.TargetBase},
-		{"Keys:", fmt.Sprintf("%v", cp.Keys)},
+// persistFieldToToml writes a parsed value into the TOML config file.
+// For provider-scoped fields, the value goes into tc.Provider[provider].
+// For global fields, the value goes into tc directly.
+func persistFieldToToml(provider string, fd *config.ConfigFieldDescriptor, value any) error {
+	source, err := config.XDGConfigPath()
+	if err != nil {
+		return fmt.Errorf("persistFieldToToml: %w", err)
 	}
-	for _, f := range fields {
-		if f.value != "" {
-			fmt.Printf("  %-25s %s\n", f.label, f.value)
+	tc, err := config.LoadTomlConfig(source)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("persistFieldToToml: %w", err)
+	}
+	if tc == nil {
+		tc = &config.TomlConfig{Provider: make(map[string]*config.Config)}
+	}
+
+	if fd.Scope == config.FieldScopeProvider {
+		// Provider-scoped: ensure provider entry exists
+		targetConfig, ok := tc.Provider[provider]
+		if !ok {
+			targetConfig = &config.Config{}
+			tc.Provider[provider] = targetConfig
+		}
+		fd.Persist(tc, provider, targetConfig, value)
+	} else {
+		// Global field: persist directly into tc
+		fd.Persist(tc, "", nil, value)
+	}
+
+	dir := filepath.Dir(source)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create config directory %s: %w", dir, err)
+	}
+	return config.SaveTomlConfig(tc, source)
+}
+
+// maskSensitiveValue returns a safe representation for sensitive fields
+// (e.g. admin_token). Non-sensitive fields pass through unchanged.
+func maskSensitiveValue(fd *config.ConfigFieldDescriptor, val any) string {
+	if fd.Key == "admin_token" {
+		if s, ok := val.(string); ok && s != "" {
+			return "(set)"
+		}
+		return "(not set)"
+	}
+	if fd.Key == "keys_file" {
+		if s, ok := val.(string); ok && s != "" {
+			return "(set)"
+		}
+		return "(not set)"
+	}
+	return fd.Format(val)
+}
+
+// getFieldValue reads a provider-scoped field value from a loaded TOML config.
+// Falls back to the field's default if the config is missing or unset.
+func getFieldValue(tc *config.TomlConfig, provider string, fd *config.ConfigFieldDescriptor) (any, error) {
+	if tc != nil {
+		if p, ok := tc.Provider[provider]; ok && p != nil {
+			switch fd.Key {
+			case "target":
+				return p.TargetBase, nil
+			case "cooldown_sec":
+				return p.CooldownSec, nil
+			case "max_retries":
+				return p.MaxRetries, nil
+			case "backoff_cap_sec":
+				return p.BackoffCapSec, nil
+			case "backoff_multiplier":
+				return p.BackoffMultiplier, nil
+			case "cb_reset_sec":
+				return p.CBResetSec, nil
+			case "upstream_cb_threshold":
+				return p.UpstreamCBThreshold, nil
+			case "http_timeout_sec":
+				return p.HTTPTimeoutSec, nil
+			case "log_level":
+				return p.LogLevel, nil
+			case "health_check_interval_sec":
+				return p.HealthCheckIntervalSec, nil
+			case "admin_token":
+				if p.AdminToken != "" {
+					return p.AdminToken, nil
+				}
+				return "", nil
+			case "disable_thinking":
+				return p.DisableThinking, nil
+			case "genai_model":
+				return p.GenaiModel, nil
+			case "keys_file":
+				return p.KeysFile, nil
+			case "key_selection":
+				return p.KeySelection, nil
+			}
 		}
 	}
+	// Fall back to default value
+	return config.ParseDefault(fd)
+}
+
+// getGlobalFieldValue reads a global-scoped field value from a loaded TOML config.
+func getGlobalFieldValue(tc *config.TomlConfig, fd *config.ConfigFieldDescriptor) (any, error) {
+	if tc != nil {
+		switch fd.Key {
+		case "port":
+			return tc.Port, nil
+		case "log_file":
+			return tc.LogFile, nil
+		}
+	}
+	return config.ParseDefault(fd)
 }

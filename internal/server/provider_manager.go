@@ -65,17 +65,31 @@ func (pm *ProviderManager) LookupProvider(name string) *ProviderState {
 func (pm *ProviderManager) FirstProvider() *ProviderState {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
-	for _, ps := range pm.providers {
-		return ps
+
+	var first string
+	for name := range pm.providers {
+		if first == "" || name < first {
+			first = name
+		}
 	}
-	return nil
+	if first == "" {
+		return nil
+	}
+	return pm.providers[first]
 }
 
-// ForEach iterates over all providers.
+// ForEach iterates over a snapshot of all providers.
+// The snapshot is copied under the read lock, then the callback
+// executes without holding the lock to avoid deadlocks.
 func (pm *ProviderManager) ForEach(fn func(name string, ps *ProviderState)) {
 	pm.mu.RLock()
-	defer pm.mu.RUnlock()
+	providers := make(map[string]*ProviderState, len(pm.providers))
 	for name, ps := range pm.providers {
+		providers[name] = ps
+	}
+	pm.mu.RUnlock()
+
+	for name, ps := range providers {
 		fn(name, ps)
 	}
 }
@@ -103,6 +117,7 @@ func (pm *ProviderManager) ReloadConfig(providers map[string]*config.Config, log
 			}
 			existing.config = cfg
 			existing.pool = keypool.NewKeyPool(cfg.Keys, cfg.KeyNames)
+			existing.pool.SetSelectionMode(keypool.KeySelectionMode(cfg.KeySelection))
 			existing.ConfigurePoolCBs(
 				time.Duration(cfg.CooldownSec)*time.Second,
 				time.Duration(cfg.BackoffCapSec)*time.Second,

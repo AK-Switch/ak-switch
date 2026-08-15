@@ -56,12 +56,10 @@ grafana-data/
 # Claude Code worktrees (runtime checkouts, not project code)
 .claude/worktrees/
 
-# Superpowers process docs (plans, specs) - generated per-session, not tracked
-docs/superpowers/
-
 # Archived docs - packed zip, not tracked
 docs-archive/
 
 # Private skills - not tracked
 .claude/skills/remote-monitoring/
 internal/server/keys.json
+bin/

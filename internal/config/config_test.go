@@ -195,7 +195,6 @@ func TestConfig_HealthCheckTimeoutTooSmall(t *testing.T) {
 	}
 }
 
-
 // ============================================================
 // mergeDefaults 测试
 // ============================================================
@@ -257,11 +256,11 @@ func TestMergeDefaults_EmptyConfig(t *testing.T) {
 
 func TestMergeDefaults_PreservesSetValues(t *testing.T) {
 	cfg := &Config{ProviderConfig: ProviderConfig{
-		Port:            9090,
-		Host:            "0.0.0.0",
-		CooldownSec:     45,
-		MaxRetries:      7,
-		BackoffCapSec:   300,
+		Port:              9090,
+		Host:              "0.0.0.0",
+		CooldownSec:       45,
+		MaxRetries:        7,
+		BackoffCapSec:     300,
 		BackoffMultiplier: 3.5,
 	}}
 	cfg.mergeDefaults()
@@ -455,7 +454,7 @@ target = "https://api.example.com"
 	}
 	// CooldownSec should use default from DefaultConfig
 	if cfg.CooldownSec != 15 {
-		t.Errorf("CooldownSec = %d, want default 60", cfg.CooldownSec)
+		t.Errorf("CooldownSec = %d, want default 15", cfg.CooldownSec)
 	}
 	// MaxRetries should use default from DefaultConfig
 	if cfg.MaxRetries != 1 {
@@ -585,7 +584,7 @@ target = "https://myapi.example.com"
 		t.Errorf("Port = %d, want default 8080", cfg.Port)
 	}
 	if cfg.CooldownSec != 15 {
-		t.Errorf("CooldownSec = %d, want default 60", cfg.CooldownSec)
+		t.Errorf("CooldownSec = %d, want default 15", cfg.CooldownSec)
 	}
 	if cfg.MaxRetries != 1 {
 		t.Errorf("MaxRetries = %d, want default 1", cfg.MaxRetries)
@@ -967,7 +966,7 @@ target = "https://api.example.com"
 		t.Errorf("Port = %d, want default 8080", cfg.Port)
 	}
 	if cfg.CooldownSec != 15 {
-		t.Errorf("CooldownSec = %d, want default 60", cfg.CooldownSec)
+		t.Errorf("CooldownSec = %d, want default 15", cfg.CooldownSec)
 	}
 	if cfg.MaxRetries != 1 {
 		t.Errorf("MaxRetries = %d, want default 1", cfg.MaxRetries)
@@ -1016,28 +1015,53 @@ func TestFindServerPort_FirstProviderPicked(t *testing.T) {
 
 func TestDefaultProviderConfig(t *testing.T) {
 	pc := DefaultProviderConfig()
-	if pc.Port != 8080 { t.Errorf("Port = %d, want 8080", pc.Port) }
-	if pc.Host != "127.0.0.1" { t.Errorf("Host = %q, want %q", pc.Host, "127.0.0.1") }
-	if pc.TargetBase != "" { t.Errorf("TargetBase should be empty, got %q", pc.TargetBase) }
-	if pc.MaxRetries != 1 { t.Errorf("MaxRetries = %d, want 1", pc.MaxRetries) }
-	if pc.CooldownSec != 15 { t.Errorf("CooldownSec = %d, want 15", pc.CooldownSec) }
-	if pc.HealthCheckPath != "/health" { t.Errorf("HealthCheckPath = %q, want %q", pc.HealthCheckPath, "/health") }
-	if pc.CalibrationIntervalSec != 3600 { t.Errorf("CalibrationIntervalSec = %d, want 3600", pc.CalibrationIntervalSec) }
+	if pc.Port != 8080 {
+		t.Errorf("Port = %d, want 8080", pc.Port)
+	}
+	if pc.Host != "127.0.0.1" {
+		t.Errorf("Host = %q, want %q", pc.Host, "127.0.0.1")
+	}
+	if pc.TargetBase != "" {
+		t.Errorf("TargetBase should be empty, got %q", pc.TargetBase)
+	}
+	if pc.MaxRetries != 1 {
+		t.Errorf("MaxRetries = %d, want 1", pc.MaxRetries)
+	}
+	if pc.CooldownSec != 15 {
+		t.Errorf("CooldownSec = %d, want 15", pc.CooldownSec)
+	}
+	if pc.HealthCheckPath != "/health" {
+		t.Errorf("HealthCheckPath = %q, want %q", pc.HealthCheckPath, "/health")
+	}
+	if pc.CalibrationIntervalSec != 3600 {
+		t.Errorf("CalibrationIntervalSec = %d, want 3600", pc.CalibrationIntervalSec)
+	}
 }
 
 func TestDefaultRuntimeConfig(t *testing.T) {
 	rc := DefaultRuntimeConfig()
-	if rc.HTTPTimeoutSec != 30 { t.Errorf("HTTPTimeoutSec = %d, want 30", rc.HTTPTimeoutSec) }
-	if rc.MaxRetries != 1 { t.Errorf("MaxRetries = %d, want 1", rc.MaxRetries) }
-	if rc.CooldownSec != 15 { t.Errorf("CooldownSec = %d, want 15", rc.CooldownSec) }
-	if rc.LogLevel != "info" { t.Errorf("LogLevel = %q, want %q", rc.LogLevel, "info") }
+	if rc.HTTPTimeoutSec != 30 {
+		t.Errorf("HTTPTimeoutSec = %d, want 30", rc.HTTPTimeoutSec)
+	}
+	if rc.MaxRetries != 1 {
+		t.Errorf("MaxRetries = %d, want 1", rc.MaxRetries)
+	}
+	if rc.CooldownSec != 15 {
+		t.Errorf("CooldownSec = %d, want 15", rc.CooldownSec)
+	}
+	if rc.LogLevel != "info" {
+		t.Errorf("LogLevel = %q, want %q", rc.LogLevel, "info")
+	}
 }
 
 func TestProviderConfig_Validate_PortRange(t *testing.T) {
 	pc := DefaultProviderConfig()
 	pc.TargetBase = "https://example.com"
 	pc.Keys = []string{"key1"}
-	tests := []struct{ port int; wantErr bool }{
+	tests := []struct {
+		port    int
+		wantErr bool
+	}{
 		{0, true}, {-1, true}, {65536, true}, {8080, false},
 	}
 	for _, tt := range tests {
@@ -1050,7 +1074,10 @@ func TestProviderConfig_Validate_PortRange(t *testing.T) {
 }
 
 func TestRuntimeConfig_Validate_HTTPTimeoutSec(t *testing.T) {
-	tests := []struct{ sec int; wantErr bool }{
+	tests := []struct {
+		sec     int
+		wantErr bool
+	}{
 		{0, true}, {-1, true}, {1, false}, {30, false},
 	}
 	for _, tt := range tests {
@@ -1063,7 +1090,10 @@ func TestRuntimeConfig_Validate_HTTPTimeoutSec(t *testing.T) {
 }
 
 func TestProviderConfig_Validate_HealthCheckTimeoutSec(t *testing.T) {
-	tests := []struct{ sec int; wantErr bool }{
+	tests := []struct {
+		sec     int
+		wantErr bool
+	}{
 		{0, true}, {-1, true}, {1, false}, {5, false},
 	}
 	for _, tt := range tests {
@@ -1080,12 +1110,73 @@ func TestProviderConfig_Validate_HealthCheckTimeoutSec(t *testing.T) {
 
 func TestConfig_BackwardCompatibility(t *testing.T) {
 	cfg := DefaultConfig()
-	if cfg.Port != 8080 { t.Errorf("Port = %d, want 8080", cfg.Port) }
-	if cfg.HTTPTimeoutSec != 30 { t.Errorf("HTTPTimeoutSec = %d, want 30", cfg.HTTPTimeoutSec) }
-	if cfg.MaxRetries != 1 { t.Errorf("MaxRetries = %d, want 1", cfg.MaxRetries) }
+	if cfg.Port != 8080 {
+		t.Errorf("Port = %d, want 8080", cfg.Port)
+	}
+	if cfg.HTTPTimeoutSec != 30 {
+		t.Errorf("HTTPTimeoutSec = %d, want 30", cfg.HTTPTimeoutSec)
+	}
+	if cfg.MaxRetries != 1 {
+		t.Errorf("MaxRetries = %d, want 1", cfg.MaxRetries)
+	}
 
 	cfg.Port = 9090
 	cfg.HTTPTimeoutSec = 60
-	if cfg.Port != 9090 { t.Error("field mutation broken") }
-	if cfg.HTTPTimeoutSec != 60 { t.Error("field mutation broken") }
+	if cfg.Port != 9090 {
+		t.Error("field mutation broken")
+	}
+	if cfg.HTTPTimeoutSec != 60 {
+		t.Error("field mutation broken")
+	}
+}
+
+func TestSaveTomlConfig_OmitZeroValues(t *testing.T) {
+	tc := &TomlConfig{
+		Provider: map[string]*Config{
+			"test": {
+				ProviderConfig: ProviderConfig{
+					Port:       7070,
+					TargetBase: "https://example.com",
+					// CooldownSec, MaxRetries, etc. left at zero
+				},
+			},
+		},
+	}
+	tmpDir := t.TempDir()
+	tomlPath := filepath.Join(tmpDir, "omit_zero.toml")
+	if err := SaveTomlConfig(tc, tomlPath); err != nil {
+		t.Fatalf("SaveTomlConfig() error: %v", err)
+	}
+
+	data, err := os.ReadFile(tomlPath)
+	if err != nil {
+		t.Fatalf("ReadFile error: %v", err)
+	}
+	output := string(data)
+
+	zeroValueFields := []string{
+		"cooldown_sec",
+		"max_retries",
+		"backoff_cap_sec",
+		"backoff_multiplier",
+		"cb_reset_sec",
+		"upstream_cb_threshold",
+		"http_timeout_sec",
+		"health_check_interval_sec",
+		"log_max_size",
+		"log_max_age",
+		"calibration_interval_sec",
+	}
+	for _, f := range zeroValueFields {
+		if strings.Contains(output, f) {
+			t.Errorf("TOML should not contain zero-value %s", f)
+		}
+	}
+
+	required := []string{"port", "target", "provider"}
+	for _, f := range required {
+		if !strings.Contains(output, f) {
+			t.Errorf("TOML must contain %s", f)
+		}
+	}
 }

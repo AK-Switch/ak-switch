@@ -3,11 +3,17 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -62,12 +68,12 @@ func newHTTPResponse(statusCode int, body string) *http.Response {
 
 func TestCategorizeError_NonRetryableCodes(t *testing.T) {
 	codes := map[int]ErrorCategory{
-		http.StatusBadRequest:          CatNonRetryable,
-		http.StatusMethodNotAllowed:    CatNonRetryable,
-		http.StatusNotAcceptable:       CatNonRetryable,
+		http.StatusBadRequest:            CatNonRetryable,
+		http.StatusMethodNotAllowed:      CatNonRetryable,
+		http.StatusNotAcceptable:         CatNonRetryable,
 		http.StatusRequestEntityTooLarge: CatNonRetryable,
-		http.StatusUnprocessableEntity: CatNonRetryable,
-		http.StatusNotImplemented:      CatNonRetryable,
+		http.StatusUnprocessableEntity:   CatNonRetryable,
+		http.StatusNotImplemented:        CatNonRetryable,
 	}
 	for code, want := range codes {
 		got := categorizeError(code, nil)
@@ -210,12 +216,15 @@ func TestHandleServerError_RecordsUpstreamFailure(t *testing.T) {
 
 func TestHandleNonRetryable_PassthroughStatus(t *testing.T) {
 	ps := newTestProviderState(t, "test", []string{"key-a"})
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
 	px, _, _ := newProxyExecutor(t)
 
 	w := httptest.NewRecorder()
 	resp := newHTTPResponse(http.StatusBadRequest, `{"error":"bad request"}`)
 
-	px.handleNonRetryable(w, ps, 0, resp, testStartTime(), "GET", "http://upstream/", []byte(`{"error":"bad request"}`), 0)
+	px.handleNonRetryable(w, ps, 0, resp, testStartTime(), "GET", "http://upstream/", []byte(`{"error":"bad request"}`), 0, false)
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("response status = %d, want 400", w.Code)
@@ -232,7 +241,7 @@ func TestHandleSuccess_PassthroughBody(t *testing.T) {
 	resp := newHTTPResponse(http.StatusOK, string(body))
 	w := httptest.NewRecorder()
 
-	px.handleSuccess(w, ps, 0, resp, testStartTime(), "POST", "http://upstream/v1/chat", body, 0)
+	px.handleSuccess(w, ps, 0, resp, testStartTime(), 0, "POST", "http://upstream/v1/chat", body, 0, false)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("response status = %d, want 200", w.Code)
@@ -328,5 +337,228 @@ func TestStreamSSEAndEstimateTokens_EmptyStream(t *testing.T) {
 
 	if inputTokens < 0 || outputTokens < 0 {
 		t.Errorf("unexpected negative tokens: input=%d output=%d", inputTokens, outputTokens)
+	}
+}
+
+// ── Execute 4xx error dump ────────────────────────────
+
+func TestExecute_NonRetryable_WritesErrorDump(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"type":"error","error":{"type":"invalid_request_error","message":"bad"}}`))
+	}))
+	defer backend.Close()
+
+	ps := newTestProviderState(t, "test", []string{"sk-key-0"})
+	ps.config.TargetBase = backend.URL
+	ps.SetThinkingMode("rectify")
+	ps.SetRectifyThinkingMapTo("enabled")
+
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
+
+	px, _, _ := newProxyExecutor(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions",
+		strings.NewReader(`{"model":"gpt-4","thinking":{"type":"adaptive"}}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	px.Execute(w, req, ps)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Verify dump file exists with both bodies + metadata.
+	errorsDir := filepath.Join(tmpHome, ".akswitch", "errors")
+	entries, err := os.ReadDir(errorsDir)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("expected 1 dump in %s, got %v (err=%v)", errorsDir, entries, err)
+	}
+	data, err := os.ReadFile(filepath.Join(errorsDir, entries[0].Name()))
+	if err != nil {
+		t.Fatalf("read dump: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, `"thinking":{"type":"enabled"}`) {
+		t.Errorf("dump missing request body:\n%s", content)
+	}
+	if !strings.Contains(content, `invalid_request_error`) {
+		t.Errorf("dump missing response body:\n%s", content)
+	}
+	if !strings.Contains(content, "Rectified: true") {
+		t.Errorf("dump missing rectified flag:\n%s", content)
+	}
+}
+
+func TestExecute_NonRetryable_ClientStillGetsFullBody(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"full upstream error detail"}`))
+	}))
+	defer backend.Close()
+
+	ps := newTestProviderState(t, "test", []string{"sk-key-0"})
+	ps.config.TargetBase = backend.URL
+
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
+
+	px, _, _ := newProxyExecutor(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions",
+		strings.NewReader(`{"model":"gpt-4"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	px.Execute(w, req, ps)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+	if got := w.Body.String(); !strings.Contains(got, "full upstream error detail") {
+		t.Errorf("client body lost upstream error, got: %q", got)
+	}
+}
+
+func TestExecute_ThinkingRectifier_Enabled(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		if strings.Contains(string(body), `"type":"enabled"`) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"choices":[]}`))
+			return
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"thinking.type not supported"}`))
+	}))
+	defer backend.Close()
+
+	ps := newTestProviderState(t, "test", []string{"sk-key-0"})
+	ps.config.TargetBase = backend.URL
+	ps.SetThinkingMode("rectify")
+	ps.SetRectifyThinkingMapTo("enabled")
+
+	px, _, _ := newProxyExecutor(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions",
+		strings.NewReader(`{"model":"gpt-4","thinking":{"type":"adaptive"}}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	px.Execute(w, req, ps)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// ── TTFB regression ───────────────────────────────────
+
+// TestExecute_TtfbLessThanDuration verifies that ttfb_ms is sampled when the
+// upstream response headers arrive (client.Do returns), not after the full
+// stream has been consumed. Regression for commit 3479eb8 where ttfb_ms was
+// computed with time.Since(start) at the end of handleSuccess, making
+// ttfb_ms always equal to duration_ms.
+func TestExecute_TtfbLessThanDuration(t *testing.T) {
+	// Backend: send headers + flush immediately, then delay the body to
+	// simulate a streaming LLM response.
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		time.Sleep(500 * time.Millisecond)
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}" + "\n\n"))
+	}))
+	defer backend.Close()
+
+	ps := newTestProviderState(t, "test", []string{"sk-key-0"})
+	ps.config.TargetBase = backend.URL
+
+	px, _, _ := newProxyExecutor(t)
+
+	// Capture slog output to inspect ttfb_ms / duration_ms.
+	var logBuf bytes.Buffer
+	orig := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	defer slog.SetDefault(orig)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions",
+		strings.NewReader(`{"model":"gpt-4"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	px.Execute(w, req, ps)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Parse ttfb_ms / duration_ms from the "proxy success" log line.
+	ttfb, dur := parseTtfbAndDuration(t, logBuf.String())
+	if dur <= ttfb {
+		t.Fatalf("ttfb_ms=%d should be strictly less than duration_ms=%d for streaming responses", ttfb, dur)
+	}
+	if ttfb < 0 || dur < 0 {
+		t.Fatalf("failed to parse timing from log: %q", logBuf.String())
+	}
+}
+
+// parseTtfbAndDuration extracts ttfb_ms and duration_ms from a slog
+// TextHandler output line containing "proxy success".
+// Returns (-1, -1) when the log line is missing or unparsable.
+func parseTtfbAndDuration(t *testing.T, logOutput string) (int64, int64) {
+	t.Helper()
+	ttfbRe := regexp.MustCompile(`ttfb_ms=(\d+)`)
+	durRe := regexp.MustCompile(`duration_ms=(\d+)`)
+
+	var ttfb, dur = int64(-1), int64(-1)
+	for _, line := range strings.Split(logOutput, "\n") {
+		if !strings.Contains(line, "proxy success") {
+			continue
+		}
+		if m := ttfbRe.FindStringSubmatch(line); m != nil {
+			ttfb, _ = strconv.ParseInt(m[1], 10, 64)
+		}
+		if m := durRe.FindStringSubmatch(line); m != nil {
+			dur, _ = strconv.ParseInt(m[1], 10, 64)
+		}
+	}
+	return ttfb, dur
+}
+
+func TestExecute_ThinkingRectifier_Disabled(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		if strings.Contains(string(body), `"type":"adaptive"`) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"choices":[]}`))
+			return
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"unexpected thinking.type"}`))
+	}))
+	defer backend.Close()
+
+	ps := newTestProviderState(t, "test", []string{"sk-key-0"})
+	ps.config.TargetBase = backend.URL
+	ps.SetThinkingMode("default")
+
+	px, _, _ := newProxyExecutor(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions",
+		strings.NewReader(`{"model":"gpt-4","thinking":{"type":"adaptive"}}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	px.Execute(w, req, ps)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 }

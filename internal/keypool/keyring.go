@@ -126,6 +126,7 @@ func fallbackPasswordFunc(passwordFile string) keyring.PromptFunc {
 
 // setTestKeyring replaces the keyring backend for testing.
 // Must be called before the function under test, paired with resetTestKeyring.
+//
 //nolint:unused // used by test files in the same package
 func setTestKeyring(kr keyring.Keyring) {
 	keyringMu.Lock()
@@ -135,6 +136,7 @@ func setTestKeyring(kr keyring.Keyring) {
 }
 
 // resetTestKeyring clears the keyring backend (for testing).
+//
 //nolint:unused // used by test files in the same package
 func resetTestKeyring() {
 	keyringMu.Lock()
@@ -148,24 +150,6 @@ func keyringItemKey(provider string) string {
 	return "akswitch:" + provider
 }
 
-// saveToKeyring saves a provider's KeyStore to the system keyring.
-func saveToKeyring(provider string, store *KeyStore) error {
-	if err := initKeyring(); err != nil {
-		return fmt.Errorf("save keys for %q to keyring: %w. "+
-			"Hint: use --insecure-storage to bypass the system keyring (WARNING: keys stored in plaintext)", provider, err)
-	}
-	data, err := json.Marshal(store)
-	if err != nil {
-		return fmt.Errorf("save keys for %q: marshal keystore: %w", provider, err)
-	}
-	if err := keyringBackend.Set(keyring.Item{
-		Key:  keyringItemKey(provider),
-		Data: data,
-	}); err != nil {
-		return fmt.Errorf("save keys for %q to keyring: %w", provider, err)
-	}
-	return nil
-}
 
 // loadFromKeyring loads a provider's KeyStore from the system keyring.
 // Returns (nil, nil) if the provider has no stored keys.
