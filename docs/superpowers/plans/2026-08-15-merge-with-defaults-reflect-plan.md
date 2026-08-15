@@ -232,6 +232,7 @@ git add internal/config/config_defaults_test.go
 
 **Files:**
 - Modify: `internal/config/config.go:263-366` — 替换 `mergeWithDefaults` 实现
+- Modify: `internal/config/config.go:215-261` — `DeepCopy()` 补 `KeySelection` 字段（Task 1 RED 发现）
 - Test: 跑 Task 1 添加的测试
 
 **Interfaces:**
@@ -268,9 +269,19 @@ var mergeExcludeFields = map[string]struct{}{
 }
 ```
 
-- [ ] **Step 2: 替换 mergeWithDefaults 实现**
+- [ ] **Step 2: 修复 DeepCopy 补 KeySelection 字段**
 
-将 `mergeWithDefaults` 函数体（第 271-366 行）替换为：
+在 `DeepCopy` 函数的 `ProviderConfig` 字段列表中，`KeysFile` 行之前加一行：
+
+```go
+KeySelection: c.KeySelection,
+```
+
+`DeepCopy` 的手写字段清单也漏了 `KeySelection`（与 `mergeWithDefaults` 同样的遗漏问题）。Task 1 RED 测试显示 `KeySelection = ""`（零值）而非 `"polling"` 或 `"random"`，源自 `result := base.DeepCopy()` 不复制 KeySelection。反射版 `mergeWithDefaults` 依赖 `DeepCopy` 初始化 result，故必须修复此字段。
+
+- [ ] **Step 3: 替换 mergeWithDefaults 实现**
+
+将 `mergeWithDefaults` 函数体替换为：
 
 ```go
 func mergeWithDefaults(base, override *Config) *Config {
@@ -323,7 +334,7 @@ func mergeWithDefaults(base, override *Config) *Config {
 }
 ```
 
-- [ ] **Step 3: 更新函数注释**
+- [ ] **Step 4: 更新函数注释**
 
 将函数上方的注释（第 263-270 行）替换为：
 
@@ -334,28 +345,28 @@ func mergeWithDefaults(base, override *Config) *Config {
 // Fields in mergeExcludeFields are never inherited from base.
 ```
 
-- [ ] **Step 4: 运行测试验证全部通过**
+- [ ] **Step 5: 运行测试验证全部通过**
 
 ```bash
 go test -tags=unit -count=1 -short -run 'TestMergeWithDefaults' ./internal/config/
 ```
 Expected: 全部通过（包括新加的 KeySelection、AllFieldsInherit、OverridePriority）
 
-- [ ] **Step 5: 运行全量单元测试**
+- [ ] **Step 6: 运行全量单元测试**
 
 ```bash
 go test -tags=unit -count=1 -short ./internal/config/
 ```
 Expected: 全部通过
 
-- [ ] **Step 6: 运行 make check**
+- [ ] **Step 7: 运行 make check**
 
 ```bash
 make check
 ```
 Expected: lint + vet + fmt 全部通过
 
-- [ ] **Step 7: 提交两个文件**
+- [ ] **Step 8: 提交两个文件**
 
 ```bash
 git add internal/config/config.go internal/config/config_defaults_test.go
