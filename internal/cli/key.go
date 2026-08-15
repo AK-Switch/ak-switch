@@ -49,6 +49,10 @@ func updateKey(provider string, idx int, op KeyMutation) error {
 		desc += fmt.Sprintf(" (name: %s)", entry.Name)
 	}
 
+	if entry.Deleted {
+		return fmt.Errorf("key [%d] is deleted, use 'key restore' to recover it first", idx)
+	}
+
 	switch op {
 	case KeyEnable:
 		store.Keys[idx].Disabled = false
@@ -386,6 +390,10 @@ Examples:
 				idx, provider, len(store.Keys), len(store.Keys)-1)
 		}
 
+		if store.Keys[idx].Deleted {
+			return fmt.Errorf("key [%d] is deleted, use 'key restore' to recover it first", idx)
+		}
+
 		// Handle optional key value
 		if len(args) == 3 {
 			newKey := args[2]
@@ -432,19 +440,58 @@ Examples:
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		provider := args[0]
-		idx, err := resolveKeyIndex(cmd, args)
+
+		// Load store once and resolve index inline to avoid TOCTOU between
+		// resolveKeyIndex (which loads store internally for --by-name) and
+		// the subsequent LoadKeys for pool-index mapping.
+		store, err := keypool.LoadKeys(provider)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to load keys for %q: %w", provider, err)
 		}
 
-		// Try runtime API
-		runtimeErr := callKeyRuntimeAPI(provider, idx, "cooldown")
+		var idx int
+		if byName, _ := cmd.Flags().GetBool("by-name"); byName {
+			idx, err = findKeyIndexByName(store, args[1])
+			if err != nil {
+				return err
+			}
+		} else {
+			idx, err = strconv.Atoi(args[1])
+			if err != nil {
+				return fmt.Errorf("invalid index %q: must be a non-negative integer", args[1])
+			}
+		}
+
+		if idx < 0 || idx >= len(store.Keys) {
+			return fmt.Errorf("index %d out of range: provider %q has %d keys (valid: 0-%d)",
+				idx, provider, len(store.Keys), len(store.Keys)-1)
+		}
+		if store.Keys[idx].Deleted {
+			return fmt.Errorf("key [%d] is deleted, use 'key restore' to recover it first", idx)
+		}
+		poolIdx := storeIndexToPoolIndex(store, idx)
+		// Server parseKeyIndex (helpers.go) takes 1-based URL index, converts to 0-based
+		// internally with idx - 1. Pool index is 0-based, so +1 yields correct 1-based URL.
+		runtimeErr := callKeyRuntimeAPI(provider, poolIdx+1, "cooldown")
 		if runtimeErr == nil {
 			return nil
 		}
 
 		return fmt.Errorf("server not running — start akswitch to use runtime cooldown: %w", runtimeErr)
 	},
+}
+
+// storeIndexToPoolIndex maps a store index (0-based, covering all keys) to a
+// pool index (0-based, covering only non-Deleted keys). This is needed because
+// keysFromStore skips Deleted entries, so the pool on the server is compact.
+func storeIndexToPoolIndex(store *keypool.KeyStore, idx int) int {
+	poolIdx := 0
+	for i := 0; i < idx; i++ {
+		if !store.Keys[i].Deleted {
+			poolIdx++
+		}
+	}
+	return poolIdx
 }
 
 var keyListCmd = &cobra.Command{
@@ -458,7 +505,7 @@ Use --runtime to query the running server for live status including cooldown inf
 Example output:
   Keys for provider "nvidia":
     [0] sk-****xx  (active)
-    [1] sk-****yy  [disabled]
+    [1] sk-****yy  (disabled)
     [2] sk-****zz  (active)  name: my-key`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -549,8 +596,10 @@ var keyDisableCmd = &cobra.Command{
 	Long: `Mark an API key as disabled at the specified index or matching name.
 
 	Disabled keys are not used for new requests but remain in the key store.
+	Deleted keys cannot be disabled — use 'key restore' to recover them first.
 	Use --by-name to look up a key by its display name instead.
-	Use 'akswitch key remove' to permanently remove a key.
+	Use 'akswitch key remove' to soft-delete a key (recoverable via 'key restore').
+	Use 'akswitch key purge' to permanently remove deleted keys.
 
 	Examples:
 	  akswitch key disable nvidia 1
@@ -572,8 +621,8 @@ var keyEnableCmd = &cobra.Command{
 
 	The key will be used again for new requests.  The operation triggers a
 	reload so the server picks up the change.
+	Deleted keys cannot be enabled — use 'key restore' to recover them first.
 	Use --by-name to look up a key by its display name instead.
-
 	Examples:
 	  akswitch key enable nvidia 1
 	  akswitch key enable nvidia my-key --by-name`,
@@ -633,7 +682,8 @@ Examples:
 var keyRestoreCmd = &cobra.Command{
 	Use:   "restore <provider> <index>",
 	Short: "Restore a previously deleted API key",
-	Long: `Restore a soft-deleted API key. The key becomes active again.
+	Long: `Restore a soft-deleted API key. The key is no longer deleted and
+	appears in key list again. Use 'key enable' separately if it was disabled.
 Use --by-name to look up a key by its display name.
 Use 'key list --all' to see deleted keys.`,
 	Args: cobra.ExactArgs(2),
@@ -957,8 +1007,11 @@ func parseJSONL(data []byte) ([]keypool.KeyEntry, error) {
 // dedupEntries filters out entries whose keys already exist in the store.
 // Returns the deduplicated entries and the count of skipped duplicates.
 func dedupEntries(entries []keypool.KeyEntry, store *keypool.KeyStore) ([]keypool.KeyEntry, int) {
-	existing := make(map[string]bool, len(store.Keys))
+	existing := make(map[string]bool)
 	for _, e := range store.Keys {
+		if e.Deleted {
+			continue
+		}
 		existing[e.Key] = true
 	}
 	var newEntries []keypool.KeyEntry
@@ -1050,8 +1103,8 @@ func parseCSV(data []byte) ([]keypool.KeyEntry, error) {
 		"token": true, "secret": true, "apikey": true,
 	}
 	nameColNames := map[string]bool{
-		"name": true, "account_name": true, "username": true,
-		"user": true, "account": true, "备注": true,
+		"name": true, "key_name": true, "account_name": true,
+		"username": true, "user": true, "account": true, "备注": true,
 	}
 
 	contentStart := 0

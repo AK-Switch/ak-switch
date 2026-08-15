@@ -180,6 +180,59 @@ func TestDedupEntries_EmptyInput(t *testing.T) {
 	}
 }
 
+func TestDedupEntries_SkipsDeletedInStore(t *testing.T) {
+	tests := []struct {
+		name       string
+		entries    []keypool.KeyEntry
+		store      *keypool.KeyStore
+		wantSkip   int
+		wantNew    int
+		wantNewKey string
+	}{
+		{
+			name: "deleted key in store is not a duplicate",
+			entries: []keypool.KeyEntry{
+				{Key: "sk-111", Name: "alpha"},
+			},
+			store: &keypool.KeyStore{Keys: []keypool.KeyEntry{
+				{Key: "sk-111", Deleted: true},
+			}},
+			wantSkip:   0,
+			wantNew:    1,
+			wantNewKey: "sk-111",
+		},
+		{
+			name: "deleted key skipped, active key still deduped",
+			entries: []keypool.KeyEntry{
+				{Key: "sk-111", Name: "alpha"},
+				{Key: "sk-222", Name: "beta"},
+			},
+			store: &keypool.KeyStore{Keys: []keypool.KeyEntry{
+				{Key: "sk-111", Deleted: true},
+				{Key: "sk-222"},
+			}},
+			wantSkip:   1,
+			wantNew:    1,
+			wantNewKey: "sk-111",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			newEntries, skipped := dedupEntries(tt.entries, tt.store)
+			if skipped != tt.wantSkip {
+				t.Errorf("skipped = %d, want %d", skipped, tt.wantSkip)
+			}
+			if len(newEntries) != tt.wantNew {
+				t.Fatalf("len(newEntries) = %d, want %d", len(newEntries), tt.wantNew)
+			}
+			if tt.wantNewKey != "" && newEntries[0].Key != tt.wantNewKey {
+				t.Errorf("newEntries[0].Key = %q, want %q", newEntries[0].Key, tt.wantNewKey)
+			}
+		})
+	}
+}
+
 // ── autoNumberNames ───────────────────────────────────
 
 func TestAutoNumberNames_UniqueNames(t *testing.T) {
@@ -375,7 +428,6 @@ func TestKeyExportCmd_Success(t *testing.T) {
 	t.Run("export to stdout", func(t *testing.T) {
 		// Reset the --output flag between test cases
 		keyExportCmd.Flags().Set("output", "")
-		keyExportCmd.Flags().Changed("output")
 
 		out := runKeyExport(t, []string{"akswitch", "key", "export", provider})
 		var parsed keypool.KeyStore
@@ -634,6 +686,7 @@ func tTempDirForPackage() string {
 
 // setupKeyStore creates a provider with the given keys and soft-deletes the one
 // at delIndex (if >= 0). Returns the provider name.
+// delIndex convention: >= 0 means "delete the key at that index", -1 means "no deletion".
 func setupKeyStore(t *testing.T, entries []keypool.KeyEntry, delIndex int) string {
 	t.Helper()
 	provider := "test-restore-purge"
@@ -1002,6 +1055,165 @@ func TestKeyUpdateCmd_Behavior(t *testing.T) {
 	}
 }
 
+func TestKeyUpdateCmd_RejectDeleted(t *testing.T) {
+	tests := []struct {
+		name   string
+		args   []string
+		delIdx int
+	}{
+		{
+			name:   "deleted key with --name",
+			args:   []string{"akswitch", "key", "update", "PROVIDER", "0", "--name", "should-fail"},
+			delIdx: 0,
+		},
+		{
+			name:   "deleted key with new key value",
+			args:   []string{"akswitch", "key", "update", "PROVIDER", "0", "sk-new-value"},
+			delIdx: 0,
+		},
+		{
+			name:   "deleted key with --by-name",
+			args:   []string{"akswitch", "key", "update", "PROVIDER", "key-a", "sk-new-value", "--by-name"},
+			delIdx: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := setupKeyStore(t, []keypool.KeyEntry{
+				{Key: "sk-update-1", Name: "key-a"},
+				{Key: "sk-update-2", Name: "key-b"},
+			}, tt.delIdx)
+
+			// Reset flag state that may have been set by previous tests
+			for _, name := range []string{"name", "by-name"} {
+				if f := keyUpdateCmd.Flags().Lookup(name); f != nil {
+					f.Changed = false
+					if err := f.Value.Set(f.DefValue); err != nil {
+						t.Fatalf("reset flag %q: %v", name, err)
+					}
+				}
+			}
+
+			// Replace provider placeholder
+			args := make([]string, len(tt.args))
+			for i, a := range tt.args {
+				if a == "PROVIDER" {
+					args[i] = p
+				} else {
+					args[i] = a
+				}
+			}
+
+			origArgs := os.Args
+			origConfigDir := config.ConfigDir
+			os.Args = args
+			config.ConfigDir = testKeyDir
+			defer func() {
+				os.Args = origArgs
+				config.ConfigDir = origConfigDir
+			}()
+			err := keyUpdateCmd.Execute()
+			if err == nil {
+				t.Fatal("expected error for deleted key, got nil")
+			}
+			if !strings.Contains(err.Error(), "is deleted") {
+				t.Errorf("error = %q, want substring \"is deleted\"", err)
+			}
+		})
+	}
+}
+
+func TestKeyEnableDisableCmd_RejectDeleted(t *testing.T) {
+	tests := []struct {
+		name string
+		op   KeyMutation
+	}{
+		{name: "enable deleted key", op: KeyEnable},
+		{name: "disable deleted key", op: KeyDisable},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := setupKeyStore(t, []keypool.KeyEntry{
+				{Key: "sk-enable-1", Name: "key-a"},
+				{Key: "sk-enable-2", Name: "key-b"},
+			}, 0) // soft-delete index 0
+
+			err := updateKey(p, 0, tt.op)
+			if err == nil {
+				t.Fatal("expected error for deleted key, got nil")
+			}
+			if !strings.Contains(err.Error(), "is deleted") {
+				t.Errorf("error = %q, want substring \"is deleted\"", err)
+			}
+		})
+	}
+}
+
+// ── keyCooldownCmd ─────────────────────────────────────
+
+func TestKeyCooldownCmd_RejectDeleted(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "cooldown deleted key by index",
+			args: []string{"akswitch", "key", "cooldown", "PROVIDER", "0"},
+		},
+		{
+			name: "cooldown deleted key by name",
+			args: []string{"akswitch", "key", "cooldown", "PROVIDER", "key-a", "--by-name"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := setupKeyStore(t, []keypool.KeyEntry{
+				{Key: "sk-cooldown-1", Name: "key-a"},
+				{Key: "sk-cooldown-2", Name: "key-b"},
+			}, 0) // soft-delete index 0
+
+			// Reset flag state that may have been set by previous tests
+			for _, name := range []string{"by-name"} {
+				if f := keyCooldownCmd.Flags().Lookup(name); f != nil {
+					f.Changed = false
+					if err := f.Value.Set(f.DefValue); err != nil {
+						t.Fatalf("reset flag %q: %v", name, err)
+					}
+				}
+			}
+
+			// Replace provider placeholder
+			args := make([]string, len(tt.args))
+			for i, a := range tt.args {
+				if a == "PROVIDER" {
+					args[i] = p
+				} else {
+					args[i] = a
+				}
+			}
+
+			origArgs := os.Args
+			origConfigDir := config.ConfigDir
+			os.Args = args
+			config.ConfigDir = testKeyDir
+			defer func() {
+				os.Args = origArgs
+				config.ConfigDir = origConfigDir
+			}()
+			err := keyCooldownCmd.Execute()
+			if err == nil {
+				t.Fatal("expected error for deleted key, got nil")
+			}
+			if !strings.Contains(err.Error(), "is deleted") {
+				t.Errorf("error = %q, want substring \"is deleted\"", err)
+			}
+		})
+	}
+}
+
 // ── keyListCmd ────────────────────────────────────────
 
 func TestKeyListCmd_ShowAll(t *testing.T) {
@@ -1046,4 +1258,75 @@ func TestKeyListCmd_ShowAll(t *testing.T) {
 			t.Error("--all list should mark deleted status, but output does not contain 'deleted'")
 		}
 	})
+}
+
+// ── storeIndexToPoolIndex ─────────────────────────────
+
+func TestStoreIndexToPoolIndex(t *testing.T) {
+	tests := []struct {
+		name string
+		keys []keypool.KeyEntry
+		idx  int
+		want int
+	}{
+		{
+			name: "no deleted keys",
+			keys: []keypool.KeyEntry{
+				{Key: "sk-1"},
+				{Key: "sk-2"},
+				{Key: "sk-3"},
+			},
+			idx:  2,
+			want: 2,
+		},
+		{
+			name: "deleted key before target",
+			keys: []keypool.KeyEntry{
+				{Key: "sk-1", Deleted: true},
+				{Key: "sk-2"},
+				{Key: "sk-3"},
+			},
+			idx:  2,
+			want: 1,
+		},
+		{
+			name: "deleted key after target",
+			keys: []keypool.KeyEntry{
+				{Key: "sk-1"},
+				{Key: "sk-2"},
+				{Key: "sk-3", Deleted: true},
+			},
+			idx:  1,
+			want: 1,
+		},
+		{
+			name: "index 0 with no deleted",
+			keys: []keypool.KeyEntry{
+				{Key: "sk-1"},
+				{Key: "sk-2"},
+			},
+			idx:  0,
+			want: 0,
+		},
+		{
+			name: "multiple deleted keys before target",
+			keys: []keypool.KeyEntry{
+				{Key: "sk-1", Deleted: true},
+				{Key: "sk-2", Deleted: true},
+				{Key: "sk-3"},
+			},
+			idx:  2,
+			want: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := &keypool.KeyStore{Keys: tt.keys}
+			got := storeIndexToPoolIndex(store, tt.idx)
+			if got != tt.want {
+				t.Errorf("storeIndexToPoolIndex(store, %d) = %d, want %d", tt.idx, got, tt.want)
+			}
+		})
+	}
 }
