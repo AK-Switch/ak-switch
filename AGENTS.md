@@ -101,6 +101,41 @@ ps.SetMaxRetries(3)
 - **Makefile 用 Tab**: 编辑 Makefile 时确保用 Tab 而非空格缩进（golangci-lint 不检查 Makefile，但 `make` 会报错）
 - **Config 字段分两组**: 启动配置在 `ProviderConfig`（TOML 解析），运行时配置在 `RuntimeConfig`（Admin API 热更新）。改配置字段前先确认属于哪组
 
+## Parallel Development Conventions
+
+AK-Switch 有多个 AI 并行开发，以下规则确保分支不打架、PR 不冲突。
+
+### 1. PR 拆小
+
+- 单个 PR 不超过 **300 行改动**（`+300` / `-`）或 **3 个文件**
+- 大功能拆成「每个独立可合」的步骤链，一个 PR 合完再开下一个
+- 例外：自动生成的文档、测试 fixture 不计入行数，但需在 PR 描述中说明
+- 超过阈值时，先合并前置依赖的小 PR，再继续后续 PR
+
+### 2. 模块 affinity
+
+修改**当前模块以外**的文件时，先在设计阶段声明。模块归属：
+
+| 模块 | 路径 |
+|------|------|
+| CLI | `internal/cli/` |
+| Server | `internal/server/` |
+| Config | `internal/config/` |
+| Core | `internal/keypool/`, `internal/circuitbreaker/`, `internal/tracker/`, `internal/tokenestimator/` |
+
+跨域改动（改动涉及**另一个模块**的文件）需在 PR 描述中标注 `cross-module: yes` 并说明跨界理由。
+
+### 3. 开 PR 前 rebase 最新 main
+
+- 开 PR 之前，执行 `git fetch origin main && git rebase origin/main`
+- 若有冲突，在本地解决后再 push 开 PR
+- 开 PR 后如果 main 有新 commit 合入导致 BEHIND，尽快 rebase 更新
+
+### 4. 合完即广播
+
+- 一个 PR 合入 main 后，通知其他活跃 worktree 的 AI 同步：`git fetch origin main && git rebase origin/main`
+- 确保 base 不跑远，减少冲突累积
+
 ## Verification Loop
 
 修改代码后按此顺序自验证：
