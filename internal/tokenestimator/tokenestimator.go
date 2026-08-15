@@ -95,6 +95,21 @@ func encodingForModel(model string) string {
 	return "cl100k_base"
 }
 
+// ExtractModel extracts the model name from a request body JSON.
+// Returns empty string if the body is empty, malformed, or model is missing.
+func ExtractModel(bodyBytes []byte) string {
+	if len(bodyBytes) == 0 {
+		return ""
+	}
+	var reqBody struct {
+		Model string `json:"model"`
+	}
+	if err := json.Unmarshal(bodyBytes, &reqBody); err != nil {
+		return ""
+	}
+	return reqBody.Model
+}
+
 // EstimateOutput uses tiktoken to estimate the number of tokens in a text string.
 // The model parameter determines which tiktoken encoding to use.
 // Returns 0 if tiktoken initialization fails or text is empty.
