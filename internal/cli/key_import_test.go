@@ -1151,6 +1151,69 @@ func TestKeyEnableDisableCmd_RejectDeleted(t *testing.T) {
 	}
 }
 
+// ── keyCooldownCmd ─────────────────────────────────────
+
+func TestKeyCooldownCmd_RejectDeleted(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "cooldown deleted key by index",
+			args: []string{"akswitch", "key", "cooldown", "PROVIDER", "0"},
+		},
+		{
+			name: "cooldown deleted key by name",
+			args: []string{"akswitch", "key", "cooldown", "PROVIDER", "key-a", "--by-name"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := setupKeyStore(t, []keypool.KeyEntry{
+				{Key: "sk-cooldown-1", Name: "key-a"},
+				{Key: "sk-cooldown-2", Name: "key-b"},
+			}, 0) // soft-delete index 0
+
+			// Reset flag state that may have been set by previous tests
+			for _, name := range []string{"by-name"} {
+				if f := keyCooldownCmd.Flags().Lookup(name); f != nil {
+					f.Changed = false
+					if err := f.Value.Set(f.DefValue); err != nil {
+						t.Fatalf("reset flag %q: %v", name, err)
+					}
+				}
+			}
+
+			// Replace provider placeholder
+			args := make([]string, len(tt.args))
+			for i, a := range tt.args {
+				if a == "PROVIDER" {
+					args[i] = p
+				} else {
+					args[i] = a
+				}
+			}
+
+			origArgs := os.Args
+			origConfigDir := config.ConfigDir
+			os.Args = args
+			config.ConfigDir = testKeyDir
+			defer func() {
+				os.Args = origArgs
+				config.ConfigDir = origConfigDir
+			}()
+			err := keyCooldownCmd.Execute()
+			if err == nil {
+				t.Fatal("expected error for deleted key, got nil")
+			}
+			if !strings.Contains(err.Error(), "is deleted") {
+				t.Errorf("error = %q, want substring \"is deleted\"", err)
+			}
+		})
+	}
+}
+
 // ── keyListCmd ────────────────────────────────────────
 
 func TestKeyListCmd_ShowAll(t *testing.T) {
