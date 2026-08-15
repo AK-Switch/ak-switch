@@ -157,9 +157,19 @@ var configViewCmd = &cobra.Command{
 		}
 
 		fmt.Printf("Configuration source: %s\n", source)
+
+		// 输出 global-scoped 字段
+		for _, fd := range config.ConfigFieldDescriptors {
+			if fd.Scope != config.FieldScopeGlobal {
+				continue
+			}
+			val, _ := getGlobalFieldValue(tc, &fd)
+			fmt.Printf("  %-30s %s\n", fd.DisplayName+":", maskSensitiveValue(&fd, val))
+		}
+
 		for name := range providers {
 			fmt.Printf("\n--- Provider: %s ---\n", name)
-for _, fd := range config.ConfigFieldDescriptors {
+			for _, fd := range config.ConfigFieldDescriptors {
 				if fd.Scope != config.FieldScopeProvider {
 					continue
 				}
