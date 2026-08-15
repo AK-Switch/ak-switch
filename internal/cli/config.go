@@ -172,6 +172,7 @@ var configViewCmd = &cobra.Command{
 			fmt.Printf("  Health check path: %s\n", sanitized.HealthCheckPath)
 			fmt.Printf("  Health check timeout seconds: %d\n", sanitized.HealthCheckTimeoutSec)
 			fmt.Printf("  Keys file: %s\n", sanitized.KeysFile)
+			fmt.Printf("  Key selection mode: %s\n", sanitized.KeySelection)
 			for i, key := range sanitized.Keys {
 				keyName := ""
 				if i < len(sanitized.KeyNames) {
@@ -268,7 +269,7 @@ var configGetCmd = &cobra.Command{
 	Valid keys: port, log_file, target, cooldown_sec, max_retries,
 	backoff_cap_sec, backoff_multiplier, cb_reset_sec, upstream_cb_threshold,
 	http_timeout_sec, health_check_interval_sec, log_level,
-	disable_thinking, genai_model, admin_token, keys_file
+	disable_thinking, genai_model, admin_token, keys_file, key_selection
 
 	Examples:
 	  akswitch config get http_timeout_sec
@@ -351,7 +352,7 @@ var configSetCmd = &cobra.Command{
 	Valid keys: port, log_file, target, cooldown_sec, max_retries,
 	backoff_cap_sec, backoff_multiplier, cb_reset_sec, upstream_cb_threshold,
 	http_timeout_sec, health_check_interval_sec, log_level,
-	disable_thinking, genai_model, admin_token, keys_file
+	disable_thinking, genai_model, admin_token, keys_file, key_selection
 
 	Examples:
 	  akswitch config set http_timeout_sec 60
@@ -595,6 +596,8 @@ func getFieldValue(tc *config.TomlConfig, provider string, fd *config.ConfigFiel
 				return p.GenaiModel, nil
 			case "keys_file":
 				return p.KeysFile, nil
+			case "key_selection":
+				return p.KeySelection, nil
 			}
 		}
 	}
