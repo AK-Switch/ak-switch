@@ -113,6 +113,7 @@ func cleanErrorDumps(dir string, maxAgeDays int) {
 	cutoff := time.Now().AddDate(0, 0, -maxAgeDays)
 	entries, err := os.ReadDir(dir)
 	if err != nil {
+		slog.Warn("failed to read error dump directory", "dir", dir, "error", err)
 		return
 	}
 	for _, e := range entries {
@@ -121,6 +122,7 @@ func cleanErrorDumps(dir string, maxAgeDays int) {
 		}
 		info, err := e.Info()
 		if err != nil {
+			slog.Warn("failed to get error dump entry info", "file", e.Name(), "error", err)
 			continue
 		}
 		if info.ModTime().Before(cutoff) {
