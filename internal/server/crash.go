@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -96,8 +97,36 @@ func defaultErrorLogDir() string {
 
 // SetupErrorLogDir ensures the error dump directory exists.
 // Returns the directory path.
-func SetupErrorLogDir() string {
+func SetupErrorLogDir(maxAgeDays int) string {
 	dir := defaultErrorLogDir()
 	_ = os.MkdirAll(dir, 0755)
+	cleanErrorDumps(dir, maxAgeDays)
 	return dir
+}
+
+// cleanErrorDumps removes error dump files older than maxAgeDays from dir.
+// Best-effort: read/remove failures logged at warn level, not fatal.
+func cleanErrorDumps(dir string, maxAgeDays int) {
+	if maxAgeDays <= 0 {
+		maxAgeDays = 7
+	}
+	cutoff := time.Now().AddDate(0, 0, -maxAgeDays)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if info.ModTime().Before(cutoff) {
+			if err := os.Remove(filepath.Join(dir, e.Name())); err != nil {
+				slog.Warn("failed to remove stale error dump", "file", e.Name(), "error", err)
+			}
+		}
+	}
 }
