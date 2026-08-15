@@ -144,6 +144,12 @@ var configViewCmd = &cobra.Command{
 			return fmt.Errorf("no configuration file found (looked at %s)", source)
 		}
 
+		// Load TOML for field values
+		tc, err := config.LoadTomlConfig(source)
+		if err != nil {
+			return fmt.Errorf("failed to load configuration: %w", err)
+		}
+
 		// Load all providers from TOML
 		providers, err := config.LoadAllTomlProviders(source)
 		if err != nil {
@@ -151,38 +157,24 @@ var configViewCmd = &cobra.Command{
 		}
 
 		fmt.Printf("Configuration source: %s\n", source)
-		for name, cfg := range providers {
-			sanitized := cfg.Sanitized()
-			fmt.Printf("\n--- Provider: %s ---\n", name)
-			fmt.Printf("  Port: %d\n", sanitized.Port)
-			fmt.Printf("  Target base URL: %s\n", sanitized.TargetBase)
-			if sanitized.AdminToken != "" {
-				fmt.Println("  Admin token: (set)")
+
+		// 输出 global-scoped 字段
+		for _, fd := range config.ConfigFieldDescriptors {
+			if fd.Scope != config.FieldScopeGlobal {
+				continue
 			}
-			fmt.Printf("  Disable thinking: %t\n", sanitized.DisableThinking)
-			fmt.Printf("  GenAI model: %s\n", sanitized.GenaiModel)
-			fmt.Printf("  Max retries: %d\n", sanitized.MaxRetries)
-			fmt.Printf("  Log level: %s\n", sanitized.LogLevel)
-			fmt.Printf("  Cooldown seconds: %d\n", sanitized.CooldownSec)
-			fmt.Printf("  Backoff cap seconds: %d\n", sanitized.BackoffCapSec)
-			fmt.Printf("  Backoff multiplier: %.1f\n", sanitized.BackoffMultiplier)
-			fmt.Printf("  Circuit breaker reset seconds: %d\n", sanitized.CBResetSec)
-			fmt.Printf("  Circuit breaker threshold: %d\n", sanitized.UpstreamCBThreshold)
-			fmt.Printf("  Health check interval seconds: %d\n", sanitized.HealthCheckIntervalSec)
-			fmt.Printf("  Health check path: %s\n", sanitized.HealthCheckPath)
-			fmt.Printf("  Health check timeout seconds: %d\n", sanitized.HealthCheckTimeoutSec)
-			fmt.Printf("  Keys file: %s\n", sanitized.KeysFile)
-			fmt.Printf("  Key selection mode: %s\n", sanitized.KeySelection)
-			for i, key := range sanitized.Keys {
-				keyName := ""
-				if i < len(sanitized.KeyNames) {
-					keyName = sanitized.KeyNames[i]
+			val, _ := getGlobalFieldValue(tc, &fd)
+			fmt.Printf("  %-30s %s\n", fd.DisplayName+":", maskSensitiveValue(&fd, val))
+		}
+
+		for name := range providers {
+			fmt.Printf("\n--- Provider: %s ---\n", name)
+			for _, fd := range config.ConfigFieldDescriptors {
+				if fd.Scope != config.FieldScopeProvider {
+					continue
 				}
-				if keyName != "" {
-					fmt.Printf("  Key[%d]: %s (name: %s)\n", i, key, keyName)
-				} else {
-					fmt.Printf("  Key[%d]: %s\n", i, key)
-				}
+				val, _ := getFieldValue(tc, name, &fd)
+				fmt.Printf("  %-30s %s\n", fd.DisplayName+":", maskSensitiveValue(&fd, val))
 			}
 		}
 
@@ -550,12 +542,6 @@ func maskSensitiveValue(fd *config.ConfigFieldDescriptor, val any) string {
 		}
 		return "(not set)"
 	}
-	if fd.Key == "keys_file" {
-		if s, ok := val.(string); ok && s != "" {
-			return "(set)"
-		}
-		return "(not set)"
-	}
 	return fd.Format(val)
 }
 
@@ -598,6 +584,10 @@ func getFieldValue(tc *config.TomlConfig, provider string, fd *config.ConfigFiel
 				return p.KeysFile, nil
 			case "key_selection":
 				return p.KeySelection, nil
+			case "rectify_thinking_map_to":
+				return p.RectifyThinkingMapTo, nil
+			case "thinking_mode":
+				return p.ThinkingMode, nil
 			}
 		}
 	}

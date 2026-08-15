@@ -14,6 +14,7 @@ type KeyEntry struct {
 	Key      string `json:"key"`
 	Name     string `json:"name,omitempty"`
 	Disabled bool   `json:"disabled,omitempty"`
+	Deleted  bool   `json:"deleted,omitempty"`
 }
 
 // KeyStore is a JSON file backed store for API keys.
@@ -282,12 +283,14 @@ func LoadStoreFromKeyring(provider string) (*KeyStore, error) {
 }
 
 // keysFromStore extracts key and name slices from a KeyStore.
+// Deleted entries are skipped so they are not loaded into the routing pool.
 func keysFromStore(store *KeyStore) (keys, names []string) {
-	keys = make([]string, len(store.Keys))
-	names = make([]string, len(store.Keys))
-	for i, entry := range store.Keys {
-		keys[i] = entry.Key
-		names[i] = entry.Name
+	for _, entry := range store.Keys {
+		if entry.Deleted {
+			continue
+		}
+		keys = append(keys, entry.Key)
+		names = append(names, entry.Name)
 	}
 	return keys, names
 }

@@ -450,7 +450,7 @@ func TestMaskSensitiveValue_KeysFileMasked(t *testing.T) {
 		t.Fatal("keys_file field not found")
 	}
 
-	// Set keys_file
+	// Set keys_file — after F7, keys_file is no longer masked: it shows the actual path
 	tc := &config.TomlConfig{
 		Provider: map[string]*config.Config{
 			"test": {ProviderConfig: config.ProviderConfig{KeysFile: "keys.json"}},
@@ -458,11 +458,8 @@ func TestMaskSensitiveValue_KeysFileMasked(t *testing.T) {
 	}
 	val, _ := getFieldValue(tc, "test", fd)
 	masked := maskSensitiveValue(fd, val)
-	if masked == "keys.json" {
-		t.Error("keys_file should be masked, not printed raw")
-	}
-	if masked != "(set)" {
-		t.Errorf("expected '(set)', got %q", masked)
+	if masked != "keys.json" {
+		t.Errorf("keys_file should show the actual path, got %q", masked)
 	}
 
 	// Empty keys_file
@@ -473,8 +470,8 @@ func TestMaskSensitiveValue_KeysFileMasked(t *testing.T) {
 	}
 	val2, _ := getFieldValue(tc2, "test", fd)
 	masked2 := maskSensitiveValue(fd, val2)
-	if masked2 != "(not set)" {
-		t.Errorf("expected '(not set)', got %q", masked2)
+	if masked2 != "" {
+		t.Errorf("empty keys_file should show empty string, got %q", masked2)
 	}
 }
 

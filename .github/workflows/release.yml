@@ -105,7 +105,7 @@ jobs:
           echo "$NOTES" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
       - name: Create Release
-        uses: softprops/action-gh-release@5a6f51711ce2ba103b78f5e9550f810679f11e0e
+        uses: softprops/action-gh-release@d1e66170d32c9ec7bbcb7fae044d3d686ce304d3
         with:
           files: dist/*
           body: ${{ steps.release_notes.outputs.notes }}

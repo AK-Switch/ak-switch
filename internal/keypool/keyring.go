@@ -150,7 +150,6 @@ func keyringItemKey(provider string) string {
 	return "akswitch:" + provider
 }
 
-
 // loadFromKeyring loads a provider's KeyStore from the system keyring.
 // Returns (nil, nil) if the provider has no stored keys.
 func loadFromKeyring(provider string) (*KeyStore, error) {

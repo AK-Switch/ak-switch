@@ -24,7 +24,6 @@ type KeyMutation int
 const (
 	KeyEnable KeyMutation = iota
 	KeyDisable
-	KeyRemove
 )
 
 // updateKey performs a KeyMutation on a provider's key at the given index.
@@ -55,8 +54,6 @@ func updateKey(provider string, idx int, op KeyMutation) error {
 		store.Keys[idx].Disabled = false
 	case KeyDisable:
 		store.Keys[idx].Disabled = true
-	case KeyRemove:
-		store.Keys = append(store.Keys[:idx], store.Keys[idx+1:]...)
 	}
 
 	if err := keypool.SaveKeys(provider, store); err != nil {
@@ -68,8 +65,6 @@ func updateKey(provider string, idx int, op KeyMutation) error {
 		fmt.Printf("Enabled key [%d] %s for provider %q\n", idx, desc, provider)
 	case KeyDisable:
 		fmt.Printf("Disabled key [%d] %s for provider %q\n", idx, desc, provider)
-	case KeyRemove:
-		fmt.Printf("Removed key [%d] %s from provider %q (remaining: %d keys)\n", idx, desc, provider, len(store.Keys))
 	}
 
 	triggerReload()
@@ -91,31 +86,37 @@ func init() {
 	keyCmd.AddCommand(keyDisableCmd)
 	keyCmd.AddCommand(keyEnableCmd)
 	keyCmd.AddCommand(keyUpdateCmd)
-	keyCmd.AddCommand(keyRenameCmd)
 	keyCmd.AddCommand(keyImportCmd)
 	keyCmd.AddCommand(keyCooldownCmd)
 	keyImportCmd.Flags().StringP("file", "f", "", "Import keys from a JSON file")
 	keyImportCmd.Flags().StringP("name", "n", "", "Display name for imported keys")
 	keyImportCmd.Flags().Bool("insecure-storage", false, "Store keys in plaintext (WARNING: not encrypted)")
+	keyImportCmd.Flags().StringP("target", "t", "", "Upstream target base URL (required with --create when provider is missing)")
+	keyImportCmd.Flags().Bool("create", false, "Auto-create the provider if it doesn't exist")
 
 	keyUpdateCmd.Flags().StringP("name", "n", "", "New display name for the key")
 	addKeyIndexFlags(keyRemoveCmd)
 	addKeyIndexFlags(keyDisableCmd)
 	addKeyIndexFlags(keyEnableCmd)
 	addKeyIndexFlags(keyUpdateCmd)
-	addKeyIndexFlags(keyRenameCmd)
 
 	keyAddCmd.Flags().StringP("name", "n", "", "Display name for the key")
 	keyAddCmd.Flags().Bool("insecure-storage", false, "Store keys in plaintext (WARNING: not encrypted)")
 	keyListCmd.Flags().Bool("runtime", false, "Query live status from running server (shows cooldown, RPM)")
 	addKeyIndexFlags(keyCooldownCmd)
+	keyCmd.AddCommand(keyExportCmd)
+	keyExportCmd.Flags().StringP("output", "o", "", "Write to file instead of stdout")
 	keyCmd.AddCommand(keyUpstreamCBResetCmd)
+	keyCmd.AddCommand(keyRestoreCmd)
+	keyCmd.AddCommand(keyPurgeCmd)
+	keyListCmd.Flags().Bool("all", false, "Show all keys including deleted ones")
+	addKeyIndexFlags(keyRestoreCmd)
 }
 
 var keyCmd = &cobra.Command{
 	Use:   "key",
 	Short: "Manage API keys",
-	Long:  `Add, list, remove, update, rename, disable, and enable API keys for a provider.`,
+	Long:  `Add, list, remove, update, disable, enable, export, restore, and purge API keys for a provider.`,
 }
 
 var keyAddCmd = &cobra.Command{
@@ -194,7 +195,17 @@ Examples:
   akswitch key import nvidia --file keys.json
   cat keys.json | akswitch key import nvidia
   akswitch key import nvidia --file credentials.jsonl
-  cat keys.jsonl | akswitch key import nvidia`,
+  cat keys.jsonl | akswitch key import nvidia
+
+	CSV format:
+	  The --file flag also accepts CSV files. The first row may be a header
+	  with columns "key_name" and "api_key" (or "api_key_account"). Without
+	  a header, the file must have one column (API key only) or two columns
+	  (key name, API key).
+
+	  Examples:
+	    akswitch key import nvidia --file keys.csv
+	    akswitch key import nvidia --file keys.csv --name "batch"`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		provider := args[0]
@@ -250,6 +261,40 @@ Examples:
 			fmt.Fprintln(os.Stderr, "Do not use this on a shared machine.")
 		}
 
+		create, _ := cmd.Flags().GetBool("create")
+		target, _ := cmd.Flags().GetString("target")
+
+		if create {
+			xdgPath, err := config.XDGConfigPath()
+			if err != nil {
+				return fmt.Errorf("failed to determine config path: %w", err)
+			}
+			tc, err := config.LoadTomlConfig(xdgPath)
+			if err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("failed to load config: %w", err)
+			}
+			providerExists := false
+			if tc != nil {
+				_, providerExists = tc.Provider[provider]
+			}
+			if !providerExists {
+				if target == "" {
+					return fmt.Errorf("--target is required when --create creates a new provider")
+				}
+				// Add provider to config
+				if tc == nil {
+					tc = &config.TomlConfig{Provider: make(map[string]*config.Config)}
+				} else if tc.Provider == nil {
+					tc.Provider = make(map[string]*config.Config)
+				}
+				tc.Provider[provider] = &config.Config{ProviderConfig: config.ProviderConfig{TargetBase: target}}
+				if err := config.SaveTomlConfig(tc, xdgPath); err != nil {
+					return fmt.Errorf("failed to save config with new provider: %w", err)
+				}
+				fmt.Printf("Created provider %q with target %q\n", provider, target)
+			}
+		}
+
 		store, err := keypool.LoadKeys(provider)
 		if err != nil {
 			return fmt.Errorf("failed to load keys for %q: %w", provider, err)
@@ -300,22 +345,21 @@ Examples:
 }
 
 var keyUpdateCmd = &cobra.Command{
-	Use:   "update <provider> <index> <key>",
+	Use:   "update <provider> <index> [key]",
 	Short: "Update an API key at the specified index",
-	Long: `Replace an existing API key at the specified index with a new key value.
+	Long: `Replace an existing API key at the specified index with a new key value,
+or rename it without changing the value.
 
 The key's position, disabled state, and circuit breaker state are preserved.
-Use --name to optionally rename the key.
+Only --name without [key] renames the key without changing its value.
 
 Examples:
   akswitch key update sensenova 0 sk-xxxxxxxxxxxxxxxx
-  akswitch key update sensenova 0 sk-xxxxxxxxxxxxxxxx --name d1-2
+  akswitch key update sensenova 0 --name d1-2
   akswitch key update sensenova d1-2 sk-xxxxxxxxxxxxxxxx --by-name`,
-	Args: cobra.ExactArgs(3),
+	Args: cobra.RangeArgs(2, 3),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		provider := args[0]
-		newKey := args[2]
-
 		store, err := keypool.LoadKeys(provider)
 		if err != nil {
 			return fmt.Errorf("failed to load keys for %q: %w", provider, err)
@@ -342,76 +386,33 @@ Examples:
 				idx, provider, len(store.Keys), len(store.Keys)-1)
 		}
 
-		oldMasked := logentry.MaskKey(store.Keys[idx].Key)
-		store.Keys[idx].Key = newKey
+		// Handle optional key value
+		if len(args) == 3 {
+			newKey := args[2]
+			oldMasked := logentry.MaskKey(store.Keys[idx].Key)
+			store.Keys[idx].Key = newKey
+			fmt.Printf("Updated key [%d] %s -> %s for provider %q\n",
+				idx, oldMasked, logentry.MaskKey(newKey), provider)
+		}
 
+		// Handle --name (always works, with or without key)
 		if cmd.Flags().Changed("name") {
 			newName, _ := cmd.Flags().GetString("name")
+			oldName := store.Keys[idx].Name
 			store.Keys[idx].Name = newName
+			fmt.Printf("Renamed key [%d] from %q to %q for provider %q\n",
+				idx, oldName, newName, provider)
+		}
+
+		// No changes at all? Error
+		if len(args) == 2 && !cmd.Flags().Changed("name") {
+			return fmt.Errorf("nothing to update: provide a new key value or --name")
 		}
 
 		if err := keypool.SaveKeys(provider, store); err != nil {
 			return fmt.Errorf("failed to save keys for %q: %w", provider, err)
 		}
 
-		fmt.Printf("Updated key [%d] %s -> %s for provider %q\n",
-			idx, oldMasked, logentry.MaskKey(newKey), provider)
-		triggerReload()
-		return nil
-	},
-}
-
-var keyRenameCmd = &cobra.Command{
-	Use:   "rename <provider> <index> <new-name>",
-	Short: "Rename an API key",
-	Long: `Change the display name of an API key at the specified index or matching name.
-
-By default, the second argument is treated as an index.
-Use --by-name to treat it as a name to match.
-
-Examples:
-  akswitch key rename sensenova 0 d1-2
-  akswitch key rename sensenova d1-2 d1-3 --by-name`,
-	Args: cobra.ExactArgs(3),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		provider := args[0]
-		newName := args[2]
-
-		store, err := keypool.LoadKeys(provider)
-		if err != nil {
-			return fmt.Errorf("failed to load keys for %q: %w", provider, err)
-		}
-		if store == nil {
-			return fmt.Errorf("no keys found for provider %q", provider)
-		}
-
-		var idx int
-		if byName, _ := cmd.Flags().GetBool("by-name"); byName {
-			idx, err = findKeyIndexByName(store, args[1])
-			if err != nil {
-				return err
-			}
-		} else {
-			idx, err = strconv.Atoi(args[1])
-			if err != nil {
-				return fmt.Errorf("invalid index %q: must be a non-negative integer", args[1])
-			}
-		}
-
-		if idx < 0 || idx >= len(store.Keys) {
-			return fmt.Errorf("index %d out of range: provider %q has %d keys (valid: 0-%d)",
-				idx, provider, len(store.Keys), len(store.Keys)-1)
-		}
-
-		oldName := store.Keys[idx].Name
-		store.Keys[idx].Name = newName
-
-		if err := keypool.SaveKeys(provider, store); err != nil {
-			return fmt.Errorf("failed to save keys for %q: %w", provider, err)
-		}
-
-		fmt.Printf("Renamed key [%d] from %q to %q for provider %q\n",
-			idx, oldName, newName, provider)
 		triggerReload()
 		return nil
 	},
@@ -478,11 +479,18 @@ Example output:
 			return nil
 		}
 
+		showAll, _ := cmd.Flags().GetBool("all")
 		fmt.Printf("Keys for provider %q:\n", provider)
 		for i, entry := range store.Keys {
+			if entry.Deleted && !showAll {
+				continue
+			}
 			status := "active"
 			if entry.Disabled {
 				status = "disabled"
+			}
+			if entry.Deleted {
+				status = "deleted"
 			}
 			line := fmt.Sprintf("  [%d] %s  (%s)", i, logentry.MaskKey(entry.Key), status)
 			if entry.Name != "" {
@@ -497,12 +505,13 @@ Example output:
 
 var keyRemoveCmd = &cobra.Command{
 	Use:   "remove <provider> <index>",
-	Short: "Remove an API key by index or name",
-	Long: `Remove an API key from the provider's key store at the specified index or matching name.
+	Short: "Remove (soft delete) an API key by index or name",
+	Long: `Mark an API key as deleted at the specified index or matching name.
 
 	The index corresponds to the key's position as shown in 'akswitch key list'.
 	Use --by-name to look up a key by its display name instead.
-	This operation cannot be undone.
+	Deleted keys are hidden from 'key list' but can be restored with 'key restore'.
+	Use 'key purge' to permanently delete all marked keys.
 
 	Examples:
 	  akswitch key remove nvidia 0
@@ -513,7 +522,24 @@ var keyRemoveCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		return updateKey(args[0], idx, KeyRemove)
+		store, err := keypool.LoadKeys(args[0])
+		if err != nil {
+			return fmt.Errorf("failed to load keys for %q: %w", args[0], err)
+		}
+		if store == nil || idx >= len(store.Keys) {
+			return fmt.Errorf("index %d out of range", idx)
+		}
+		store.Keys[idx].Deleted = true
+		if err := keypool.SaveKeys(args[0], store); err != nil {
+			return fmt.Errorf("failed to save keys: %w", err)
+		}
+		desc := logentry.MaskKey(store.Keys[idx].Key)
+		if store.Keys[idx].Name != "" {
+			desc += fmt.Sprintf(" (name: %s)", store.Keys[idx].Name)
+		}
+		fmt.Printf("Deleted key [%d] %s for provider %q (use 'key restore' to undo)\n", idx, desc, args[0])
+		triggerReload()
+		return nil
 	},
 }
 
@@ -601,6 +627,126 @@ Examples:
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(os.Stderr, "WARNING: 'key upstream-cb-reset' is deprecated, use 'provider upstream-cb-reset' instead")
 		return resetUpstreamCB(args[0])
+	},
+}
+
+var keyRestoreCmd = &cobra.Command{
+	Use:   "restore <provider> <index>",
+	Short: "Restore a previously deleted API key",
+	Long: `Restore a soft-deleted API key. The key becomes active again.
+Use --by-name to look up a key by its display name.
+Use 'key list --all' to see deleted keys.`,
+	Args: cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		idx, err := resolveKeyIndex(cmd, args)
+		if err != nil {
+			return err
+		}
+		store, err := keypool.LoadKeys(args[0])
+		if err != nil {
+			return fmt.Errorf("failed to load keys for %q: %w", args[0], err)
+		}
+		if store == nil || idx >= len(store.Keys) {
+			return fmt.Errorf("index %d out of range", idx)
+		}
+		if !store.Keys[idx].Deleted {
+			return fmt.Errorf("key [%d] is not deleted", idx)
+		}
+		store.Keys[idx].Deleted = false
+		if err := keypool.SaveKeys(args[0], store); err != nil {
+			return fmt.Errorf("failed to save keys: %w", err)
+		}
+		desc := logentry.MaskKey(store.Keys[idx].Key)
+		if store.Keys[idx].Name != "" {
+			desc += fmt.Sprintf(" (name: %s)", store.Keys[idx].Name)
+		}
+		fmt.Printf("Restored key [%d] %s for provider %q\n", idx, desc, args[0])
+		triggerReload()
+		return nil
+	},
+}
+
+var keyPurgeCmd = &cobra.Command{
+	Use:   "purge <provider>",
+	Short: "Permanently remove all deleted keys",
+	Long:  `Remove all soft-deleted API keys permanently. This cannot be undone.`,
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		provider := args[0]
+		store, err := keypool.LoadKeys(provider)
+		if err != nil {
+			return fmt.Errorf("failed to load keys for %q: %w", provider, err)
+		}
+		if store == nil {
+			return fmt.Errorf("no keys found for provider %q", provider)
+		}
+
+		var remaining []keypool.KeyEntry
+		purged := 0
+		for _, entry := range store.Keys {
+			if entry.Deleted {
+				purged++
+				continue
+			}
+			remaining = append(remaining, entry)
+		}
+		if purged == 0 {
+			fmt.Printf("No deleted keys to purge for provider %q\n", provider)
+			return nil
+		}
+
+		store.Keys = remaining
+		if err := keypool.SaveKeys(provider, store); err != nil {
+			return fmt.Errorf("failed to save keys: %w", err)
+		}
+		fmt.Printf("Purged %d deleted key(s) from provider %q (remaining: %d)\n", purged, provider, len(remaining))
+		triggerReload()
+		return nil
+	},
+}
+
+var keyExportCmd = &cobra.Command{
+	Use:   "export <provider>",
+	Short: "Export API keys to stdout or a file",
+	Long: `Export all API keys for a provider as JSON.
+
+By default, prints to stdout. Use --output to write to a file.
+Keys are decrypted automatically (supports encrypted storage).
+
+Examples:
+  akswitch key export nvidia
+  akswitch key export nvidia --output keys.json`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		provider := args[0]
+		outputPath, _ := cmd.Flags().GetString("output")
+
+		store, err := keypool.LoadKeys(provider)
+		if err != nil {
+			return fmt.Errorf("failed to load keys for %q: %w", provider, err)
+		}
+		if store == nil || len(store.Keys) == 0 {
+			return fmt.Errorf("no keys found for provider %q", provider)
+		}
+
+		data, err := json.MarshalIndent(store, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to serialize keys: %w", err)
+		}
+
+		if outputPath != "" {
+			// Check if file exists
+			if _, err := os.Stat(outputPath); err == nil {
+				fmt.Fprintf(os.Stderr, "WARNING: %s already exists, overwriting\n", outputPath)
+			}
+			if err := os.WriteFile(outputPath, data, 0600); err != nil {
+				return fmt.Errorf("failed to write %q: %w", outputPath, err)
+			}
+			fmt.Printf("Exported %d keys for provider %q to %s\n", len(store.Keys), provider, outputPath)
+		} else {
+			fmt.Println(string(data))
+		}
+		return nil
 	},
 }
 
@@ -883,6 +1029,120 @@ func autoNumberNames(entries []keypool.KeyEntry, store *keypool.KeyStore) []keyp
 	return entries
 }
 
+// parseCSV parses CSV data into KeyEntry slices.
+// Parsing rules:
+//  1. Lines starting with '#' are skipped (comments)
+//  2. If the first non-comment line contains known column headers,
+//     columns are mapped by header name (case-insensitive)
+//  3. If no header is detected, positional inference is used:
+//     - 1 column → key
+//     - 2 columns → name, key
+//     - 3+ columns → error
+//  4. Leading/trailing whitespace is stripped from each cell
+func parseCSV(data []byte) ([]keypool.KeyEntry, error) {
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) == 0 {
+		return nil, fmt.Errorf("empty CSV data")
+	}
+
+	keyColNames := map[string]bool{
+		"key": true, "api_key": true, "api key": true,
+		"token": true, "secret": true, "apikey": true,
+	}
+	nameColNames := map[string]bool{
+		"name": true, "account_name": true, "username": true,
+		"user": true, "account": true, "备注": true,
+	}
+
+	contentStart := 0
+	for contentStart < len(lines) {
+		trimmed := strings.TrimSpace(lines[contentStart])
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			contentStart++
+			continue
+		}
+		break
+	}
+	if contentStart >= len(lines) {
+		return nil, fmt.Errorf("no data found in CSV (all lines are comments or empty)")
+	}
+
+	firstLine := strings.TrimSpace(lines[contentStart])
+	cols := strings.Split(firstLine, ",")
+	for i := range cols {
+		cols[i] = strings.TrimSpace(cols[i])
+	}
+
+	isHeader := false
+	keyCol := -1
+	nameCol := -1
+	for _, c := range cols {
+		lower := strings.ToLower(c)
+		if keyColNames[lower] {
+			isHeader = true
+			break
+		}
+		if nameColNames[lower] {
+			isHeader = true
+			break
+		}
+	}
+
+	dataStart := contentStart
+	if isHeader {
+		for i, c := range cols {
+			lower := strings.ToLower(c)
+			if keyColNames[lower] {
+				keyCol = i
+			}
+			if nameColNames[lower] {
+				nameCol = i
+			}
+		}
+		if keyCol == -1 {
+			return nil, fmt.Errorf("CSV has header but no key column found (known names: key, api_key, token, secret)")
+		}
+		dataStart = contentStart + 1
+	}
+
+	var entries []keypool.KeyEntry
+	for i := dataStart; i < len(lines); i++ {
+		line := strings.TrimSpace(lines[i])
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		cells := strings.Split(line, ",")
+		for j := range cells {
+			cells[j] = strings.TrimSpace(cells[j])
+		}
+
+		if isHeader {
+			if keyCol >= len(cells) {
+				continue
+			}
+			entry := keypool.KeyEntry{Key: cells[keyCol]}
+			if nameCol >= 0 && nameCol < len(cells) {
+				entry.Name = cells[nameCol]
+			}
+			entries = append(entries, entry)
+		} else {
+			switch len(cells) {
+			case 1:
+				entries = append(entries, keypool.KeyEntry{Key: cells[0]})
+			case 2:
+				entries = append(entries, keypool.KeyEntry{Name: cells[0], Key: cells[1]})
+			default:
+				return nil, fmt.Errorf("line %d: cannot infer CSV column mapping with %d columns (no header detected)", i+1, len(cells))
+			}
+		}
+	}
+
+	if len(entries) == 0 {
+		return nil, fmt.Errorf("no valid key entries found in CSV data")
+	}
+	return entries, nil
+}
+
 // parseKeyEntries parses key data into KeyEntry slices.
 // Supports:
 //   - JSON array of strings: ["key1", "key2"]
@@ -913,5 +1173,13 @@ func parseKeyEntries(data []byte) ([]keypool.KeyEntry, error) {
 		}
 	}
 
-	return nil, fmt.Errorf("expected JSON array of strings, key objects, or JSONL format")
+	// Try CSV
+	if len(data) > 0 {
+		csvEntries, csvErr := parseCSV(data)
+		if csvErr == nil {
+			return csvEntries, nil
+		}
+	}
+
+	return nil, fmt.Errorf("expected JSON array of strings, key objects, JSONL, or CSV format")
 }
