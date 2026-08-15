@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -333,6 +334,94 @@ func TestKeyExportCmd(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestKeyExportCmd_Success verifies the success path of `key export`:
+// exporting a provider's keys to a file produces valid JSON containing the keys,
+// and exporting to stdout prints the JSON (decrypted).
+func TestKeyExportCmd_Success(t *testing.T) {
+	provider := setupKeyStore(t, []keypool.KeyEntry{
+		{Key: "sk-export-1", Name: "export-key"},
+		{Key: "sk-export-2"},
+	}, -1)
+
+	t.Run("export to file", func(t *testing.T) {
+		outputPath := filepath.Join(t.TempDir(), "exported.json")
+		out := runKeyExport(t, []string{"akswitch", "key", "export", provider, "--output", outputPath})
+		if !strings.Contains(out, "Exported 2 keys") {
+			t.Errorf("stdout = %q, want it to mention exported key count", out)
+		}
+		data, err := os.ReadFile(outputPath)
+		if err != nil {
+			t.Fatalf("failed to read exported file: %v", err)
+		}
+		var exported keypool.KeyStore
+		if err := json.Unmarshal(data, &exported); err != nil {
+			t.Fatalf("exported file is not valid JSON: %v", err)
+		}
+		if len(exported.Keys) != 2 {
+			t.Fatalf("exported file contains %d keys, want 2", len(exported.Keys))
+		}
+		if exported.Keys[0].Key != "sk-export-1" || exported.Keys[0].Name != "export-key" {
+			t.Errorf("exported key[0] = %+v, want {Key: sk-export-1, Name: export-key}", exported.Keys[0])
+		}
+		if exported.Keys[1].Key != "sk-export-2" {
+			t.Errorf("exported key[1] = %+v, want {Key: sk-export-2}", exported.Keys[1])
+		}
+	})
+
+	t.Run("export to stdout", func(t *testing.T) {
+		// Reset the --output flag between test cases
+		keyExportCmd.Flags().Set("output", "")
+		keyExportCmd.Flags().Changed("output")
+
+		out := runKeyExport(t, []string{"akswitch", "key", "export", provider})
+		var parsed keypool.KeyStore
+		if err := json.Unmarshal([]byte(out), &parsed); err != nil {
+			t.Fatalf("stdout is not valid JSON: %v\nstdout: %s", err, out)
+		}
+		if len(parsed.Keys) != 2 {
+			t.Fatalf("stdout contains %d keys, want 2", len(parsed.Keys))
+		}
+		if parsed.Keys[0].Key != "sk-export-1" {
+			t.Errorf("key[0] = %q, want %q", parsed.Keys[0].Key, "sk-export-1")
+		}
+	})
+}
+
+// runKeyExport runs the key export subcommand with os.Args override and captured stdout.
+func runKeyExport(t *testing.T, osArgs []string) string {
+	t.Helper()
+	origArgs := os.Args
+	origConfigDir := config.ConfigDir
+	os.Args = osArgs
+	config.ConfigDir = testKeyDir
+	t.Cleanup(func() {
+		os.Args = origArgs
+		config.ConfigDir = origConfigDir
+	})
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	t.Cleanup(func() { w.Close() })
+	oldStdout := os.Stdout
+	os.Stdout = w
+	t.Cleanup(func() { os.Stdout = oldStdout })
+
+	done := make(chan string)
+	go func() {
+		var sb strings.Builder
+		_, _ = io.Copy(&sb, r)
+		done <- sb.String()
+	}()
+
+	if err := keyExportCmd.Execute(); err != nil {
+		t.Fatalf("key export failed: %v", err)
+	}
+	w.Close()
+	return <-done
 }
 
 // ── keyImportCmd --create flag ──────────────────────────
