@@ -248,7 +248,8 @@ func (c *Config) DeepCopy() *Config {
 			CalibrationIntervalSec: c.CalibrationIntervalSec,
 		},
 		RuntimeConfig: RuntimeConfig{
-			HTTPTimeoutSec: c.RuntimeConfig.HTTPTimeoutSec, MaxRetries: c.RuntimeConfig.MaxRetries,
+			HTTPTimeoutSec:      c.RuntimeConfig.HTTPTimeoutSec,
+			MaxRetries:          c.RuntimeConfig.MaxRetries,
 			CooldownSec:         c.RuntimeConfig.CooldownSec,
 			BackoffCapSec:       c.RuntimeConfig.BackoffCapSec,
 			BackoffMultiplier:   c.RuntimeConfig.BackoffMultiplier,
@@ -351,7 +352,8 @@ func mergeWithDefaults(base, override *Config) *Config {
 	}
 	if override.CalibrationIntervalSec != 0 {
 		result.CalibrationIntervalSec = override.CalibrationIntervalSec
-	} // Sync runtime config
+	}
+	// Sync runtime config
 	result.RuntimeConfig.HTTPTimeoutSec = result.HTTPTimeoutSec
 	result.RuntimeConfig.MaxRetries = result.MaxRetries
 	result.RuntimeConfig.CooldownSec = result.CooldownSec
