@@ -313,14 +313,14 @@ func TestConfigGetCmd_AllLoadsTomlOnce(t *testing.T) {
 	config.ConfigDir = tmpDir
 
 	// Simulate what configGetCmd.RunE does with --all:
-	// load TOML once, then get field value for each provider
+	// load merged providers, then get field value for each provider
 	source, err := config.XDGConfigPath()
 	if err != nil {
 		t.Fatalf("xdg path: %v", err)
 	}
-	tcLoaded, err := config.LoadTomlConfig(source)
+	mergedProviders, err := config.LoadAllTomlProviders(source)
 	if err != nil {
-		t.Fatalf("load config: %v", err)
+		t.Fatalf("load merged providers: %v", err)
 	}
 
 	fd := config.FindField("cooldown_sec")
@@ -329,18 +329,18 @@ func TestConfigGetCmd_AllLoadsTomlOnce(t *testing.T) {
 	}
 
 	var providers []string
-	for name := range tcLoaded.Provider {
+	for name := range mergedProviders {
 		providers = append(providers, name)
 	}
 	sort.Strings(providers)
 
 	for _, p := range providers {
-		val, getErr := getFieldValue(tcLoaded, p, fd)
+		val, getErr := getMergedFieldValue(mergedProviders, p, fd)
 		if getErr != nil {
-			t.Fatalf("getFieldValue(%s): %v", p, getErr)
+			t.Fatalf("getMergedFieldValue(%s): %v", p, getErr)
 		}
 		formatted := fd.Format(val)
-		expected := strconv.Itoa(tc.Provider[p].CooldownSec)
+		expected := strconv.Itoa(mergedProviders[p].CooldownSec)
 		if formatted != expected {
 			t.Errorf("provider %s: got %s, want %s", p, formatted, expected)
 		}
@@ -407,24 +407,20 @@ func TestGetFieldValue_AdminTokenMasked(t *testing.T) {
 	}
 
 	// Set token
-	tc := &config.TomlConfig{
-		Provider: map[string]*config.Config{
-			"test": {ProviderConfig: config.ProviderConfig{AdminToken: "secret123"}},
-		},
+	providers := map[string]*config.Config{
+		"test": {ProviderConfig: config.ProviderConfig{AdminToken: "secret123"}},
 	}
-	val, _ := getFieldValue(tc, "test", fd)
+	val, _ := getMergedFieldValue(providers, "test", fd)
 	masked := maskSensitiveValue(fd, val)
 	if masked != "(set)" {
 		t.Errorf("expected '(set)', got %q", masked)
 	}
 
 	// Empty token
-	tc2 := &config.TomlConfig{
-		Provider: map[string]*config.Config{
-			"test": {ProviderConfig: config.ProviderConfig{AdminToken: ""}},
-		},
+	providers2 := map[string]*config.Config{
+		"test": {ProviderConfig: config.ProviderConfig{AdminToken: ""}},
 	}
-	val2, _ := getFieldValue(tc2, "test", fd)
+	val2, _ := getMergedFieldValue(providers2, "test", fd)
 	masked2 := maskSensitiveValue(fd, val2)
 	if masked2 != "(not set)" {
 		t.Errorf("expected '(not set)', got %q", masked2)
@@ -432,12 +428,10 @@ func TestGetFieldValue_AdminTokenMasked(t *testing.T) {
 
 	// Non-sensitive field passes through unchanged
 	fdInt := config.FindField("cooldown_sec")
-	tc3 := &config.TomlConfig{
-		Provider: map[string]*config.Config{
-			"test": {ProviderConfig: config.ProviderConfig{CooldownSec: 60}},
-		},
+	providers3 := map[string]*config.Config{
+		"test": {ProviderConfig: config.ProviderConfig{CooldownSec: 60}},
 	}
-	val3, _ := getFieldValue(tc3, "test", fdInt)
+	val3, _ := getMergedFieldValue(providers3, "test", fdInt)
 	masked3 := maskSensitiveValue(fdInt, val3)
 	if masked3 != "60" {
 		t.Errorf("expected '60', got %q", masked3)
@@ -451,24 +445,20 @@ func TestMaskSensitiveValue_KeysFileMasked(t *testing.T) {
 	}
 
 	// Set keys_file — after F7, keys_file is no longer masked: it shows the actual path
-	tc := &config.TomlConfig{
-		Provider: map[string]*config.Config{
-			"test": {ProviderConfig: config.ProviderConfig{KeysFile: "keys.json"}},
-		},
+	providers := map[string]*config.Config{
+		"test": {ProviderConfig: config.ProviderConfig{KeysFile: "keys.json"}},
 	}
-	val, _ := getFieldValue(tc, "test", fd)
+	val, _ := getMergedFieldValue(providers, "test", fd)
 	masked := maskSensitiveValue(fd, val)
 	if masked != "keys.json" {
 		t.Errorf("keys_file should show the actual path, got %q", masked)
 	}
 
 	// Empty keys_file
-	tc2 := &config.TomlConfig{
-		Provider: map[string]*config.Config{
-			"test": {ProviderConfig: config.ProviderConfig{KeysFile: ""}},
-		},
+	providers2 := map[string]*config.Config{
+		"test": {ProviderConfig: config.ProviderConfig{KeysFile: ""}},
 	}
-	val2, _ := getFieldValue(tc2, "test", fd)
+	val2, _ := getMergedFieldValue(providers2, "test", fd)
 	masked2 := maskSensitiveValue(fd, val2)
 	if masked2 != "" {
 		t.Errorf("empty keys_file should show empty string, got %q", masked2)
@@ -546,14 +536,62 @@ func TestConfigGetCmd_AdminTokenMasked(t *testing.T) {
 		t.Fatal("admin_token not registered in descriptors")
 	}
 	// Masking is applied via maskSensitiveValue in the print path —
-	// getFieldValue returns raw token, but maskSensitiveValue masks it.
-	rawVal, _ := getFieldValue(&config.TomlConfig{
-		Provider: map[string]*config.Config{
-			"test": {ProviderConfig: config.ProviderConfig{AdminToken: "tok123"}},
-		},
+	// getMergedFieldValue returns raw token, but maskSensitiveValue masks it.
+	rawVal, _ := getMergedFieldValue(map[string]*config.Config{
+		"test": {ProviderConfig: config.ProviderConfig{AdminToken: "tok123"}},
 	}, "test", fd)
 	masked := maskSensitiveValue(fd, rawVal)
 	if masked == "tok123" {
 		t.Error("admin_token should be masked, not printed raw")
+	}
+}
+
+func TestGetMergedFieldValue(t *testing.T) {
+	providers := map[string]*config.Config{
+		"test-provider": {
+			ProviderConfig: config.ProviderConfig{
+				TargetBase:     "https://example.com",
+				MaxRetries:     3,
+				CooldownSec:    20,
+				LogLevel:       "info",
+				HTTPTimeoutSec: 30,
+				KeySelection:   "random",
+			},
+		},
+		"empty-provider": {
+			ProviderConfig: config.ProviderConfig{},
+		},
+	}
+
+	tests := []struct {
+		name     string
+		provider string
+		key      string
+		want     any
+	}{
+		{"target", "test-provider", "target", "https://example.com"},
+		{"max_retries", "test-provider", "max_retries", 3},
+		{"cooldown_sec", "test-provider", "cooldown_sec", 20},
+		{"log_level", "test-provider", "log_level", "info"},
+		{"http_timeout_sec", "test-provider", "http_timeout_sec", 30},
+		{"key_selection", "test-provider", "key_selection", "random"},
+		{"nonexistent provider falls back to ParseDefault", "no-such-provider", "max_retries", 1},
+		{"empty provider field falls back to ParseDefault", "empty-provider", "target", ""},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			fd := config.FindField(tc.key)
+			if fd == nil {
+				t.Fatalf("field descriptor not found for key %q", tc.key)
+			}
+			got, err := getMergedFieldValue(providers, tc.provider, fd)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("getMergedFieldValue(%q, %q, %q) = %v (%T), want %v (%T)", tc.provider, tc.key, tc.key, got, got, tc.want, tc.want)
+			}
+		})
 	}
 }

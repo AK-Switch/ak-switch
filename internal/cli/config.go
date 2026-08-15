@@ -173,7 +173,7 @@ var configViewCmd = &cobra.Command{
 				if fd.Scope != config.FieldScopeProvider {
 					continue
 				}
-				val, _ := getFieldValue(tc, name, &fd)
+				val, _ := getMergedFieldValue(providers, name, &fd)
 				fmt.Printf("  %-30s %s\n", fd.DisplayName+":", maskSensitiveValue(&fd, val))
 			}
 		}
@@ -200,23 +200,26 @@ var configListCmd = &cobra.Command{
 			targetProvider = args[0]
 		}
 
-		// Load TOML for persistent values
+		// Load all providers with [provider.default] inheritance
 		source, err := config.XDGConfigPath()
 		if err != nil {
 			return fmt.Errorf("failed to determine config path: %w", err)
 		}
-		tc, err := config.LoadTomlConfig(source)
-		if err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("failed to load config: %w", err)
+		mergedProviders := make(map[string]*config.Config)
+		if _, statErr := os.Stat(source); statErr == nil {
+			mergedProviders, err = config.LoadAllTomlProviders(source)
+			if err != nil {
+				return fmt.Errorf("failed to load providers: %w", err)
+			}
+		} else if !os.IsNotExist(statErr) {
+			return fmt.Errorf("failed to access config file: %w", statErr)
 		}
 
 		// Build provider list
 		var names []string
 		if all {
-			if tc != nil {
-				for n := range tc.Provider {
-					names = append(names, n)
-				}
+			for n := range mergedProviders {
+				names = append(names, n)
 			}
 			sort.Strings(names)
 			if len(names) == 0 {
@@ -226,12 +229,10 @@ var configListCmd = &cobra.Command{
 			names = []string{targetProvider}
 		} else {
 			// No args, no --all: show the first (or only) provider
-			if tc != nil {
-				for n := range tc.Provider {
-					names = append(names, n)
-				}
-				sort.Strings(names)
+			for n := range mergedProviders {
+				names = append(names, n)
 			}
+			sort.Strings(names)
 			if len(names) == 0 {
 				return fmt.Errorf("no providers configured")
 			}
@@ -245,7 +246,7 @@ var configListCmd = &cobra.Command{
 				if fd.Scope != config.FieldScopeProvider {
 					continue
 				}
-				val, _ := getFieldValue(tc, name, &fd)
+				val, _ := getMergedFieldValue(mergedProviders, name, &fd)
 				fmt.Printf("  %-30s %s\n", fd.DisplayName+":", maskSensitiveValue(&fd, val))
 			}
 		}
@@ -279,6 +280,7 @@ var configGetCmd = &cobra.Command{
 
 		var providers []string
 		var tc *config.TomlConfig
+		var mergedProviders map[string]*config.Config
 		if all {
 			source, err := config.XDGConfigPath()
 			if err != nil {
@@ -287,6 +289,10 @@ var configGetCmd = &cobra.Command{
 			tc, err = config.LoadTomlConfig(source)
 			if err != nil {
 				return fmt.Errorf("failed to load config: %w", err)
+			}
+			mergedProviders, err = config.LoadAllTomlProviders(source)
+			if err != nil {
+				return fmt.Errorf("failed to load merged providers: %w", err)
 			}
 			if tc != nil {
 				for n := range tc.Provider {
@@ -303,9 +309,9 @@ var configGetCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("failed to determine config path: %w", err)
 			}
-			tc, err = config.LoadTomlConfig(source)
+			mergedProviders, err = config.LoadAllTomlProviders(source)
 			if err != nil {
-				return fmt.Errorf("failed to load config: %w", err)
+				return fmt.Errorf("failed to load merged providers: %w", err)
 			}
 		} else {
 			// Global field — no provider needed
@@ -323,7 +329,7 @@ var configGetCmd = &cobra.Command{
 		}
 
 		for _, p := range providers {
-			val, _ := getFieldValue(tc, p, fd)
+			val, _ := getMergedFieldValue(mergedProviders, p, fd)
 			if all {
 				fmt.Printf("%s: %s\n", p, maskSensitiveValue(fd, val))
 			} else {
@@ -545,53 +551,55 @@ func maskSensitiveValue(fd *config.ConfigFieldDescriptor, val any) string {
 	return fd.Format(val)
 }
 
-// getFieldValue reads a provider-scoped field value from a loaded TOML config.
-// Falls back to the field's default if the config is missing or unset.
-func getFieldValue(tc *config.TomlConfig, provider string, fd *config.ConfigFieldDescriptor) (any, error) {
-	if tc != nil {
-		if p, ok := tc.Provider[provider]; ok && p != nil {
-			switch fd.Key {
-			case "target":
-				return p.TargetBase, nil
-			case "cooldown_sec":
-				return p.CooldownSec, nil
-			case "max_retries":
-				return p.MaxRetries, nil
-			case "backoff_cap_sec":
-				return p.BackoffCapSec, nil
-			case "backoff_multiplier":
-				return p.BackoffMultiplier, nil
-			case "cb_reset_sec":
-				return p.CBResetSec, nil
-			case "upstream_cb_threshold":
-				return p.UpstreamCBThreshold, nil
-			case "http_timeout_sec":
-				return p.HTTPTimeoutSec, nil
-			case "log_level":
-				return p.LogLevel, nil
-			case "health_check_interval_sec":
-				return p.HealthCheckIntervalSec, nil
-			case "admin_token":
-				if p.AdminToken != "" {
-					return p.AdminToken, nil
-				}
-				return "", nil
-			case "disable_thinking":
-				return p.DisableThinking, nil
-			case "genai_model":
-				return p.GenaiModel, nil
-			case "keys_file":
-				return p.KeysFile, nil
-			case "key_selection":
-				return p.KeySelection, nil
-			case "rectify_thinking_map_to":
-				return p.RectifyThinkingMapTo, nil
-			case "thinking_mode":
-				return p.ThinkingMode, nil
-			}
-		}
+// getMergedFieldValue reads a provider-scoped field value from a merged (inherited) config map.
+// Uses LoadAllTomlProviders's output so that [provider.default] section values are reflected.
+// Falls back to the field's default if the provider is missing or field is unset.
+func getMergedFieldValue(providers map[string]*config.Config, provider string, fd *config.ConfigFieldDescriptor) (any, error) {
+	if p, ok := providers[provider]; ok && p != nil {
+		return readFieldFromProviderConfig(&p.ProviderConfig, fd)
 	}
-	// Fall back to default value
+	return config.ParseDefault(fd)
+}
+
+// readFieldFromProviderConfig reads a field value from a provider's `ProviderConfig` (which is
+// embedded in *config.Config). Falls back to the field's default if the key is not mapped.
+func readFieldFromProviderConfig(p *config.ProviderConfig, fd *config.ConfigFieldDescriptor) (any, error) {
+	switch fd.Key {
+	case "target":
+		return p.TargetBase, nil
+	case "cooldown_sec":
+		return p.CooldownSec, nil
+	case "max_retries":
+		return p.MaxRetries, nil
+	case "backoff_cap_sec":
+		return p.BackoffCapSec, nil
+	case "backoff_multiplier":
+		return p.BackoffMultiplier, nil
+	case "cb_reset_sec":
+		return p.CBResetSec, nil
+	case "upstream_cb_threshold":
+		return p.UpstreamCBThreshold, nil
+	case "http_timeout_sec":
+		return p.HTTPTimeoutSec, nil
+	case "log_level":
+		return p.LogLevel, nil
+	case "health_check_interval_sec":
+		return p.HealthCheckIntervalSec, nil
+	case "admin_token":
+		return p.AdminToken, nil
+	case "disable_thinking":
+		return p.DisableThinking, nil
+	case "genai_model":
+		return p.GenaiModel, nil
+	case "keys_file":
+		return p.KeysFile, nil
+	case "key_selection":
+		return p.KeySelection, nil
+	case "rectify_thinking_map_to":
+		return p.RectifyThinkingMapTo, nil
+	case "thinking_mode":
+		return p.ThinkingMode, nil
+	}
 	return config.ParseDefault(fd)
 }
 
