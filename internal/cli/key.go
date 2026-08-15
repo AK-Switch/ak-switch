@@ -458,7 +458,7 @@ Use --runtime to query the running server for live status including cooldown inf
 Example output:
   Keys for provider "nvidia":
     [0] sk-****xx  (active)
-    [1] sk-****yy  [disabled]
+    [1] sk-****yy  (disabled)
     [2] sk-****zz  (active)  name: my-key`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
