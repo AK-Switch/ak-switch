@@ -23,10 +23,10 @@ jobs:
         with:
           repository: OpenHands/extensions
           ref: main
-          sparse-checkout: .github/actions/pr-review
+          sparse-checkout: plugins/pr-review
 
       - name: Run PR Review
-        uses: ./.github/actions/pr-review
+        uses: ./plugins/pr-review
         with:
           llm-model: openai/step-3.7-flash
           llm-base-url: https://api.stepfun.com/step_plan/v1
