@@ -116,7 +116,7 @@ func init() {
 var keyCmd = &cobra.Command{
 	Use:   "key",
 	Short: "Manage API keys",
-	Long:  `Add, list, remove, update, disable, and enable API keys for a provider.`,
+	Long:  `Add, list, remove, update, disable, enable, export, restore, and purge API keys for a provider.`,
 }
 
 var keyAddCmd = &cobra.Command{
@@ -195,7 +195,17 @@ Examples:
   akswitch key import nvidia --file keys.json
   cat keys.json | akswitch key import nvidia
   akswitch key import nvidia --file credentials.jsonl
-  cat keys.jsonl | akswitch key import nvidia`,
+  cat keys.jsonl | akswitch key import nvidia
+
+	CSV format:
+	  The --file flag also accepts CSV files. The first row may be a header
+	  with columns "key_name" and "api_key" (or "api_key_account"). Without
+	  a header, the file must have one column (API key only) or two columns
+	  (key name, API key).
+
+	  Examples:
+	    akswitch key import nvidia --file keys.csv
+	    akswitch key import nvidia --file keys.csv --name "batch"`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		provider := args[0]
