@@ -634,7 +634,8 @@ Examples:
 var keyRestoreCmd = &cobra.Command{
 	Use:   "restore <provider> <index>",
 	Short: "Restore a previously deleted API key",
-	Long: `Restore a soft-deleted API key. The key becomes active again.
+	Long: `Restore a soft-deleted API key. The key is no longer deleted and
+	appears in key list again. Use 'key enable' separately if it was disabled.
 Use --by-name to look up a key by its display name.
 Use 'key list --all' to see deleted keys.`,
 	Args: cobra.ExactArgs(2),
