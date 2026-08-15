@@ -839,6 +839,7 @@ func TestKeyPurgeCmd(t *testing.T) {
 		})
 	}
 }
+
 // ── keyUpdateCmd ────────────────────────────────────────
 
 // runKeyCmd runs a key subcommand (e.g. "update", "list") with os.Args override and captured stdout.

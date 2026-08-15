@@ -423,7 +423,6 @@ func TestCLI_InvalidCommand(t *testing.T) {
 	}
 }
 
-
 func TestConfigInit_CreatesFile(t *testing.T) {
 	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
@@ -816,6 +815,7 @@ func TestKeyAdd_InsecureStorage(t *testing.T) {
 		t.Errorf("Key = %q, want %q", store.Keys[0].Key, "sk-insecure-test-key")
 	}
 }
+
 // ── Key Import Acceptance Tests ─────────────────────────
 
 // TestKeyImport_FromArgs verifies that "akswitch key import <provider> <key1> <key2>"
@@ -980,7 +980,6 @@ func TestKeyImport_EmptyInput(t *testing.T) {
 		t.Errorf("expected no keys, got %d", len(store.Keys))
 	}
 }
-
 
 func TestProviderAdd_CreatesProviderEntry(t *testing.T) {
 	cli.ResetConfigEnv()
@@ -1268,15 +1267,15 @@ func TestCLI_ProviderInfo_Format(t *testing.T) {
 		Provider: map[string]*config.Config{
 			"alpha": &config.Config{
 				ProviderConfig: config.ProviderConfig{
-					TargetBase:          "https://alpha.test/v1",
-					CooldownSec:         60,
-					MaxRetries:          3,
-					BackoffCapSec:       120,
-					BackoffMultiplier:   2,
-					CBResetSec:          30,
-					UpstreamCBThreshold: 5,
+					TargetBase:             "https://alpha.test/v1",
+					CooldownSec:            60,
+					MaxRetries:             3,
+					BackoffCapSec:          120,
+					BackoffMultiplier:      2,
+					CBResetSec:             30,
+					UpstreamCBThreshold:    5,
 					HealthCheckIntervalSec: 30,
-					HealthCheckPath:       "/health",
+					HealthCheckPath:        "/health",
 					HealthCheckTimeoutSec:  5,
 				},
 			},
@@ -1556,7 +1555,7 @@ func TestProviderUpdate_DefaultFlag(t *testing.T) {
 }
 
 // TestProviderUpdate_OutputNotMarkedDefault 验证更新已为 default 的 provider
-//（不传 --default）时，输出不含 (default) 标记。
+// （不传 --default）时，输出不含 (default) 标记。
 func TestProviderUpdate_OutputNotMarkedDefault(t *testing.T) {
 	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
