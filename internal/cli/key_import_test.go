@@ -375,7 +375,6 @@ func TestKeyExportCmd_Success(t *testing.T) {
 	t.Run("export to stdout", func(t *testing.T) {
 		// Reset the --output flag between test cases
 		keyExportCmd.Flags().Set("output", "")
-		keyExportCmd.Flags().Changed("output")
 
 		out := runKeyExport(t, []string{"akswitch", "key", "export", provider})
 		var parsed keypool.KeyStore
