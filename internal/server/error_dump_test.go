@@ -76,3 +76,71 @@ func TestWriteErrorDump_WritesFileWithBodies(t *testing.T) {
 		}
 	}
 }
+
+func TestCleanErrorDumps_RemovesOldFiles(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create an old file (10 days ago)
+	oldPath := filepath.Join(dir, "old.txt")
+	os.WriteFile(oldPath, []byte("old"), 0644)
+	oldTime := time.Now().AddDate(0, 0, -10)
+	os.Chtimes(oldPath, oldTime, oldTime)
+
+	// Create a recent file (now)
+	newPath := filepath.Join(dir, "new.txt")
+	os.WriteFile(newPath, []byte("new"), 0644)
+
+	cleanErrorDumps(dir, 7)
+
+	if _, err := os.Stat(oldPath); !os.IsNotExist(err) {
+		t.Errorf("old file should be removed, stat err: %v", err)
+	}
+	if _, err := os.Stat(newPath); err != nil {
+		t.Errorf("new file should remain, stat err: %v", err)
+	}
+}
+
+func TestCleanErrorDumps_ZeroMaxAge(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a file that is 3 days old (< 7 day default)
+	path := filepath.Join(dir, "file.txt")
+	os.WriteFile(path, []byte("data"), 0644)
+	oldTime := time.Now().AddDate(0, 0, -3)
+	os.Chtimes(path, oldTime, oldTime)
+
+	cleanErrorDumps(dir, 0)
+
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("3-day-old file should not be removed with maxAge=0 (fallback to 7), stat err: %v", err)
+	}
+}
+
+func TestCleanErrorDumps_NoDir(t *testing.T) {
+	// Should not panic or error when dir doesn't exist
+	cleanErrorDumps(filepath.Join(t.TempDir(), "nonexistent"), 7)
+}
+
+func TestCleanErrorDumps_SkipsSubdirs(t *testing.T) {
+	dir := t.TempDir()
+
+	subDir := filepath.Join(dir, "sub")
+	os.MkdirAll(subDir, 0755)
+
+	// Old file in subdir (should be skipped)
+	oldSub := filepath.Join(subDir, "old.txt")
+	os.WriteFile(oldSub, []byte("old"), 0644)
+	oldTime := time.Now().AddDate(0, 0, -10)
+	os.Chtimes(oldSub, oldTime, oldTime)
+
+	cleanErrorDumps(dir, 7)
+
+	// Subdir itself should still exist
+	if _, err := os.Stat(subDir); err != nil {
+		t.Errorf("subdir should not be removed, stat err: %v", err)
+	}
+	// File inside subdir should still exist
+	if _, err := os.Stat(oldSub); err != nil {
+		t.Errorf("file inside subdir should not be removed, stat err: %v", err)
+	}
+}
