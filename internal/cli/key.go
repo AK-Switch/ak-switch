@@ -24,7 +24,6 @@ type KeyMutation int
 const (
 	KeyEnable KeyMutation = iota
 	KeyDisable
-	KeyRemove
 )
 
 // updateKey performs a KeyMutation on a provider's key at the given index.
@@ -55,8 +54,6 @@ func updateKey(provider string, idx int, op KeyMutation) error {
 		store.Keys[idx].Disabled = false
 	case KeyDisable:
 		store.Keys[idx].Disabled = true
-	case KeyRemove:
-		store.Keys = append(store.Keys[:idx], store.Keys[idx+1:]...)
 	}
 
 	if err := keypool.SaveKeys(provider, store); err != nil {
@@ -68,8 +65,6 @@ func updateKey(provider string, idx int, op KeyMutation) error {
 		fmt.Printf("Enabled key [%d] %s for provider %q\n", idx, desc, provider)
 	case KeyDisable:
 		fmt.Printf("Disabled key [%d] %s for provider %q\n", idx, desc, provider)
-	case KeyRemove:
-		fmt.Printf("Removed key [%d] %s from provider %q (remaining: %d keys)\n", idx, desc, provider, len(store.Keys))
 	}
 
 	triggerReload()
