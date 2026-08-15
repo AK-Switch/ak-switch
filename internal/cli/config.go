@@ -578,6 +578,10 @@ func getFieldValue(tc *config.TomlConfig, provider string, fd *config.ConfigFiel
 				return p.GenaiModel, nil
 			case "keys_file":
 				return p.KeysFile, nil
+			case "rectify_thinking_map_to":
+				return p.RectifyThinkingMapTo, nil
+			case "thinking_mode":
+				return p.ThinkingMode, nil
 			}
 		}
 	}
