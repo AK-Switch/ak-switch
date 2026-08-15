@@ -386,6 +386,10 @@ Examples:
 				idx, provider, len(store.Keys), len(store.Keys)-1)
 		}
 
+		if store.Keys[idx].Deleted {
+			return fmt.Errorf("key [%d] is deleted, use 'key restore' to recover it first", idx)
+		}
+
 		// Handle optional key value
 		if len(args) == 3 {
 			newKey := args[2]

@@ -633,6 +633,7 @@ func tTempDirForPackage() string {
 
 // setupKeyStore creates a provider with the given keys and soft-deletes the one
 // at delIndex (if >= 0). Returns the provider name.
+// delIndex convention: >= 0 means "delete the key at that index", -1 means "no deletion".
 func setupKeyStore(t *testing.T, entries []keypool.KeyEntry, delIndex int) string {
 	t.Helper()
 	provider := "test-restore-purge"
@@ -997,6 +998,75 @@ func TestKeyUpdateCmd_Behavior(t *testing.T) {
 				t.Fatalf("LoadKeys: %v", err)
 			}
 			tt.check(t, store, out)
+		})
+	}
+}
+
+func TestKeyUpdateCmd_RejectDeleted(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		delIdx  int
+	}{
+		{
+			name:   "deleted key with --name",
+			args:   []string{"akswitch", "key", "update", "PROVIDER", "0", "--name", "should-fail"},
+			delIdx: 0,
+		},
+		{
+			name:   "deleted key with new key value",
+			args:   []string{"akswitch", "key", "update", "PROVIDER", "0", "sk-new-value"},
+			delIdx: 0,
+		},
+		{
+			name:   "deleted key with --by-name",
+			args:   []string{"akswitch", "key", "update", "PROVIDER", "key-a", "sk-new-value", "--by-name"},
+			delIdx: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := setupKeyStore(t, []keypool.KeyEntry{
+				{Key: "sk-update-1", Name: "key-a"},
+				{Key: "sk-update-2", Name: "key-b"},
+			}, tt.delIdx)
+
+			// Reset flag state that may have been set by previous tests
+			for _, name := range []string{"name", "by-name"} {
+				if f := keyUpdateCmd.Flags().Lookup(name); f != nil {
+					f.Changed = false
+					if err := f.Value.Set(f.DefValue); err != nil {
+						t.Fatalf("reset flag %q: %v", name, err)
+					}
+				}
+			}
+
+			// Replace provider placeholder
+			args := make([]string, len(tt.args))
+			for i, a := range tt.args {
+				if a == "PROVIDER" {
+					args[i] = p
+				} else {
+					args[i] = a
+				}
+			}
+
+			origArgs := os.Args
+			origConfigDir := config.ConfigDir
+			os.Args = args
+			config.ConfigDir = testKeyDir
+			defer func() {
+				os.Args = origArgs
+				config.ConfigDir = origConfigDir
+			}()
+			err := keyUpdateCmd.Execute()
+			if err == nil {
+				t.Fatal("expected error for deleted key, got nil")
+			}
+			if !strings.Contains(err.Error(), "is deleted") {
+				t.Errorf("error = %q, want substring \"is deleted\"", err)
+			}
 		})
 	}
 }
