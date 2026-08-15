@@ -211,8 +211,8 @@ func TestDedupEntries_SkipsDeletedInStore(t *testing.T) {
 				{Key: "sk-111", Deleted: true},
 				{Key: "sk-222"},
 			}},
-			wantSkip: 1,
-			wantNew:  1,
+			wantSkip:   1,
+			wantNew:    1,
 			wantNewKey: "sk-111",
 		},
 	}
@@ -1057,9 +1057,9 @@ func TestKeyUpdateCmd_Behavior(t *testing.T) {
 
 func TestKeyUpdateCmd_RejectDeleted(t *testing.T) {
 	tests := []struct {
-		name    string
-		args    []string
-		delIdx  int
+		name   string
+		args   []string
+		delIdx int
 	}{
 		{
 			name:   "deleted key with --name",
@@ -1195,4 +1195,75 @@ func TestKeyListCmd_ShowAll(t *testing.T) {
 			t.Error("--all list should mark deleted status, but output does not contain 'deleted'")
 		}
 	})
+}
+
+// ── storeIndexToPoolIndex ─────────────────────────────
+
+func TestStoreIndexToPoolIndex(t *testing.T) {
+	tests := []struct {
+		name string
+		keys []keypool.KeyEntry
+		idx  int
+		want int
+	}{
+		{
+			name: "no deleted keys",
+			keys: []keypool.KeyEntry{
+				{Key: "sk-1"},
+				{Key: "sk-2"},
+				{Key: "sk-3"},
+			},
+			idx:  2,
+			want: 2,
+		},
+		{
+			name: "deleted key before target",
+			keys: []keypool.KeyEntry{
+				{Key: "sk-1", Deleted: true},
+				{Key: "sk-2"},
+				{Key: "sk-3"},
+			},
+			idx:  2,
+			want: 1,
+		},
+		{
+			name: "deleted key after target",
+			keys: []keypool.KeyEntry{
+				{Key: "sk-1"},
+				{Key: "sk-2"},
+				{Key: "sk-3", Deleted: true},
+			},
+			idx:  1,
+			want: 1,
+		},
+		{
+			name: "index 0 with no deleted",
+			keys: []keypool.KeyEntry{
+				{Key: "sk-1"},
+				{Key: "sk-2"},
+			},
+			idx:  0,
+			want: 0,
+		},
+		{
+			name: "multiple deleted keys before target",
+			keys: []keypool.KeyEntry{
+				{Key: "sk-1", Deleted: true},
+				{Key: "sk-2", Deleted: true},
+				{Key: "sk-3"},
+			},
+			idx:  2,
+			want: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := &keypool.KeyStore{Keys: tt.keys}
+			got := storeIndexToPoolIndex(store, tt.idx)
+			if got != tt.want {
+				t.Errorf("storeIndexToPoolIndex(store, %d) = %d, want %d", tt.idx, got, tt.want)
+			}
+		})
+	}
 }

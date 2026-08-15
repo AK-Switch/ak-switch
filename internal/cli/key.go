@@ -445,14 +445,40 @@ Examples:
 			return err
 		}
 
-		// Try runtime API
-		runtimeErr := callKeyRuntimeAPI(provider, idx, "cooldown")
+		// Map store index to pool index (keysFromStore skips Deleted entries)
+		store, loadErr := keypool.LoadKeys(provider)
+		if loadErr != nil {
+			return fmt.Errorf("failed to load keys for %q: %w", provider, loadErr)
+		}
+		if idx < 0 || idx >= len(store.Keys) {
+			return fmt.Errorf("index %d out of range: provider %q has %d keys (valid: 0-%d)",
+				idx, provider, len(store.Keys), len(store.Keys)-1)
+		}
+		if store.Keys[idx].Deleted {
+			return fmt.Errorf("key [%d] is deleted, use 'key restore' to recover it first", idx)
+		}
+		poolIdx := storeIndexToPoolIndex(store, idx)
+		// Server parseKeyIndex expects 1-based URL index, converts to 0-based internally
+		runtimeErr := callKeyRuntimeAPI(provider, poolIdx+1, "cooldown")
 		if runtimeErr == nil {
 			return nil
 		}
 
 		return fmt.Errorf("server not running — start akswitch to use runtime cooldown: %w", runtimeErr)
 	},
+}
+
+// storeIndexToPoolIndex maps a store index (0-based, covering all keys) to a
+// pool index (0-based, covering only non-Deleted keys). This is needed because
+// keysFromStore skips Deleted entries, so the pool on the server is compact.
+func storeIndexToPoolIndex(store *keypool.KeyStore, idx int) int {
+	poolIdx := 0
+	for i := 0; i < idx; i++ {
+		if !store.Keys[i].Deleted {
+			poolIdx++
+		}
+	}
+	return poolIdx
 }
 
 var keyListCmd = &cobra.Command{
