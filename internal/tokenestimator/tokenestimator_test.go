@@ -314,6 +314,136 @@ func TestProcessResponse_InvalidJSON(t *testing.T) {
 	}
 }
 
+// ── ExtractModel ──────────────────────────────────
+
+func TestExtractModel_ValidJSON(t *testing.T) {
+	body := []byte(`{"model":"gpt-4o","messages":[]}`)
+	if got := ExtractModel(body); got != "gpt-4o" {
+		t.Errorf("ExtractModel = %q, want %q", got, "gpt-4o")
+	}
+}
+
+func TestExtractModel_MissingField(t *testing.T) {
+	body := []byte(`{"messages":[]}`)
+	if got := ExtractModel(body); got != "" {
+		t.Errorf("ExtractModel = %q, want empty", got)
+	}
+}
+
+func TestExtractModel_InvalidJSON(t *testing.T) {
+	if got := ExtractModel([]byte(`not json`)); got != "" {
+		t.Errorf("ExtractModel = %q, want empty", got)
+	}
+}
+
+func TestExtractModel_NilBody(t *testing.T) {
+	if got := ExtractModel(nil); got != "" {
+		t.Errorf("ExtractModel(nil) = %q, want empty", got)
+	}
+}
+
+func TestExtractModel_EmptyBody(t *testing.T) {
+	if got := ExtractModel([]byte{}); got != "" {
+		t.Errorf("ExtractModel(empty) = %q, want empty", got)
+	}
+}
+
+// ── EstimateInput ─────────────────────────────────
+
+func TestEstimateInput_OpenAIStringFormat(t *testing.T) {
+	body := []byte(`{"messages":[{"role":"user","content":"hello world"}]}`)
+	tokens := EstimateInput(body, "gpt-4o")
+	if tokens <= 0 {
+		t.Errorf("EstimateInput = %d, want > 0 (OpenAI string format)", tokens)
+	}
+}
+
+func TestEstimateInput_AnthropicContentArray(t *testing.T) {
+	body := []byte(`{"messages":[{"role":"user","content":[{"type":"text","text":"hello world"}]}]}`)
+	tokens := EstimateInput(body, "claude-3-opus-20240229")
+	if tokens <= 0 {
+		t.Errorf("EstimateInput = %d, want > 0 (Anthropic content array)", tokens)
+	}
+}
+
+func TestEstimateInput_MultiTurn(t *testing.T) {
+	body := []byte(`{"messages":[
+			{"role":"user","content":"first message"},
+			{"role":"assistant","content":"response"},
+			{"role":"user","content":[{"type":"text","text":"second message with array"}]}
+		]}`)
+	tokens := EstimateInput(body, "gpt-4o")
+	if tokens <= 0 {
+		t.Errorf("EstimateInput = %d, want > 0 (multi-turn)", tokens)
+	}
+}
+
+func TestEstimateInput_EmptyBody(t *testing.T) {
+	if got := EstimateInput(nil, "gpt-4o"); got != 0 {
+		t.Errorf("EstimateInput(nil) = %d, want 0", got)
+	}
+	if got := EstimateInput([]byte{}, "gpt-4o"); got != 0 {
+		t.Errorf("EstimateInput(empty) = %d, want 0", got)
+	}
+}
+
+func TestEstimateInput_InvalidJSON(t *testing.T) {
+	if got := EstimateInput([]byte(`not json`), "gpt-4o"); got != 0 {
+		t.Errorf("EstimateInput(invalid) = %d, want 0", got)
+	}
+}
+
+func TestEstimateInput_EmptyMessages(t *testing.T) {
+	body := []byte(`{"messages":[]}`)
+	if got := EstimateInput(body, "gpt-4o"); got != 0 {
+		t.Errorf("EstimateInput(empty messages) = %d, want 0", got)
+	}
+}
+
+func TestEstimateInput_MixedContentTypes(t *testing.T) {
+	body := []byte(`{"messages":[
+			{"role":"user","content":"plain string"},
+			{"role":"user","content":[{"type":"text","text":"array text"}]}
+		]}`)
+	tokens := EstimateInput(body, "gpt-4o")
+	if tokens <= 0 {
+		t.Errorf("EstimateInput(mixed) = %d, want > 0", tokens)
+	}
+}
+
+// ── EstimateOutput ────────────────────────────────
+
+func TestEstimateOutput_NormalText(t *testing.T) {
+	tokens := EstimateOutput("hello world, this is a test message", "gpt-4o")
+	if tokens <= 0 {
+		t.Skip("requires tiktoken C library")
+	}
+}
+
+func TestEstimateOutput_EmptyText(t *testing.T) {
+	if got := EstimateOutput("", "gpt-4o"); got != 0 {
+		t.Errorf("EstimateOutput(empty) = %d, want 0", got)
+	}
+}
+
+func TestEstimateOutput_UnknownModel(t *testing.T) {
+	tokens := EstimateOutput("hello world", "unknown-model-12345")
+	if tokens <= 0 {
+		t.Skip("requires tiktoken C library")
+	}
+}
+
+func TestEstimateOutput_LongText(t *testing.T) {
+	text := ""
+	for i := 0; i < 1000; i++ {
+		text += "word "
+	}
+	tokens := EstimateOutput(text, "cl100k_base")
+	if tokens <= 0 {
+		t.Skip("requires tiktoken C library")
+	}
+}
+
 // ── RecordCalibration ──────────────────────────
 
 func TestRecordCalibration_BothPositive(t *testing.T) {

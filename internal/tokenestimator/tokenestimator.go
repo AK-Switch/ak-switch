@@ -95,6 +95,21 @@ func encodingForModel(model string) string {
 	return "cl100k_base"
 }
 
+// ExtractModel extracts the model name from a request body JSON.
+// Returns empty string if the body is empty, malformed, or model is missing.
+func ExtractModel(bodyBytes []byte) string {
+	if len(bodyBytes) == 0 {
+		return ""
+	}
+	var reqBody struct {
+		Model string `json:"model"`
+	}
+	if err := json.Unmarshal(bodyBytes, &reqBody); err != nil {
+		return ""
+	}
+	return reqBody.Model
+}
+
 // EstimateOutput uses tiktoken to estimate the number of tokens in a text string.
 // The model parameter determines which tiktoken encoding to use.
 // Returns 0 if tiktoken initialization fails or text is empty.
@@ -157,15 +172,9 @@ func EstimateInput(bodyBytes []byte, model string) int {
 	return len(tke.Encode(inputBuf.String(), nil, nil))
 }
 
-// ParseSSEEvent parses a single SSE "data: " event line and returns
-// the extracted text delta, thinking delta, and output token count.
-// Returns (0, "", "") for non-data lines, unrecognized JSON, or events
-// that don't carry text/token information.
-func ParseSSEEvent(raw []byte) (outputTokens int, textDelta string, thinkingDelta string) {
-	if len(raw) == 0 {
-		return 0, "", ""
-	}
-
+// parseAnthropicSSE handles Anthropic format SSE events.
+// Supports: content_block_delta (text/partial_json/thinking), content_block_start, message_delta.
+func parseAnthropicSSE(raw []byte) (outputTokens int, textDelta string, thinkingDelta string) {
 	var result struct {
 		Type  string `json:"type"`
 		Delta *struct {
@@ -180,23 +189,9 @@ func ParseSSEEvent(raw []byte) (outputTokens int, textDelta string, thinkingDelt
 		Usage *struct {
 			OutputTokens int `json:"output_tokens"`
 		} `json:"usage,omitempty"`
-		Choices []struct {
-			Delta *struct {
-				Content string `json:"content"`
-			} `json:"delta,omitempty"`
-		} `json:"choices"`
 	}
-	if err := json.Unmarshal(raw, &result); err != nil || result.Type == "" {
-		// Try OpenAI format (no "type" field)
-		if err := json.Unmarshal(raw, &result); err != nil {
-			return 0, "", ""
-		}
-		for _, choice := range result.Choices {
-			if choice.Delta != nil {
-				textDelta += choice.Delta.Content
-			}
-		}
-		return 0, textDelta, ""
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return 0, "", ""
 	}
 
 	switch result.Type {
@@ -217,6 +212,50 @@ func ParseSSEEvent(raw []byte) (outputTokens int, textDelta string, thinkingDelt
 		}
 	}
 	return outputTokens, textDelta, thinkingDelta
+}
+
+// parseOpenAISSE handles OpenAI format SSE events.
+// Supports: choices[].delta.content format.
+func parseOpenAISSE(raw []byte) (outputTokens int, textDelta string, thinkingDelta string) {
+	var result struct {
+		Choices []struct {
+			Delta *struct {
+				Content string `json:"content"`
+			} `json:"delta,omitempty"`
+		} `json:"choices"`
+	}
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return 0, "", ""
+	}
+	for _, choice := range result.Choices {
+		if choice.Delta != nil {
+			textDelta += choice.Delta.Content
+		}
+	}
+	return 0, textDelta, ""
+}
+
+// ParseSSEEvent parses a single SSE "data: " event line and returns
+// the extracted text delta, thinking delta, and output token count.
+// Returns (0, "", "") for non-data lines, unrecognized JSON, or events
+// that don't carry text/token information.
+func ParseSSEEvent(raw []byte) (outputTokens int, textDelta string, thinkingDelta string) {
+	if len(raw) == 0 {
+		return 0, "", ""
+	}
+
+	// Try Anthropic format first (has "type" field)
+	if raw[0] == '{' {
+		typeCheck := struct {
+			Type string `json:"type"`
+		}{}
+		if err := json.Unmarshal(raw, &typeCheck); err == nil && typeCheck.Type != "" {
+			return parseAnthropicSSE(raw)
+		}
+		// No type field — try OpenAI format
+		return parseOpenAISSE(raw)
+	}
+	return 0, "", ""
 }
 
 // ProcessResponse extracts the actual token counts and response text
