@@ -298,6 +298,18 @@ func mergeWithDefaults(base, override *Config) *Config {
         }
     }
 
+    // 排除字段：显式应用 override 非零值
+    // 反射循环跳过了排除字段，但 override 显式设置的值必须生效
+    if override.TargetBase != "" {
+        result.TargetBase = override.TargetBase
+    }
+    if len(override.Keys) > 0 {
+        result.Keys = override.Keys
+    }
+    if len(override.KeyNames) > 0 {
+        result.KeyNames = override.KeyNames
+    }
+
     // Sync runtime config
     result.RuntimeConfig.HTTPTimeoutSec = result.HTTPTimeoutSec
     result.RuntimeConfig.MaxRetries = result.MaxRetries
