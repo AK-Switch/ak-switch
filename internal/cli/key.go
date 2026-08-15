@@ -49,6 +49,10 @@ func updateKey(provider string, idx int, op KeyMutation) error {
 		desc += fmt.Sprintf(" (name: %s)", entry.Name)
 	}
 
+	if entry.Deleted {
+		return fmt.Errorf("key [%d] is deleted, use 'key restore' to recover it first", idx)
+	}
+
 	switch op {
 	case KeyEnable:
 		store.Keys[idx].Disabled = false

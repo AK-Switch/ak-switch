@@ -1071,6 +1071,33 @@ func TestKeyUpdateCmd_RejectDeleted(t *testing.T) {
 	}
 }
 
+func TestKeyEnableDisableCmd_RejectDeleted(t *testing.T) {
+	tests := []struct {
+		name string
+		op   KeyMutation
+	}{
+		{name: "enable deleted key", op: KeyEnable},
+		{name: "disable deleted key", op: KeyDisable},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := setupKeyStore(t, []keypool.KeyEntry{
+				{Key: "sk-enable-1", Name: "key-a"},
+				{Key: "sk-enable-2", Name: "key-b"},
+			}, 0) // soft-delete index 0
+
+			err := updateKey(p, 0, tt.op)
+			if err == nil {
+				t.Fatal("expected error for deleted key, got nil")
+			}
+			if !strings.Contains(err.Error(), "is deleted") {
+				t.Errorf("error = %q, want substring \"is deleted\"", err)
+			}
+		})
+	}
+}
+
 // ── keyListCmd ────────────────────────────────────────
 
 func TestKeyListCmd_ShowAll(t *testing.T) {
