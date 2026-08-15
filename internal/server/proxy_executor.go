@@ -258,7 +258,8 @@ func (px *ProxyExecutor) handleNonRetryable(w http.ResponseWriter, ps *ProviderS
 	_, _ = io.Copy(w, tee)
 	body := buf.Bytes()
 
-	if err := writeErrorDump(SetupErrorLogDir(), ps, keyName, method, target, resp.StatusCode, attempt, start, bodyBytes, body, rectified); err != nil {
+	maxAge := ps.ErrorDumpMaxAge()
+	if err := writeErrorDump(SetupErrorLogDir(maxAge), ps, keyName, method, target, resp.StatusCode, attempt, start, bodyBytes, body, rectified, maxAge); err != nil {
 		slog.Warn("failed to write error dump", "provider", ps.Name(), "status", resp.StatusCode, "error", err)
 	}
 
