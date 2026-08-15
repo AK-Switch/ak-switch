@@ -234,6 +234,7 @@ func (c *Config) DeepCopy() *Config {
 			Keys:                   keys,
 			KeyNames:               keyNames,
 			KeysFile:               c.KeysFile,
+			KeySelection:           c.KeySelection,
 			BackoffCapSec:          c.BackoffCapSec,
 			BackoffMultiplier:      c.BackoffMultiplier,
 			CBResetSec:             c.CBResetSec,
@@ -260,98 +261,54 @@ func (c *Config) DeepCopy() *Config {
 	}
 }
 
+// mergeExcludeFields 列出不应从 [provider.default] 段继承的字段。
+// 这些字段是 provider 专属，全局段设置无意义。
+// 实现上：mergeWithDefaults 会对这些字段清零后仅接受 override 的非零值。
+var mergeExcludeFields = map[string]struct{}{
+	"TargetBase": {},
+	"Keys":       {},
+	"KeyNames":   {},
+}
+
 // mergeWithDefaults merges override into base, returning a new Config.
 // Non-zero fields in override take precedence over base.
-// Non-inheritable fields (TargetBase, Keys, KeyNames, Port, Host, etc.)
-// are taken from override only when non-zero/non-empty.
-//
-// The 9 inheritable fields are: MaxRetries, HTTPTimeoutSec, CooldownSec,
-// BackoffCapSec, BackoffMultiplier, CBResetSec, UpstreamCBThreshold,
-// HealthCheckIntervalSec, LogLevel.
+// Uses reflection to iterate all ProviderConfig fields automatically.
+// Fields in mergeExcludeFields are never inherited from base.
 func mergeWithDefaults(base, override *Config) *Config {
 	result := base.DeepCopy()
-	// Inheritable fields — only override if non-zero
-	if override.MaxRetries != 0 {
-		result.MaxRetries = override.MaxRetries
+
+	// 排除字段不从 base 继承——清零后仅接受 override 的非零值。
+	// 否则 base.DeepCopy() 会把这三个 provider 专属字段误带到 result。
+	result.TargetBase = ""
+	result.Keys = nil
+	result.KeyNames = nil
+
+	baseVal := reflect.ValueOf(&base.ProviderConfig).Elem()
+	overrideVal := reflect.ValueOf(&override.ProviderConfig).Elem()
+	resultVal := reflect.ValueOf(&result.ProviderConfig).Elem()
+
+	for i := 0; i < baseVal.NumField(); i++ {
+		field := baseVal.Type().Field(i)
+		if _, excluded := mergeExcludeFields[field.Name]; excluded {
+			continue
+		}
+		o := overrideVal.Field(i)
+		r := resultVal.Field(i)
+		if !o.IsZero() {
+			r.Set(o)
+		}
 	}
-	if override.HTTPTimeoutSec != 0 {
-		result.HTTPTimeoutSec = override.HTTPTimeoutSec
-	}
-	if override.CooldownSec != 0 {
-		result.CooldownSec = override.CooldownSec
-	}
-	if override.BackoffCapSec != 0 {
-		result.BackoffCapSec = override.BackoffCapSec
-	}
-	if override.BackoffMultiplier != 0 {
-		result.BackoffMultiplier = override.BackoffMultiplier
-	}
-	if override.CBResetSec != 0 {
-		result.CBResetSec = override.CBResetSec
-	}
-	if override.UpstreamCBThreshold != 0 {
-		result.UpstreamCBThreshold = override.UpstreamCBThreshold
-	}
-	if override.HealthCheckIntervalSec != 0 {
-		result.HealthCheckIntervalSec = override.HealthCheckIntervalSec
-	}
-	if override.LogLevel != "" {
-		result.LogLevel = override.LogLevel
-	}
-	// Non-inheritable fields — only override if non-zero/non-empty
-	if override.Port != 0 {
-		result.Port = override.Port
-	}
-	if override.Host != "" {
-		result.Host = override.Host
-	}
+
+	// 排除字段：显式应用 override 非零值
+	// 反射循环跳过了排除字段，但 override 显式设置的值必须生效
 	if override.TargetBase != "" {
 		result.TargetBase = override.TargetBase
-	}
-	if override.AdminToken != "" {
-		result.AdminToken = override.AdminToken
-	}
-	if override.DisableThinking {
-		result.DisableThinking = true
-	}
-	if override.ThinkingMode != "" {
-		result.ThinkingMode = override.ThinkingMode
-	}
-	if override.RectifyThinkingMapTo != "" {
-		result.RectifyThinkingMapTo = override.RectifyThinkingMapTo
-	}
-	if override.GenaiModel != "" {
-		result.GenaiModel = override.GenaiModel
 	}
 	if len(override.Keys) > 0 {
 		result.Keys = override.Keys
 	}
 	if len(override.KeyNames) > 0 {
 		result.KeyNames = override.KeyNames
-	}
-	if override.KeysFile != "" {
-		result.KeysFile = override.KeysFile
-	}
-	if override.HealthCheckPath != "" {
-		result.HealthCheckPath = override.HealthCheckPath
-	}
-	if override.HealthCheckTimeoutSec != 0 {
-		result.HealthCheckTimeoutSec = override.HealthCheckTimeoutSec
-	}
-	if override.LogFile != "" {
-		result.LogFile = override.LogFile
-	}
-	if override.LogMaxSize != 0 {
-		result.LogMaxSize = override.LogMaxSize
-	}
-	if override.LogMaxAge != 0 {
-		result.LogMaxAge = override.LogMaxAge
-	}
-	if override.ErrorDumpMaxAge != 0 {
-		result.ErrorDumpMaxAge = override.ErrorDumpMaxAge
-	}
-	if override.CalibrationIntervalSec != 0 {
-		result.CalibrationIntervalSec = override.CalibrationIntervalSec
 	}
 	// Sync runtime config
 	result.RuntimeConfig.HTTPTimeoutSec = result.HTTPTimeoutSec
