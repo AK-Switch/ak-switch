@@ -159,7 +159,7 @@ var configViewCmd = &cobra.Command{
 		fmt.Printf("Configuration source: %s\n", source)
 		for name := range providers {
 			fmt.Printf("\n--- Provider: %s ---\n", name)
-			for _, fd := range config.ConfigFieldDescriptors {
+for _, fd := range config.ConfigFieldDescriptors {
 				if fd.Scope != config.FieldScopeProvider {
 					continue
 				}
@@ -251,7 +251,7 @@ var configGetCmd = &cobra.Command{
 	Valid keys: port, log_file, target, cooldown_sec, max_retries,
 	backoff_cap_sec, backoff_multiplier, cb_reset_sec, upstream_cb_threshold,
 	http_timeout_sec, health_check_interval_sec, log_level,
-	disable_thinking, genai_model, admin_token, keys_file
+	disable_thinking, genai_model, admin_token, keys_file, key_selection
 
 	Examples:
 	  akswitch config get http_timeout_sec
@@ -334,7 +334,7 @@ var configSetCmd = &cobra.Command{
 	Valid keys: port, log_file, target, cooldown_sec, max_retries,
 	backoff_cap_sec, backoff_multiplier, cb_reset_sec, upstream_cb_threshold,
 	http_timeout_sec, health_check_interval_sec, log_level,
-	disable_thinking, genai_model, admin_token, keys_file
+	disable_thinking, genai_model, admin_token, keys_file, key_selection
 
 	Examples:
 	  akswitch config set http_timeout_sec 60
@@ -572,6 +572,8 @@ func getFieldValue(tc *config.TomlConfig, provider string, fd *config.ConfigFiel
 				return p.GenaiModel, nil
 			case "keys_file":
 				return p.KeysFile, nil
+			case "key_selection":
+				return p.KeySelection, nil
 			case "rectify_thinking_map_to":
 				return p.RectifyThinkingMapTo, nil
 			case "thinking_mode":

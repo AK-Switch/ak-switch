@@ -53,6 +53,8 @@ func NewProviderState(name string, cfg *config.Config, pool *keypool.KeyPool, da
 	base := time.Duration(cfg.CooldownSec) * time.Second
 	cap_ := time.Duration(backoffCapSec) * time.Second
 	pool.ConfigureCBs(base, cap_, backoffMult)
+	// 设置 key 选择策略
+	pool.SetSelectionMode(keypool.KeySelectionMode(cfg.KeySelection))
 
 	upCB := circuitbreaker.NewUpstreamCircuitBreaker(
 		upstreamThreshold,
@@ -124,6 +126,7 @@ func (ps *ProviderState) SetThinkingMode(v string)         { ps.config.ThinkingM
 func (ps *ProviderState) SetRectifyThinkingMapTo(v string) { ps.config.RectifyThinkingMapTo = v }
 func (ps *ProviderState) GenaiModel() string               { return ps.config.GenaiModel }
 func (ps *ProviderState) CalibrationIntervalSec() int      { return ps.config.CalibrationIntervalSec }
+func (ps *ProviderState) ErrorDumpMaxAge() int             { return ps.config.ErrorDumpMaxAge }
 func (ps *ProviderState) TargetBase() string               { return ps.config.TargetBase }
 
 // Pool proxy methods — forward to ps.pool

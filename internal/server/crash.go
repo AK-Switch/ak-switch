@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -79,4 +80,55 @@ func SetupCrashLogDir() string {
 		_ = os.MkdirAll(dir, 0755)
 	}
 	return path
+}
+
+// ErrorLogDir is the subdirectory under the user's home/config dir for error dumps.
+const ErrorLogDir = "errors"
+
+// defaultErrorLogDir returns the default error dump directory
+// (~/.akswitch/errors), matching CrashLogDir's home-based convention.
+func defaultErrorLogDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ErrorLogDir
+	}
+	return filepath.Join(home, CrashLogDir, ErrorLogDir)
+}
+
+// SetupErrorLogDir ensures the error dump directory exists.
+// Returns the directory path.
+func SetupErrorLogDir(maxAgeDays int) string {
+	dir := defaultErrorLogDir()
+	_ = os.MkdirAll(dir, 0755)
+	cleanErrorDumps(dir, maxAgeDays)
+	return dir
+}
+
+// cleanErrorDumps removes error dump files older than maxAgeDays from dir.
+// Best-effort: read/remove failures logged at warn level, not fatal.
+func cleanErrorDumps(dir string, maxAgeDays int) {
+	if maxAgeDays <= 0 {
+		maxAgeDays = 7
+	}
+	cutoff := time.Now().AddDate(0, 0, -maxAgeDays)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		slog.Warn("failed to read error dump directory", "dir", dir, "error", err)
+		return
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			slog.Warn("failed to get error dump entry info", "file", e.Name(), "error", err)
+			continue
+		}
+		if info.ModTime().Before(cutoff) {
+			if err := os.Remove(filepath.Join(dir, e.Name())); err != nil {
+				slog.Warn("failed to remove stale error dump", "file", e.Name(), "error", err)
+			}
+		}
+	}
 }

@@ -123,6 +123,9 @@ func LoadAllTomlProviders(path string) (map[string]*Config, error) {
 		if tc.LogMaxAge > 0 {
 			p.LogMaxAge = tc.LogMaxAge
 		}
+		if tc.ErrorDumpMaxAge > 0 {
+			p.ErrorDumpMaxAge = tc.ErrorDumpMaxAge
+		}
 		result[name] = p
 	}
 	// Warn about provider names containing uppercase letters.

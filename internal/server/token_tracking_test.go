@@ -3,6 +3,7 @@
 package server
 
 import (
+	"bufio"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -292,4 +293,112 @@ func TestStreamSSE_InputJsonDelta(t *testing.T) {
 	if output <= 0 {
 		t.Errorf("output_tokens = %d, want > 0 (should accumulate both input_json_delta and text_delta)", output)
 	}
+}
+
+type failAfterWriter struct {
+	http.ResponseWriter
+	writeCount int
+	failAfter  int
+}
+
+func (w *failAfterWriter) Write(b []byte) (int, error) {
+	w.writeCount++
+	if w.writeCount > w.failAfter {
+		return 0, io.ErrUnexpectedEOF
+	}
+	return w.ResponseWriter.Write(b)
+}
+
+func TestStreamSSE_RespBodySize(t *testing.T) {
+	// SSE data lines (each line ends with LF in the raw stream)
+	lines := []string{
+		`data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`,
+		`data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`,
+		`data: {"type":"content_block_stop","index":0}`,
+		`data: {"type":"message_delta","delta":{},"usage":{"output_tokens":5}}`,
+		`data: {"type":"message_stop"}`,
+	}
+	// Build SSE data with classic \n\n event separators
+	var sseData string
+	for i, line := range lines {
+		if i > 0 {
+			sseData += "\n" // blank line between events
+		}
+		sseData += line + "\n\n"
+	}
+	// Expected: each Scanner line is written back as (line + "\n").
+	// Scanner splits on \n; blank lines between events are empty tokens.
+	// The trailing \n\n means the last event has a trailing blank line.
+	var expectedSize int
+	scanner := bufio.NewScanner(strings.NewReader(sseData))
+	for scanner.Scan() {
+		expectedSize += len(scanner.Text()) + 1 // +1 for the "\n" added by w.Write
+	}
+
+	w := httptest.NewRecorder()
+	respBody := io.NopCloser(strings.NewReader(sseData))
+	resp := &http.Response{Body: respBody, Header: make(http.Header)}
+	resp.Header.Set("Content-Type", "text/event-stream")
+
+	_, _, respBodySize := streamSSEAndEstimateTokens(w, resp, nil, "")
+
+	if respBodySize != int64(expectedSize) {
+		t.Errorf("respBodySize = %d, want %d", respBodySize, expectedSize)
+	}
+
+	t.Run("write_error_mid_stream", func(t *testing.T) {
+		inner := httptest.NewRecorder()
+		w := &failAfterWriter{ResponseWriter: inner, failAfter: 1}
+		sseData := "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hello\"}}\n\n" +
+			"data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" world\"}}\n\n"
+		respBody := io.NopCloser(strings.NewReader(sseData))
+		resp := &http.Response{Body: respBody, Header: make(http.Header)}
+		resp.Header.Set("Content-Type", "text/event-stream")
+
+		_, _, respBodySize := streamSSEAndEstimateTokens(w, resp, nil, "")
+
+		if respBodySize <= 0 {
+			t.Errorf("respBodySize = %d, want > 0 (partial write)", respBodySize)
+		}
+		if respBodySize >= int64(len(sseData)) {
+			t.Errorf("respBodySize = %d, want < %d (should be truncated)", respBodySize, len(sseData))
+		}
+	})
+
+	t.Run("crlf_line_endings", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		// SSE data with \r\n line endings
+		sseData := "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hi\"}}\r\n\r\n"
+		respBody := io.NopCloser(strings.NewReader(sseData))
+		resp := &http.Response{Body: respBody, Header: make(http.Header)}
+		resp.Header.Set("Content-Type", "text/event-stream")
+
+		// Expected: bufio.Scanner's default ScanLines split strips trailing \r
+		// (dropCR), so "data: ...\r\n" produces token "data: ..." (no \r).
+		// w.Write writes line + "\n", turning each token back into "...\n".
+		// The blank "\r\n" line produces an empty token, written back as "\n".
+		var expectedSize int
+		scanner := bufio.NewScanner(strings.NewReader(sseData))
+		for scanner.Scan() {
+			expectedSize += len(scanner.Text()) + 1 // +1 for the "\n" added by w.Write
+		}
+		_, _, respBodySize := streamSSEAndEstimateTokens(w, resp, nil, "")
+
+		if respBodySize != int64(expectedSize) {
+			t.Errorf("respBodySize = %d, want %d (\\r\\n endings)", respBodySize, expectedSize)
+		}
+	})
+
+	t.Run("empty_stream", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		respBody := io.NopCloser(strings.NewReader(""))
+		resp := &http.Response{Body: respBody, Header: make(http.Header)}
+		resp.Header.Set("Content-Type", "text/event-stream")
+
+		_, _, respBodySize := streamSSEAndEstimateTokens(w, resp, nil, "")
+
+		if respBodySize != 0 {
+			t.Errorf("respBodySize = %d, want 0 for empty stream", respBodySize)
+		}
+	})
 }

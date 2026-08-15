@@ -18,6 +18,7 @@ type TomlConfig struct {
 	LogFile         string             `toml:"log_file,omitempty"`
 	LogMaxSize      int                `toml:"log_max_size,omitempty"`
 	LogMaxAge       int                `toml:"log_max_age,omitempty"`
+	ErrorDumpMaxAge int                `toml:"error_dump_max_age,omitempty"`
 	Provider        map[string]*Config `toml:"provider"`
 }
 
