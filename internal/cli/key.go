@@ -1051,8 +1051,8 @@ func parseCSV(data []byte) ([]keypool.KeyEntry, error) {
 		"token": true, "secret": true, "apikey": true,
 	}
 	nameColNames := map[string]bool{
-		"name": true, "account_name": true, "username": true,
-		"user": true, "account": true, "备注": true,
+		"name": true, "key_name": true, "account_name": true,
+		"username": true, "user": true, "account": true, "备注": true,
 	}
 
 	contentStart := 0
