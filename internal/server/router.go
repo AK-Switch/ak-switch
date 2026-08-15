@@ -126,6 +126,7 @@ func (ps *ProviderState) SetThinkingMode(v string)         { ps.config.ThinkingM
 func (ps *ProviderState) SetRectifyThinkingMapTo(v string) { ps.config.RectifyThinkingMapTo = v }
 func (ps *ProviderState) GenaiModel() string               { return ps.config.GenaiModel }
 func (ps *ProviderState) CalibrationIntervalSec() int      { return ps.config.CalibrationIntervalSec }
+func (ps *ProviderState) ErrorDumpMaxAge() int             { return ps.config.ErrorDumpMaxAge }
 func (ps *ProviderState) TargetBase() string               { return ps.config.TargetBase }
 
 // Pool proxy methods — forward to ps.pool
