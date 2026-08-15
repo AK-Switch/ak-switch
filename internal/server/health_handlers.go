@@ -10,6 +10,12 @@ import (
 	"time"
 )
 
+// ── SW Handler ──────────────────────────────────────────
+
+func (api *AdminAPI) swHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // ── Health Handler ──────────────────────────────────────
 
 func (api *AdminAPI) healthHandler(w http.ResponseWriter, r *http.Request) {

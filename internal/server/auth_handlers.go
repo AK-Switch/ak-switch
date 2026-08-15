@@ -148,10 +148,6 @@ func (api *AdminAPI) persistRuntimeConfigFieldToDefault(key string, value interf
 
 // ── SW Handler ──────────────────────────────────────────
 
-func (api *AdminAPI) swHandler(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNoContent)
-}
-
 // ── Log Level Handler ───────────────────────────────────
 
 func (api *AdminAPI) logLevelHandler(w http.ResponseWriter, r *http.Request) {
