@@ -595,6 +595,8 @@ func getFieldValue(tc *config.TomlConfig, provider string, fd *config.ConfigFiel
 				return p.GenaiModel, nil
 			case "keys_file":
 				return p.KeysFile, nil
+			case "key_selection":
+				return p.KeySelection, nil
 			}
 		}
 	}
