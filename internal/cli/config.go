@@ -205,9 +205,12 @@ var configListCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to determine config path: %w", err)
 		}
-		mergedProviders, err := config.LoadAllTomlProviders(source)
-		if err != nil {
-			return fmt.Errorf("failed to load providers: %w", err)
+		mergedProviders := make(map[string]*config.Config)
+		if _, statErr := os.Stat(source); statErr == nil {
+			mergedProviders, err = config.LoadAllTomlProviders(source)
+			if err != nil {
+				return fmt.Errorf("failed to load providers: %w", err)
+			}
 		}
 
 		// Build provider list
