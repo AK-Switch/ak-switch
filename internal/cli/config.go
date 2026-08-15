@@ -172,6 +172,7 @@ var configViewCmd = &cobra.Command{
 			fmt.Printf("  Health check path: %s\n", sanitized.HealthCheckPath)
 			fmt.Printf("  Health check timeout seconds: %d\n", sanitized.HealthCheckTimeoutSec)
 			fmt.Printf("  Keys file: %s\n", sanitized.KeysFile)
+			fmt.Printf("  Key selection mode: %s\n", sanitized.KeySelection)
 			for i, key := range sanitized.Keys {
 				keyName := ""
 				if i < len(sanitized.KeyNames) {
