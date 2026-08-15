@@ -314,10 +314,6 @@ var configGetCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("failed to determine config path: %w", err)
 			}
-			tc, err = config.LoadTomlConfig(source)
-			if err != nil {
-				return fmt.Errorf("failed to load config: %w", err)
-			}
 			mergedProviders, err = config.LoadAllTomlProviders(source)
 			if err != nil {
 				return fmt.Errorf("failed to load merged providers: %w", err)
@@ -558,18 +554,6 @@ func maskSensitiveValue(fd *config.ConfigFieldDescriptor, val any) string {
 		return "(not set)"
 	}
 	return fd.Format(val)
-}
-
-// getFieldValue reads a provider-scoped field value from a loaded TOML config.
-// Falls back to the field's default if the config is missing or unset.
-func getFieldValue(tc *config.TomlConfig, provider string, fd *config.ConfigFieldDescriptor) (any, error) {
-	if tc != nil {
-		if p, ok := tc.Provider[provider]; ok && p != nil {
-			return readFieldFromProviderConfig(&p.ProviderConfig, fd)
-		}
-	}
-	// Fall back to default value
-	return config.ParseDefault(fd)
 }
 
 // getMergedFieldValue reads a provider-scoped field value from a merged (inherited) config map.
