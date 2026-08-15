@@ -52,23 +52,6 @@ func TestKeyUpdateCmd_Flags(t *testing.T) {
 	}
 }
 
-func TestKeyRenameCmd_Exists(t *testing.T) {
-	if keyRenameCmd == nil {
-		t.Fatal("expected keyRenameCmd to be defined")
-	}
-}
-
-func TestKeyRenameCmd_Flags(t *testing.T) {
-	flags := []string{"by-name"}
-	for _, f := range flags {
-		t.Run(f, func(t *testing.T) {
-			if keyRenameCmd.Flags().Lookup(f) == nil {
-				t.Fatalf("expected --%s flag on key rename command", f)
-			}
-		})
-	}
-}
-
 func TestFindKeyIndexByName_Found(t *testing.T) {
 	store := &keypool.KeyStore{
 		Keys: []keypool.KeyEntry{
@@ -148,7 +131,6 @@ func TestAllKeyIndexCommands_HaveByNameFlag(t *testing.T) {
 		{"keyDisable", keyDisableCmd},
 		{"keyEnable", keyEnableCmd},
 		{"keyUpdate", keyUpdateCmd},
-		{"keyRename", keyRenameCmd},
 	}
 	for _, tc := range commands {
 		t.Run(tc.name, func(t *testing.T) {
