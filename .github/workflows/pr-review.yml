@@ -28,6 +28,7 @@ jobs:
       - name: Run PR Review
         uses: ./.github/actions/pr-review
         with:
-          llm-model: anthropic/claude-sonnet-4-5-20250929
+          llm-model: openai/step-3.7-flash
+          llm-base-url: https://api.stepfun.com/step_plan/v1
           llm-api-key: ${{ secrets.LLM_API_KEY }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
