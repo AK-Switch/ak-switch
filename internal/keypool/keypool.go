@@ -13,6 +13,14 @@ import (
 	"akswitch/internal/logentry"
 )
 
+// KeySelectionMode defines how a key is selected from the pool.
+type KeySelectionMode string
+
+const (
+	KeySelectionPolling KeySelectionMode = "polling"
+	KeySelectionRandom  KeySelectionMode = "random"
+)
+
 // KeyPool is a thread-safe, round-robin key pool with cooldown, disable, and request-tracking support.
 type KeyPool struct {
 	counter        uint64
@@ -23,6 +31,8 @@ type KeyPool struct {
 	lastUsed       []time.Time
 	inUse          []bool // tracks keys currently reserved by a goroutine (prevents concurrent selection)
 	mu             sync.RWMutex
+	selectionMode  KeySelectionMode // 选择策略
+	pollingIndex   uint64           // polling 模式下的轮转索引
 }
 
 // NewKeyPool creates a KeyPool from slices of API keys and optional names.
@@ -46,7 +56,72 @@ func NewKeyPool(keys []string, names []string) *KeyPool {
 		requestHistory: make([][]time.Time, len(keys)),
 		lastUsed:       make([]time.Time, len(keys)),
 		inUse:          make([]bool, len(keys)),
+		selectionMode:  KeySelectionPolling,
+		pollingIndex:   0,
 	}
+}
+
+// SetSelectionMode sets the key selection strategy for the pool.
+// Safe to call before any requests are processed.
+func (p *KeyPool) SetSelectionMode(mode KeySelectionMode) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.selectionMode = mode
+}
+
+// SelectKey returns the next available key according to the configured selection strategy.
+// Returns index, key value, and ok=false if no key is available.
+// The caller must Release(idx) when the key is no longer needed.
+func (p *KeyPool) SelectKey() (int, string, bool) {
+	switch p.selectionMode {
+	case KeySelectionPolling:
+		return p.selectKeyPolling()
+	case KeySelectionRandom:
+		return p.selectKeyRandom()
+	default:
+		return p.selectKeyPolling()
+	}
+}
+
+// selectKeyPolling implements the "polling" (round-robin) strategy.
+// It starts from the stored pollingIndex and scans forward to find the first available key.
+func (p *KeyPool) selectKeyPolling() (int, string, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	n := len(p.keys)
+	if n == 0 {
+		return -1, "", false
+	}
+
+	start := int(p.pollingIndex % uint64(n))
+	for i := 0; i < n; i++ {
+		idx := (start + i) % n
+		if p.cbs[idx].Allow() {
+			p.pollingIndex = uint64(idx+1) % uint64(n)
+			return idx, p.keys[idx], true
+		}
+	}
+	return -1, "", false
+}
+
+// selectKeyRandom implements the "random" strategy.
+// It collects all available keys and picks one uniformly at random.
+func (p *KeyPool) selectKeyRandom() (int, string, bool) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	var available []int
+	for i, cb := range p.cbs {
+		if cb.Allow() {
+			available = append(available, i)
+		}
+	}
+	if len(available) == 0 {
+		return -1, "", false
+	}
+	idx := available[rand.Intn(len(available))]
+	return idx, p.keys[idx], true
 }
 
 // validateIndex checks that the given index is within the valid range of keys.

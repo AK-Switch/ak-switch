@@ -29,7 +29,7 @@ func TestFindField_AllRegistered(t *testing.T) {
 		"backoff_multiplier", "cb_reset_sec", "upstream_cb_threshold",
 		"http_timeout_sec", "log_level", "thinking_mode",
 		"rectify_thinking_map_to", "health_check_interval_sec",
-		"admin_token", "disable_thinking", "genai_model", "keys_file",
+		"admin_token", "disable_thinking", "genai_model", "keys_file", "key_selection",
 		"port", "log_file",
 	}
 	for _, key := range expected {
@@ -157,6 +157,47 @@ func TestFieldDescriptor_RuntimeEditableMatchesServer(t *testing.T) {
 	for _, fd := range ConfigFieldDescriptors {
 		if fd.RuntimeEditable && !serverHandled[fd.Key] {
 			t.Errorf("field %q has RuntimeEditable=true but server does not handle it", fd.Key)
+		}
+	}
+}
+
+func TestKeySelectionDescriptor(t *testing.T) {
+	d := FindField("key_selection")
+	if d == nil {
+		t.Fatal("FindField('key_selection') returned nil")
+	}
+	if d.Default != "polling" {
+		t.Errorf("default = %q, want 'polling'", d.Default)
+	}
+	if d.RuntimeEditable {
+		t.Error("key_selection should not be runtime editable")
+	}
+
+	tests := []struct {
+		input string
+		want  string
+		err   bool
+	}{
+		{"polling", "polling", false},
+		{"random", "random", false},
+		{"smart", "", true},
+		{"unknown", "", true},
+		{"", "", true},
+	}
+	for _, tt := range tests {
+		got, err := d.Parse(tt.input)
+		if tt.err {
+			if err == nil {
+				t.Errorf("Parse(%q) expected error", tt.input)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("Parse(%q) unexpected error: %v", tt.input, err)
+			continue
+		}
+		if got != tt.want {
+			t.Errorf("Parse(%q) = %v, want %v", tt.input, got, tt.want)
 		}
 	}
 }
