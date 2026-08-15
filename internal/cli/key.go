@@ -596,6 +596,7 @@ var keyDisableCmd = &cobra.Command{
 	Long: `Mark an API key as disabled at the specified index or matching name.
 
 	Disabled keys are not used for new requests but remain in the key store.
+	Deleted keys cannot be disabled — use 'key restore' to recover them first.
 	Use --by-name to look up a key by its display name instead.
 	Use 'akswitch key remove' to soft-delete a key (recoverable via 'key restore').
 	Use 'akswitch key purge' to permanently remove deleted keys.
@@ -620,8 +621,8 @@ var keyEnableCmd = &cobra.Command{
 
 	The key will be used again for new requests.  The operation triggers a
 	reload so the server picks up the change.
+	Deleted keys cannot be enabled — use 'key restore' to recover them first.
 	Use --by-name to look up a key by its display name instead.
-
 	Examples:
 	  akswitch key enable nvidia 1
 	  akswitch key enable nvidia my-key --by-name`,
