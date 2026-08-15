@@ -440,16 +440,28 @@ Examples:
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		provider := args[0]
-		idx, err := resolveKeyIndex(cmd, args)
+
+		// Load store once and resolve index inline to avoid TOCTOU between
+		// resolveKeyIndex (which loads store internally for --by-name) and
+		// the subsequent LoadKeys for pool-index mapping.
+		store, err := keypool.LoadKeys(provider)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to load keys for %q: %w", provider, err)
 		}
 
-		// Map store index to pool index (keysFromStore skips Deleted entries)
-		store, loadErr := keypool.LoadKeys(provider)
-		if loadErr != nil {
-			return fmt.Errorf("failed to load keys for %q: %w", provider, loadErr)
+		var idx int
+		if byName, _ := cmd.Flags().GetBool("by-name"); byName {
+			idx, err = findKeyIndexByName(store, args[1])
+			if err != nil {
+				return err
+			}
+		} else {
+			idx, err = strconv.Atoi(args[1])
+			if err != nil {
+				return fmt.Errorf("invalid index %q: must be a non-negative integer", args[1])
+			}
 		}
+
 		if idx < 0 || idx >= len(store.Keys) {
 			return fmt.Errorf("index %d out of range: provider %q has %d keys (valid: 0-%d)",
 				idx, provider, len(store.Keys), len(store.Keys)-1)
@@ -458,7 +470,8 @@ Examples:
 			return fmt.Errorf("key [%d] is deleted, use 'key restore' to recover it first", idx)
 		}
 		poolIdx := storeIndexToPoolIndex(store, idx)
-		// Server parseKeyIndex expects 1-based URL index, converts to 0-based internally
+		// Server parseKeyIndex (helpers.go) takes 1-based URL index, converts to 0-based
+		// internally with idx - 1. Pool index is 0-based, so +1 yields correct 1-based URL.
 		runtimeErr := callKeyRuntimeAPI(provider, poolIdx+1, "cooldown")
 		if runtimeErr == nil {
 			return nil
