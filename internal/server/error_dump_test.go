@@ -45,7 +45,7 @@ func TestWriteErrorDump_WritesFileWithBodies(t *testing.T) {
 	dir := t.TempDir()
 
 	err := writeErrorDump(dir, ps, "key-a", "POST", "/v1/messages", 400, 2,
-		time.Now(), []byte(`{"thinking":{"type":"adaptive"}}`), []byte(`{"error":"bad"}`), true)
+		time.Now(), []byte(`{"thinking":{"type":"adaptive"}}`), []byte(`{"error":"bad"}`), true, 7)
 	if err != nil {
 		t.Fatalf("writeErrorDump: %v", err)
 	}

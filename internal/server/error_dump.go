@@ -37,10 +37,11 @@ func errorDumpFilename(status int, ts time.Time, prefix string) string {
 // writeErrorDump persists a non-retryable 4xx request/response pair to dir.
 // Writes atomically (temp file + rename) so a partially-written dump is
 // never observed mid-flight. Returns an error; the caller decides how to log it.
-func writeErrorDump(dir string, ps *ProviderState, keyName, method, target string, status, round int, start time.Time, reqBody, respBody []byte, rectified bool) error {
+func writeErrorDump(dir string, ps *ProviderState, keyName, method, target string, status, round int, start time.Time, reqBody, respBody []byte, rectified bool, maxAgeDays int) error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("writeErrorDump: mkdir %s: %w", dir, err)
 	}
+	cleanErrorDumps(dir, maxAgeDays)
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "Time:      %s\n", start.Format("2006-01-02 15:04:05"))
