@@ -211,6 +211,8 @@ var configListCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("failed to load providers: %w", err)
 			}
+		} else if !os.IsNotExist(statErr) {
+			return fmt.Errorf("failed to access config file: %w", statErr)
 		}
 
 		// Build provider list
