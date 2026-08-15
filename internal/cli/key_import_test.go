@@ -180,6 +180,59 @@ func TestDedupEntries_EmptyInput(t *testing.T) {
 	}
 }
 
+func TestDedupEntries_SkipsDeletedInStore(t *testing.T) {
+	tests := []struct {
+		name       string
+		entries    []keypool.KeyEntry
+		store      *keypool.KeyStore
+		wantSkip   int
+		wantNew    int
+		wantNewKey string
+	}{
+		{
+			name: "deleted key in store is not a duplicate",
+			entries: []keypool.KeyEntry{
+				{Key: "sk-111", Name: "alpha"},
+			},
+			store: &keypool.KeyStore{Keys: []keypool.KeyEntry{
+				{Key: "sk-111", Deleted: true},
+			}},
+			wantSkip:   0,
+			wantNew:    1,
+			wantNewKey: "sk-111",
+		},
+		{
+			name: "deleted key skipped, active key still deduped",
+			entries: []keypool.KeyEntry{
+				{Key: "sk-111", Name: "alpha"},
+				{Key: "sk-222", Name: "beta"},
+			},
+			store: &keypool.KeyStore{Keys: []keypool.KeyEntry{
+				{Key: "sk-111", Deleted: true},
+				{Key: "sk-222"},
+			}},
+			wantSkip: 1,
+			wantNew:  1,
+			wantNewKey: "sk-111",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			newEntries, skipped := dedupEntries(tt.entries, tt.store)
+			if skipped != tt.wantSkip {
+				t.Errorf("skipped = %d, want %d", skipped, tt.wantSkip)
+			}
+			if len(newEntries) != tt.wantNew {
+				t.Fatalf("len(newEntries) = %d, want %d", len(newEntries), tt.wantNew)
+			}
+			if tt.wantNewKey != "" && newEntries[0].Key != tt.wantNewKey {
+				t.Errorf("newEntries[0].Key = %q, want %q", newEntries[0].Key, tt.wantNewKey)
+			}
+		})
+	}
+}
+
 // ── autoNumberNames ───────────────────────────────────
 
 func TestAutoNumberNames_UniqueNames(t *testing.T) {

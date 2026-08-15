@@ -967,8 +967,11 @@ func parseJSONL(data []byte) ([]keypool.KeyEntry, error) {
 // dedupEntries filters out entries whose keys already exist in the store.
 // Returns the deduplicated entries and the count of skipped duplicates.
 func dedupEntries(entries []keypool.KeyEntry, store *keypool.KeyStore) ([]keypool.KeyEntry, int) {
-	existing := make(map[string]bool, len(store.Keys))
+	existing := make(map[string]bool)
 	for _, e := range store.Keys {
+		if e.Deleted {
+			continue
+		}
 		existing[e.Key] = true
 	}
 	var newEntries []keypool.KeyEntry
