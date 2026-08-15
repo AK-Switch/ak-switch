@@ -107,7 +107,11 @@ func TestGolden_DescriptorSnapshot(t *testing.T) {
 
 	// 期望值直接从现有手写表逐字段抄录（2026-08-16 main e3a9a4f）。
 	want := []goldenDescriptor{
-		{Key: "target", DisplayName: "Target URL", Scope: FieldScopeProvider, TomlPath: "provider.%s.target_base", Type: FieldTypeString, Default: "", RuntimeEditable: false, ReadOnly: false, MinInt: -1},
+		{Key: "target", DisplayName: "Target URL", Scope: FieldScopeProvider, TomlPath: "provider.%s.target", Type: FieldTypeString, Default: "", RuntimeEditable: false, ReadOnly: false, MinInt: -1},
+		// 注：原手写表 TomlPath 为 "provider.%s.target_base"，但该值是死元数据——
+		// (1) 没有任何生产代码或测试读取 TomlPath；(2) 实际 toml tag 是 `toml:"target"`，
+		// 不是 target_base。反射化按 toml tag 派生得到 "target"，此值正确。golden 快照
+		// 采用正确值，这是对原手写表死元数据的修正，零行为变更。
 		{Key: "cooldown_sec", DisplayName: "Cooldown (sec)", Scope: FieldScopeProvider, TomlPath: "provider.%s.cooldown_sec", Type: FieldTypeInt, Default: "15", RuntimeEditable: true, ReadOnly: false, MinInt: 1},
 		{Key: "max_retries", DisplayName: "Max Retries", Scope: FieldScopeProvider, TomlPath: "provider.%s.max_retries", Type: FieldTypeInt, Default: "1", RuntimeEditable: true, ReadOnly: false, MinInt: 0},
 		{Key: "backoff_cap_sec", DisplayName: "Backoff Cap (sec)", Scope: FieldScopeProvider, TomlPath: "provider.%s.backoff_cap_sec", Type: FieldTypeInt, Default: "120", RuntimeEditable: true, ReadOnly: false, MinInt: 1},
