@@ -584,7 +584,7 @@ func TestKeyList_ShowsKeys(t *testing.T) {
 }
 
 // TestKeyRemove_RemovesKey verifies that "akswitch key remove <provider> <index>"
-// removes the key at the given index.
+// soft-deletes the key at the given index (marking it as deleted, not removing it).
 func TestKeyRemove_RemovesKey(t *testing.T) {
 	cli.ResetConfigEnv()
 	tmpDir := t.TempDir()
@@ -607,16 +607,25 @@ func TestKeyRemove_RemovesKey(t *testing.T) {
 	cli.RunCommand(t, "akswitch", "key", "add", "removetest", "sk-remove-key-2")
 	cli.RunCommand(t, "akswitch", "key", "remove", "removetest", "0")
 
-	// Verify key[0] was removed (should now be "sk-remove-key-2")
+	// Verify key[0] is soft-deleted, key[1] remains (both still in the store)
 	store, err := keypool.LoadKeys("removetest")
 	if err != nil {
 		t.Fatalf("LoadKeys failed: %v", err)
 	}
-	if len(store.Keys) != 1 {
-		t.Fatalf("expected 1 key after remove, got %d", len(store.Keys))
+	if len(store.Keys) != 2 {
+		t.Fatalf("expected 2 keys after soft-delete, got %d", len(store.Keys))
 	}
-	if store.Keys[0].Key != "sk-remove-key-2" {
-		t.Errorf("remaining key = %q, want %q", store.Keys[0].Key, "sk-remove-key-2")
+	if !store.Keys[0].Deleted {
+		t.Errorf("key[0] should be marked as deleted")
+	}
+	if store.Keys[0].Key != "sk-remove-key-1" {
+		t.Errorf("deleted key[0] = %q, want %q", store.Keys[0].Key, "sk-remove-key-1")
+	}
+	if store.Keys[1].Key != "sk-remove-key-2" {
+		t.Errorf("remaining key[1] = %q, want %q", store.Keys[1].Key, "sk-remove-key-2")
+	}
+	if store.Keys[1].Deleted {
+		t.Errorf("key[1] should not be marked as deleted")
 	}
 }
 
