@@ -550,7 +550,8 @@ var keyDisableCmd = &cobra.Command{
 
 	Disabled keys are not used for new requests but remain in the key store.
 	Use --by-name to look up a key by its display name instead.
-	Use 'akswitch key remove' to permanently remove a key.
+	Use 'akswitch key remove' to soft-delete a key (recoverable via 'key restore').
+	Use 'akswitch key purge' to permanently remove deleted keys.
 
 	Examples:
 	  akswitch key disable nvidia 1
