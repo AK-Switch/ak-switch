@@ -173,7 +173,7 @@ var configViewCmd = &cobra.Command{
 				if fd.Scope != config.FieldScopeProvider {
 					continue
 				}
-				val, _ := getFieldValue(tc, name, &fd)
+				val, _ := getMergedFieldValue(providers, name, &fd)
 				fmt.Printf("  %-30s %s\n", fd.DisplayName+":", maskSensitiveValue(&fd, val))
 			}
 		}
@@ -208,6 +208,12 @@ var configListCmd = &cobra.Command{
 		tc, err := config.LoadTomlConfig(source)
 		if err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("failed to load config: %w", err)
+		}
+
+		// Load all providers with [provider.default] inheritance
+		mergedProviders, err := config.LoadAllTomlProviders(source)
+		if err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("failed to load providers: %w", err)
 		}
 
 		// Build provider list
@@ -245,7 +251,7 @@ var configListCmd = &cobra.Command{
 				if fd.Scope != config.FieldScopeProvider {
 					continue
 				}
-				val, _ := getFieldValue(tc, name, &fd)
+				val, _ := getMergedFieldValue(mergedProviders, name, &fd)
 				fmt.Printf("  %-30s %s\n", fd.DisplayName+":", maskSensitiveValue(&fd, val))
 			}
 		}
@@ -279,6 +285,7 @@ var configGetCmd = &cobra.Command{
 
 		var providers []string
 		var tc *config.TomlConfig
+		var mergedProviders map[string]*config.Config
 		if all {
 			source, err := config.XDGConfigPath()
 			if err != nil {
@@ -287,6 +294,10 @@ var configGetCmd = &cobra.Command{
 			tc, err = config.LoadTomlConfig(source)
 			if err != nil {
 				return fmt.Errorf("failed to load config: %w", err)
+			}
+			mergedProviders, err = config.LoadAllTomlProviders(source)
+			if err != nil {
+				return fmt.Errorf("failed to load merged providers: %w", err)
 			}
 			if tc != nil {
 				for n := range tc.Provider {
@@ -307,6 +318,10 @@ var configGetCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("failed to load config: %w", err)
 			}
+			mergedProviders, err = config.LoadAllTomlProviders(source)
+			if err != nil {
+				return fmt.Errorf("failed to load merged providers: %w", err)
+			}
 		} else {
 			// Global field — no provider needed
 			source, err := config.XDGConfigPath()
@@ -323,7 +338,7 @@ var configGetCmd = &cobra.Command{
 		}
 
 		for _, p := range providers {
-			val, _ := getFieldValue(tc, p, fd)
+			val, _ := getMergedFieldValue(mergedProviders, p, fd)
 			if all {
 				fmt.Printf("%s: %s\n", p, maskSensitiveValue(fd, val))
 			} else {
