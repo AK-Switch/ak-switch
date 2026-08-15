@@ -313,14 +313,14 @@ func TestConfigGetCmd_AllLoadsTomlOnce(t *testing.T) {
 	config.ConfigDir = tmpDir
 
 	// Simulate what configGetCmd.RunE does with --all:
-	// load TOML once, then get field value for each provider
+	// load merged providers, then get field value for each provider
 	source, err := config.XDGConfigPath()
 	if err != nil {
 		t.Fatalf("xdg path: %v", err)
 	}
-	tcLoaded, err := config.LoadTomlConfig(source)
+	mergedProviders, err := config.LoadAllTomlProviders(source)
 	if err != nil {
-		t.Fatalf("load config: %v", err)
+		t.Fatalf("load merged providers: %v", err)
 	}
 
 	fd := config.FindField("cooldown_sec")
@@ -329,18 +329,18 @@ func TestConfigGetCmd_AllLoadsTomlOnce(t *testing.T) {
 	}
 
 	var providers []string
-	for name := range tcLoaded.Provider {
+	for name := range mergedProviders {
 		providers = append(providers, name)
 	}
 	sort.Strings(providers)
 
 	for _, p := range providers {
-		val, getErr := getMergedFieldValue(tcLoaded.Provider, p, fd)
+		val, getErr := getMergedFieldValue(mergedProviders, p, fd)
 		if getErr != nil {
 			t.Fatalf("getMergedFieldValue(%s): %v", p, getErr)
 		}
 		formatted := fd.Format(val)
-		expected := strconv.Itoa(tc.Provider[p].CooldownSec)
+		expected := strconv.Itoa(mergedProviders[p].CooldownSec)
 		if formatted != expected {
 			t.Errorf("provider %s: got %s, want %s", p, formatted, expected)
 		}

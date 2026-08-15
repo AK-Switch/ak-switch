@@ -200,17 +200,11 @@ var configListCmd = &cobra.Command{
 			targetProvider = args[0]
 		}
 
-		// Load TOML for persistent values
+		// Load all providers with [provider.default] inheritance
 		source, err := config.XDGConfigPath()
 		if err != nil {
 			return fmt.Errorf("failed to determine config path: %w", err)
 		}
-		tc, err := config.LoadTomlConfig(source)
-		if err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("failed to load config: %w", err)
-		}
-
-		// Load all providers with [provider.default] inheritance
 		mergedProviders, err := config.LoadAllTomlProviders(source)
 		if err != nil {
 			return fmt.Errorf("failed to load providers: %w", err)
@@ -219,10 +213,8 @@ var configListCmd = &cobra.Command{
 		// Build provider list
 		var names []string
 		if all {
-			if tc != nil {
-				for n := range tc.Provider {
-					names = append(names, n)
-				}
+			for n := range mergedProviders {
+				names = append(names, n)
 			}
 			sort.Strings(names)
 			if len(names) == 0 {
@@ -232,12 +224,10 @@ var configListCmd = &cobra.Command{
 			names = []string{targetProvider}
 		} else {
 			// No args, no --all: show the first (or only) provider
-			if tc != nil {
-				for n := range tc.Provider {
-					names = append(names, n)
-				}
-				sort.Strings(names)
+			for n := range mergedProviders {
+				names = append(names, n)
 			}
+			sort.Strings(names)
 			if len(names) == 0 {
 				return fmt.Errorf("no providers configured")
 			}
