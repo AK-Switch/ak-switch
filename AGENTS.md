@@ -101,6 +101,73 @@ ps.SetMaxRetries(3)
 - **Makefile 用 Tab**: 编辑 Makefile 时确保用 Tab 而非空格缩进（golangci-lint 不检查 Makefile，但 `make` 会报错）
 - **Config 字段分两组**: 启动配置在 `ProviderConfig`（TOML 解析），运行时配置在 `RuntimeConfig`（Admin API 热更新）。改配置字段前先确认属于哪组
 
+## Parallel Development Conventions
+
+AK-Switch 有多个 AI 并行开发，以下规则确保分支不打架、PR 不冲突。
+
+### 1. PR 拆小
+
+- 单个 PR 不超过 **300 行改动**（`+300` / `-`）或 **3 个文件**
+- 大功能拆成「每个独立可合」的步骤链，一个 PR 合完再开下一个
+- 例外：自动生成的文档、测试 fixture 不计入行数，但需在 PR 描述中说明
+- 超过阈值时，先合并前置依赖的小 PR，再继续后续 PR
+
+### 2. 模块 affinity
+
+修改**当前模块以外**的文件时，先在设计阶段声明。模块归属：
+
+| 模块 | 路径 |
+|------|------|
+| CLI | `internal/cli/` |
+| Server | `internal/server/` |
+| Config | `internal/config/` |
+| Core | `internal/keypool/`, `internal/circuitbreaker/`, `internal/tracker/`, `internal/tokenestimator/` |
+
+跨域改动（改动涉及**另一个模块**的文件）需在 PR 描述中标注 `cross-module: yes` 并说明跨界理由。
+
+### 3. 开 PR 前 rebase 最新 main
+
+- 开 PR 之前，执行 `git fetch origin main && git rebase origin/main`
+- 若有冲突，在本地解决后再 push 开 PR
+- 开 PR 后如果 main 有新 commit 合入导致 BEHIND，尽快 rebase 更新
+
+### 4. 合完即广播
+
+- 一个 PR 合入 main 后，通知其他活跃 worktree 的 AI 同步：`git fetch origin main && git rebase origin/main`
+- 确保 base 不跑远，减少冲突累积
+
+## PR / Commit Guidelines
+
+AK-Switch 使用 conventional commits 格式。每个 commit 只做一件事，改完立即提交。
+
+### Commit 格式
+
+```
+类型: 简短描述（不超过 50 字，说清做了什么）
+```
+
+| 类型 | 含义 | 示例 |
+|------|------|------|
+| `feat` | 新增功能 | `feat: KeyPool 支持 polling/random 选择策略` |
+| `fix` | 修复 bug | `fix: config view 显示 thinking_mode 实际值` |
+| `refactor` | 重构（不改变行为） | `refactor: 拆分 admin_api.go 为 6 个职责文件` |
+| `docs` | 仅文档变更 | `docs: AGENTS.md 新增并行开发规范` |
+| `chore` | 杂务（构建、依赖、配置） | `chore(deps): bump softprops/action-gh-release` |
+| `test` | 测试变更 | `test: 补充 key export 成功路径测试` |
+| `ci` | CI 配置变更 | `ci: 集成测试增加 Docker 健康检查` |
+| `perf` | 性能优化 | `perf: 缓存 ConfigFieldDescriptors 查找结果` |
+
+### PR 标题
+
+PR 标题与 commit 格式一致：`类型: 描述`。如 `fix: 流式响应 response_body_size 追踪`。
+
+### 提交前检查
+
+- [ ] 当前分支是否正确
+- [ ] 只改必要文件（不顺手改无关代码）
+- [ ] 已执行 `make check`（lint + vet + fmt）
+- [ ] 已执行 `make test-unit` 或目标模块的单元测试
+
 ## Verification Loop
 
 修改代码后按此顺序自验证：
