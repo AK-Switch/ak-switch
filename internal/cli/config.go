@@ -212,7 +212,7 @@ var configListCmd = &cobra.Command{
 
 		// Load all providers with [provider.default] inheritance
 		mergedProviders, err := config.LoadAllTomlProviders(source)
-		if err != nil && !os.IsNotExist(err) {
+		if err != nil {
 			return fmt.Errorf("failed to load providers: %w", err)
 		}
 
@@ -607,10 +607,7 @@ func readFieldFromProviderConfig(p *config.ProviderConfig, fd *config.ConfigFiel
 	case "health_check_interval_sec":
 		return p.HealthCheckIntervalSec, nil
 	case "admin_token":
-		if p.AdminToken != "" {
-			return p.AdminToken, nil
-		}
-		return "", nil
+		return p.AdminToken, nil
 	case "disable_thinking":
 		return p.DisableThinking, nil
 	case "genai_model":
