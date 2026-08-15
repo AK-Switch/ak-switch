@@ -269,7 +269,7 @@ var configGetCmd = &cobra.Command{
 	Valid keys: port, log_file, target, cooldown_sec, max_retries,
 	backoff_cap_sec, backoff_multiplier, cb_reset_sec, upstream_cb_threshold,
 	http_timeout_sec, health_check_interval_sec, log_level,
-	disable_thinking, genai_model, admin_token, keys_file
+	disable_thinking, genai_model, admin_token, keys_file, key_selection
 
 	Examples:
 	  akswitch config get http_timeout_sec
@@ -352,7 +352,7 @@ var configSetCmd = &cobra.Command{
 	Valid keys: port, log_file, target, cooldown_sec, max_retries,
 	backoff_cap_sec, backoff_multiplier, cb_reset_sec, upstream_cb_threshold,
 	http_timeout_sec, health_check_interval_sec, log_level,
-	disable_thinking, genai_model, admin_token, keys_file
+	disable_thinking, genai_model, admin_token, keys_file, key_selection
 
 	Examples:
 	  akswitch config set http_timeout_sec 60
