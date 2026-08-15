@@ -41,11 +41,11 @@ type ProviderConfig struct {
 	HealthCheckPath        string `toml:"-" default:"/health"`
 	HealthCheckTimeoutSec  int    `toml:"-" default:"5"`
 
-	LogFile    string `toml:"log_file,omitempty"` // 日志文件路径（空 = 不启用文件日志）
-	LogMaxSize int    `toml:"log_max_size,omitempty" default:"100"`
-	LogMaxAge  int    `toml:"log_max_age,omitempty" default:"7"`
-
-	CalibrationIntervalSec int `toml:"calibration_interval_sec,omitempty" default:"3600"` // Token 校准间隔（秒，默认 1 小时）
+	LogFile                string `toml:"log_file,omitempty"` // 日志文件路径（空 = 不启用文件日志）
+	LogMaxSize             int    `toml:"log_max_size,omitempty" default:"100"`
+	LogMaxAge              int    `toml:"log_max_age,omitempty" default:"7"`
+	ErrorDumpMaxAge        int    `toml:"error_dump_max_age,omitempty" default:"7"`
+	CalibrationIntervalSec int    `toml:"calibration_interval_sec,omitempty" default:"3600"` // Token 校准间隔（秒，默认 1 小时）
 }
 
 // Config holds all provider-level configuration via embedded ProviderConfig.
@@ -109,6 +109,7 @@ func DefaultProviderConfig() *ProviderConfig {
 		KeysFile:               "keys.json",
 		LogMaxSize:             100,
 		LogMaxAge:              7,
+		ErrorDumpMaxAge:        7,
 		CalibrationIntervalSec: 3600,
 	}
 }
@@ -243,11 +244,11 @@ func (c *Config) DeepCopy() *Config {
 			LogFile:                c.LogFile,
 			LogMaxSize:             c.LogMaxSize,
 			LogMaxAge:              c.LogMaxAge,
+			ErrorDumpMaxAge:        c.ErrorDumpMaxAge,
 			CalibrationIntervalSec: c.CalibrationIntervalSec,
 		},
 		RuntimeConfig: RuntimeConfig{
-			HTTPTimeoutSec:      c.RuntimeConfig.HTTPTimeoutSec,
-			MaxRetries:          c.RuntimeConfig.MaxRetries,
+			HTTPTimeoutSec: c.RuntimeConfig.HTTPTimeoutSec, MaxRetries: c.RuntimeConfig.MaxRetries,
 			CooldownSec:         c.RuntimeConfig.CooldownSec,
 			BackoffCapSec:       c.RuntimeConfig.BackoffCapSec,
 			BackoffMultiplier:   c.RuntimeConfig.BackoffMultiplier,
@@ -345,10 +346,12 @@ func mergeWithDefaults(base, override *Config) *Config {
 	if override.LogMaxAge != 0 {
 		result.LogMaxAge = override.LogMaxAge
 	}
+	if override.ErrorDumpMaxAge != 0 {
+		result.ErrorDumpMaxAge = override.ErrorDumpMaxAge
+	}
 	if override.CalibrationIntervalSec != 0 {
 		result.CalibrationIntervalSec = override.CalibrationIntervalSec
-	}
-	// Sync runtime config
+	} // Sync runtime config
 	result.RuntimeConfig.HTTPTimeoutSec = result.HTTPTimeoutSec
 	result.RuntimeConfig.MaxRetries = result.MaxRetries
 	result.RuntimeConfig.CooldownSec = result.CooldownSec
