@@ -1,13 +1,14 @@
 package server
 
 import (
-	"akswitch/internal/circuitbreaker"
-	"akswitch/internal/config"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
+
+	"akswitch/internal/circuitbreaker"
+	"akswitch/internal/config"
 )
 
 // ── SW Handler ──────────────────────────────────────────

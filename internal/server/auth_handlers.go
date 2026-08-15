@@ -1,12 +1,13 @@
 package server
 
 import (
-	"akswitch/internal/config"
-	"akswitch/internal/logentry"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
+
+	"akswitch/internal/config"
+	"akswitch/internal/logentry"
 )
 
 // ── Auth Helpers ────────────────────────────────────────

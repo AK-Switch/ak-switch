@@ -1,9 +1,10 @@
 package server
 
 import (
-	"akswitch/internal/config"
 	"net/http"
 	"time"
+
+	"akswitch/internal/config"
 )
 
 // ProviderLookup defines the interface AdminAPI needs to access provider data.
