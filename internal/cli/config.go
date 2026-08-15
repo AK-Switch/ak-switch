@@ -550,45 +550,7 @@ func maskSensitiveValue(fd *config.ConfigFieldDescriptor, val any) string {
 func getFieldValue(tc *config.TomlConfig, provider string, fd *config.ConfigFieldDescriptor) (any, error) {
 	if tc != nil {
 		if p, ok := tc.Provider[provider]; ok && p != nil {
-			switch fd.Key {
-			case "target":
-				return p.TargetBase, nil
-			case "cooldown_sec":
-				return p.CooldownSec, nil
-			case "max_retries":
-				return p.MaxRetries, nil
-			case "backoff_cap_sec":
-				return p.BackoffCapSec, nil
-			case "backoff_multiplier":
-				return p.BackoffMultiplier, nil
-			case "cb_reset_sec":
-				return p.CBResetSec, nil
-			case "upstream_cb_threshold":
-				return p.UpstreamCBThreshold, nil
-			case "http_timeout_sec":
-				return p.HTTPTimeoutSec, nil
-			case "log_level":
-				return p.LogLevel, nil
-			case "health_check_interval_sec":
-				return p.HealthCheckIntervalSec, nil
-			case "admin_token":
-				if p.AdminToken != "" {
-					return p.AdminToken, nil
-				}
-				return "", nil
-			case "disable_thinking":
-				return p.DisableThinking, nil
-			case "genai_model":
-				return p.GenaiModel, nil
-			case "keys_file":
-				return p.KeysFile, nil
-			case "key_selection":
-				return p.KeySelection, nil
-			case "rectify_thinking_map_to":
-				return p.RectifyThinkingMapTo, nil
-			case "thinking_mode":
-				return p.ThinkingMode, nil
-			}
+			return readFieldFromProviderConfig(&p.ProviderConfig, fd)
 		}
 	}
 	// Fall back to default value
@@ -600,45 +562,52 @@ func getFieldValue(tc *config.TomlConfig, provider string, fd *config.ConfigFiel
 // Falls back to the field's default if the provider is missing or field is unset.
 func getMergedFieldValue(providers map[string]*config.Config, provider string, fd *config.ConfigFieldDescriptor) (any, error) {
 	if p, ok := providers[provider]; ok && p != nil {
-		switch fd.Key {
-		case "target":
-			return p.TargetBase, nil
-		case "cooldown_sec":
-			return p.CooldownSec, nil
-		case "max_retries":
-			return p.MaxRetries, nil
-		case "backoff_cap_sec":
-			return p.BackoffCapSec, nil
-		case "backoff_multiplier":
-			return p.BackoffMultiplier, nil
-		case "cb_reset_sec":
-			return p.CBResetSec, nil
-		case "upstream_cb_threshold":
-			return p.UpstreamCBThreshold, nil
-		case "http_timeout_sec":
-			return p.HTTPTimeoutSec, nil
-		case "log_level":
-			return p.LogLevel, nil
-		case "health_check_interval_sec":
-			return p.HealthCheckIntervalSec, nil
-		case "admin_token":
-			if p.AdminToken != "" {
-				return p.AdminToken, nil
-			}
-			return "", nil
-		case "disable_thinking":
-			return p.DisableThinking, nil
-		case "genai_model":
-			return p.GenaiModel, nil
-		case "keys_file":
-			return p.KeysFile, nil
-		case "key_selection":
-			return p.KeySelection, nil
-		case "rectify_thinking_map_to":
-			return p.RectifyThinkingMapTo, nil
-		case "thinking_mode":
-			return p.ThinkingMode, nil
+		return readFieldFromProviderConfig(&p.ProviderConfig, fd)
+	}
+	return config.ParseDefault(fd)
+}
+
+// readFieldFromProviderConfig reads a field value from a provider's `ProviderConfig` (which is
+// embedded in *config.Config). Falls back to the field's default if the key is not mapped.
+func readFieldFromProviderConfig(p *config.ProviderConfig, fd *config.ConfigFieldDescriptor) (any, error) {
+	switch fd.Key {
+	case "target":
+		return p.TargetBase, nil
+	case "cooldown_sec":
+		return p.CooldownSec, nil
+	case "max_retries":
+		return p.MaxRetries, nil
+	case "backoff_cap_sec":
+		return p.BackoffCapSec, nil
+	case "backoff_multiplier":
+		return p.BackoffMultiplier, nil
+	case "cb_reset_sec":
+		return p.CBResetSec, nil
+	case "upstream_cb_threshold":
+		return p.UpstreamCBThreshold, nil
+	case "http_timeout_sec":
+		return p.HTTPTimeoutSec, nil
+	case "log_level":
+		return p.LogLevel, nil
+	case "health_check_interval_sec":
+		return p.HealthCheckIntervalSec, nil
+	case "admin_token":
+		if p.AdminToken != "" {
+			return p.AdminToken, nil
 		}
+		return "", nil
+	case "disable_thinking":
+		return p.DisableThinking, nil
+	case "genai_model":
+		return p.GenaiModel, nil
+	case "keys_file":
+		return p.KeysFile, nil
+	case "key_selection":
+		return p.KeySelection, nil
+	case "rectify_thinking_map_to":
+		return p.RectifyThinkingMapTo, nil
+	case "thinking_mode":
+		return p.ThinkingMode, nil
 	}
 	return config.ParseDefault(fd)
 }
