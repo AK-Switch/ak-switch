@@ -201,3 +201,19 @@ func TestKeySelectionDescriptor(t *testing.T) {
 		}
 	}
 }
+
+func TestIsValidLogLevel(t *testing.T) {
+	valid := []string{"debug", "info", "warn", "error"}
+	for _, l := range valid {
+		if !IsValidLogLevel(l) {
+			t.Errorf("IsValidLogLevel(%q) = false, want true", l)
+		}
+	}
+	// Case-insensitive normalization is done by callers, not by IsValidLogLevel
+	invalid := []string{"", "trace", "fatal", "DEBUG", "INFO"}
+	for _, l := range invalid {
+		if IsValidLogLevel(l) {
+			t.Errorf("IsValidLogLevel(%q) = true, want false", l)
+		}
+	}
+}

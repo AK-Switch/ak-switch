@@ -78,6 +78,16 @@ type ConfigFieldDescriptor struct {
 	ApplyRuntime func(ps any, provider string, value any) (any, error)
 }
 
+// IsValidLogLevel reports whether level is a recognized log level.
+// Valid levels: debug, info, warn, error.
+func IsValidLogLevel(level string) bool {
+	switch level {
+	case "debug", "info", "warn", "error":
+		return true
+	}
+	return false
+}
+
 // ConfigFieldDescriptors is the single source of truth for all configurable fields.
 // Provider-scoped fields come first, then global fields.
 var ConfigFieldDescriptors = []ConfigFieldDescriptor{
@@ -308,11 +318,10 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 		RuntimeEditable: true,
 		Parse: func(s string) (any, error) {
 			v := strings.TrimSpace(strings.ToLower(s))
-			switch v {
-			case "debug", "info", "warn", "error":
-				return v, nil
+			if !IsValidLogLevel(v) {
+				return nil, fmt.Errorf("invalid log level %q, use: debug, info, warn, error", s)
 			}
-			return nil, fmt.Errorf("invalid log level %q, use: debug, info, warn, error", s)
+			return v, nil
 		},
 		Format: func(v any) string { return fmt.Sprintf("%v", v) },
 		Persist: func(tc *TomlConfig, provider string, c *Config, value any) {
@@ -326,12 +335,11 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 				return nil, fmt.Errorf("log_level must be a string")
 			}
 			v := strings.TrimSpace(strings.ToLower(s))
-			switch v {
-			case "debug", "info", "warn", "error":
-				ps.(ProviderRuntimeState).SetLogLevel(v)
-				return v, nil
+			if !IsValidLogLevel(v) {
+				return nil, fmt.Errorf("invalid log level, use: debug, info, warn, error")
 			}
-			return nil, fmt.Errorf("invalid log level, use: debug, info, warn, error")
+			ps.(ProviderRuntimeState).SetLogLevel(v)
+			return v, nil
 		},
 	},
 	{

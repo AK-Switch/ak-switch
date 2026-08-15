@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"akswitch/internal/config"
+
 	"github.com/spf13/cobra"
 )
 
@@ -52,8 +54,7 @@ Examples:
 
 		// POST — set log level
 		level := strings.TrimSpace(strings.ToLower(args[0]))
-		validLevels := map[string]bool{"debug": true, "info": true, "warn": true, "error": true}
-		if !validLevels[level] {
+		if !config.IsValidLogLevel(level) {
 			return fmt.Errorf("invalid log level %q, use: debug, info, warn, error", args[0])
 		}
 
