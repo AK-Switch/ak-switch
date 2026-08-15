@@ -557,3 +557,53 @@ func TestConfigGetCmd_AdminTokenMasked(t *testing.T) {
 		t.Error("admin_token should be masked, not printed raw")
 	}
 }
+
+func TestGetMergedFieldValue(t *testing.T) {
+	providers := map[string]*config.Config{
+		"test-provider": {
+			ProviderConfig: config.ProviderConfig{
+				TargetBase:     "https://example.com",
+				MaxRetries:     3,
+				CooldownSec:    20,
+				LogLevel:       "info",
+				HTTPTimeoutSec: 30,
+				KeySelection:   "random",
+			},
+		},
+		"empty-provider": {
+			ProviderConfig: config.ProviderConfig{},
+		},
+	}
+
+	tests := []struct {
+		name     string
+		provider string
+		key      string
+		want     any
+	}{
+		{"target", "test-provider", "target", "https://example.com"},
+		{"max_retries", "test-provider", "max_retries", 3},
+		{"cooldown_sec", "test-provider", "cooldown_sec", 20},
+		{"log_level", "test-provider", "log_level", "info"},
+		{"http_timeout_sec", "test-provider", "http_timeout_sec", 30},
+		{"key_selection", "test-provider", "key_selection", "random"},
+		{"nonexistent provider falls back to ParseDefault", "no-such-provider", "max_retries", 1},
+		{"empty provider field falls back to ParseDefault", "empty-provider", "target", ""},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			fd := config.FindField(tc.key)
+			if fd == nil {
+				t.Fatalf("field descriptor not found for key %q", tc.key)
+			}
+			got, err := getMergedFieldValue(providers, tc.provider, fd)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("getMergedFieldValue(%q, %q, %q) = %v (%T), want %v (%T)", tc.provider, tc.key, tc.key, got, got, tc.want, tc.want)
+			}
+		})
+	}
+}
