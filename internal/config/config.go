@@ -263,7 +263,6 @@ func (c *Config) DeepCopy() *Config {
 
 // mergeExcludeFields 列出不应从 [provider.default] 段继承的字段。
 // 这些字段是 provider 专属，全局段设置无意义。
-// 实现上：mergeWithDefaults 会对这些字段清零后仅接受 override 的非零值。
 var mergeExcludeFields = map[string]struct{}{
 	"TargetBase": {},
 	"Keys":       {},
@@ -277,38 +276,18 @@ var mergeExcludeFields = map[string]struct{}{
 func mergeWithDefaults(base, override *Config) *Config {
 	result := base.DeepCopy()
 
-	// 排除字段不从 base 继承——清零后仅接受 override 的非零值。
-	// 否则 base.DeepCopy() 会把这三个 provider 专属字段误带到 result。
-	result.TargetBase = ""
-	result.Keys = nil
-	result.KeyNames = nil
-
 	baseVal := reflect.ValueOf(&base.ProviderConfig).Elem()
 	overrideVal := reflect.ValueOf(&override.ProviderConfig).Elem()
 	resultVal := reflect.ValueOf(&result.ProviderConfig).Elem()
 
 	for i := 0; i < baseVal.NumField(); i++ {
-		field := baseVal.Type().Field(i)
-		if _, excluded := mergeExcludeFields[field.Name]; excluded {
-			continue
+		name := baseVal.Type().Field(i).Name
+		if _, excluded := mergeExcludeFields[name]; excluded {
+			resultVal.Field(i).SetZero() // 不继承 base 值
 		}
-		o := overrideVal.Field(i)
-		r := resultVal.Field(i)
-		if !o.IsZero() {
-			r.Set(o)
+		if o := overrideVal.Field(i); !o.IsZero() {
+			resultVal.Field(i).Set(o)
 		}
-	}
-
-	// 排除字段：显式应用 override 非零值
-	// 反射循环跳过了排除字段，但 override 显式设置的值必须生效
-	if override.TargetBase != "" {
-		result.TargetBase = override.TargetBase
-	}
-	if len(override.Keys) > 0 {
-		result.Keys = override.Keys
-	}
-	if len(override.KeyNames) > 0 {
-		result.KeyNames = override.KeyNames
 	}
 	// Sync runtime config
 	result.RuntimeConfig.HTTPTimeoutSec = result.HTTPTimeoutSec

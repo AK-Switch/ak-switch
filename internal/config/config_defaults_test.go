@@ -358,3 +358,22 @@ func TestMergeWithDefaults_OverridePriority(t *testing.T) {
 		t.Errorf("Keys = %v, want [override-key]", result.Keys)
 	}
 }
+
+func TestMergeWithDefaults_DisableThinkingInherited(t *testing.T) {
+	// DisableThinking=true 在 base 中，override 显式设 false → 不应覆盖（bool false 是零值）
+	base := &Config{
+		ProviderConfig: ProviderConfig{
+			DisableThinking: true,
+		},
+	}
+	override := &Config{
+		ProviderConfig: ProviderConfig{
+			TargetBase:      "https://example.com",
+			DisableThinking: false,
+		},
+	}
+	result := mergeWithDefaults(base, override)
+	if !result.DisableThinking {
+		t.Errorf("DisableThinking = false, want true (inherited from base; override false must not clear)")
+	}
+}
