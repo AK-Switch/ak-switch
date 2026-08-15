@@ -96,7 +96,7 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 		Key:             "target",
 		DisplayName:     "Target URL",
 		Scope:           FieldScopeProvider,
-		TomlPath:        "provider.%s.target_base",
+		TomlPath:        "provider.%s.target",
 		Type:            FieldTypeString,
 		Default:         "",
 		RuntimeEditable: false,
