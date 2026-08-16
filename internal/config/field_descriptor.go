@@ -105,19 +105,9 @@ func FindField(key string) *ConfigFieldDescriptor {
 }
 
 // ParseDefault converts the Default string to the field's type.
+// 保留导出签名（CLI 侧调用），内部委托 parseByType 消除重复。
 func ParseDefault(d *ConfigFieldDescriptor) (any, error) {
-	switch d.Type {
-	case FieldTypeInt:
-		return strconv.Atoi(d.Default)
-	case FieldTypeFloat64:
-		return strconv.ParseFloat(d.Default, 64)
-	case FieldTypeBool:
-		return strconv.ParseBool(d.Default)
-	case FieldTypeString:
-		return d.Default, nil
-	default:
-		return nil, fmt.Errorf("unknown field type: %s", d.Type)
-	}
+	return parseByType(d.Type, d.Default)
 }
 
 // fieldTag 解析后的 field struct tag。
