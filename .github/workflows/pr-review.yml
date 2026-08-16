@@ -2,7 +2,7 @@ name: PR Review
 
 on:
   pull_request_target:
-    types: [opened, ready_for_review, labeled, review_requested]
+    types: [opened, synchronize, ready_for_review, labeled, review_requested]
 
 permissions:
   contents: read
@@ -12,7 +12,7 @@ permissions:
 jobs:
   review:
     if: |
-      (github.event.action == 'opened' && github.event.pull_request.draft == false) ||
+      ((github.event.action == 'opened' || github.event.action == 'synchronize') && github.event.pull_request.draft == false) ||
       github.event.action == 'ready_for_review' ||
       github.event.label.name == 'review-this' ||
       github.event.requested_reviewer.login == 'openhands-agent' ||
