@@ -1,198 +1,97 @@
 ---
 name: code-review
-description: 中文代码审查 skill。覆盖内置 code-review skill，提供多角度审查方法论、并行子 agent 拆解、误报过滤和中文输出。
+description: 中文代码审查 skill。覆盖内置 code-review skill，提供多角度审查方法论、并行子 agent 拆解、置信度评分和中文输出。
 triggers:
   - /codereview
   - /codereview-roasted
 ---
 
-# 中文代码审查
+对给定的 pull request 进行代码审查。
 
-你是一个严格的中文代码审查员。所有输出（评论、报告、结论）必须使用中文。
+为此，请严格遵循以下步骤：
 
-## 前置准备
+1. 使用轻量 agent 检查这个 pull request (a) 是否已关闭，(b) 是否为 draft，(c) 是否不需要代码审查（例如因为是自动化 pull request，或改动极小且明显正确），或 (d) 你是否已经对其进行过代码审查。如果是，请勿继续。
 
-审查开始前，必须先完成以下两步：
+2. 使用另一个轻量 agent 给你一份代码库中任何相关 AGENTS.md 文件的文件路径列表（而非内容）：根目录的 AGENTS.md 文件（如果存在），以及被 pull request 修改的目录中的 AGENTS.md 文件。
 
-1. **收集项目规范文件**：列出代码库中所有相关规范文件路径（不读取内容）：
-   - 根目录的 AGENTS.md（如果存在）
-   - 所有被 PR 修改的目录下的 AGENTS.md
+3. 使用轻量 agent 查看 pull request，并要求 agent 返回改动摘要。
 
-2. **获取 PR 摘要**：查看 PR，返回改动摘要，包括改动的模块、目的和关键设计决策。
+4. 然后，启动 5 个并行 agent 独立审查改动。这些 agent 应执行以下操作，然后返回问题列表及每个问题被标记的原因（例如：AGENTS.md 合规、bug、历史 git 上下文等）：
+   a. Agent #1：审计改动，确保其符合 AGENTS.md。注意：AGENTS.md 是指导 AI 编写代码的规范，并非所有条款都适用于代码审查。
+   b. Agent #2：读取 pull request 中的文件改动，然后对明显的 bug 进行浅层扫描。避免读取改动范围之外的额外上下文，只关注改动本身。专注于大型 bug，忽略小问题和吹毛求疵。忽略明显的误报。
+   c. Agent #3：读取被修改代码的 git blame 和历史，结合历史上下文识别 bug。
+   d. Agent #4：读取之前涉及这些文件的 pull request，检查是否有评论也可能适用于当前的 pull request。
+   e. Agent #5：读取修改文件中的代码注释，确保 pull request 的改动符合注释中提供的任何指导。
 
-然后列出 todo list，按以下 8 步执行。
+5. 对于步骤 #4 中发现的每个问题，启动并行轻量 agent，该 agent 接收 PR、问题描述和 AGENTS.md 文件列表（来自步骤 #2），并返回一个分数，以表示该 agent 对问题是真实问题还是误报的置信度。该 agent 应按 0-100 的分数评分，以表示其置信度。如果问题因 AGENTS.md 条款而被标记，agent 应 double check 确认 AGENTS.md 是否确实明确指出了该问题。评分标准为（将以下评分标准原样传达给 agent）：
+   a. 0：完全不自信。这是一个误报，经不起简单推敲，或是 pre-existing issue。
+   b. 25： somewhat confident。这可能是真实问题，但也可能是误报。Agent 无法验证这是否是真实问题。如果问题是风格问题，那它不是相关 AGENTS.md 中明确指出的那种。
+   c. 50： moderately confident。Agent 已验证这是真实问题，但可能是 nitpick 或不常发生。相对于 PR 的其他部分，它不是很重要。
+   d. 75： highly confident。Agent 双重检查后确认这很可能是真实问题，会在实践中遇到。现有方法不足。问题很重要，会直接影响代码功能，或直接在相关 AGENTS.md 中被提到。
+   e. 100： absolutely certain。Agent 双重检查后确认这 definitely 是真实问题，会在实践中频繁发生。证据直接确认。
 
-## 审查哲学
+6. 过滤掉所有分数低于 80 的问题。如果没有满足条件的问题，请勿继续。
 
-1. **简洁优先**：如果超过 3 层缩进，说明设计有问题，需要重构而不是加条件判断。
-2. **不破坏用户空间**：任何会破坏现有 API 或行为的改动都是不可接受的，无论理论正确性如何。
-3. **务实主义**：解决真实存在的问题，不要为想象中的边缘场景过度设计。拒绝理论上完美但实践中复杂的方案。
-4. **数据结构和简洁性优先**："Bad programmers worry about the code. Good programmers worry about data structures."
-5. **不做无意义的噪音**：跳过纯风格问题、格式问题、linter 能 catches 的问题。只评论真正需要行动的事项。
+7. 使用轻量 agent 重复 #1 的资格检查，确保 pull request 仍然符合代码审查条件。
 
-### 步骤 1：资格检查
+8. 最后，使用 gh 命令在 pull request 上发表评论。撰写评论时请记住：
+   a. 保持输出简洁
+   b. 避免使用 emoji
+   c. 引用和链接相关代码、文件和 URL
 
-在开始审查前，先确认：
-- PR 是否已关闭或处于 draft 状态？如果是，跳过详细审查。
-- PR 是否已有来自你的 review？如果有，不要重复审查。
-- 改动是否极小且明显正确？如果是，直接 APPROVE。
+误报示例（步骤 #4 和 #5）：
 
-### 步骤 2-3：前置准备
+- Pre-existing issues
+- 看起来像 bug 但实际上不是 bug 的情况
+- 高级工程师不会专门指出的吹毛求疵的 nitpicks
+- Linter、类型检查器、编译器能 catches 的问题（例如：缺失或不正确的导入、类型错误、损坏的测试、格式问题、像换行这样的琐碎样式问题）。你不需要自己运行这些构建步骤——假设它们会作为 CI 的一部分单独运行，这样是安全的。
+- 通用代码质量问题（例如：测试覆盖不足、一般安全问题、文档差），除非 AGENTS.md 明确要求
+- AGENTS.md 中提到的问题，但在代码中被明确禁用了（例如由于 lint ignore 注释）
+- 可能是故意为之的改动，或与整体改动直接相关的改动
+- 真实问题，但位于用户未在 pull request 中修改的行
 
-- 步骤 2：收集项目规范文件路径（AGENTS.md 等），不读取内容
-- 步骤 3：获取 PR 摘要，包括改动模块、目的和关键设计决策
+注意事项：
 
-列出 todo list，然后继续步骤 4-8。
+- 不要检查构建信号或尝试构建/类型检查应用程序。这些将单独运行，与你的代码审查无关。
+- 使用 `gh` 与 GitHub 交互（例如：获取 pull request、创建行内评论），而不是 web fetch
+- 先做 todo list
+- 你必须引用和链接每个 bug（例如：如果引用 AGENTS.md，你必须链接它）
+- 对于你的最终评论，请严格遵循以下格式（假设你发现了 3 个问题）：
 
-### 步骤 4：5 个并行角度审查
+---
 
-从以下 5 个角度并行审查。使用 TaskToolSet 拆分子任务，按文件或角度分发，并发执行后合并结果。
+### Code review
 
-### 角度 1：项目规范合规
-- 是否符合 AGENTS.md 中的编码规范和架构约束？
-- 是否触及 Boundaries 中标记的禁区（直接访问 ProviderState 私有字段、在 internal/ 下引入外部框架等）？
-- Commit/PR 标题是否符合 conventional commits 格式？
+Found 3 issues:
 
-### 角度 2：代码 bug 和逻辑错误
-- 是否有未处理的 nil/None 引用？
-- 是否有并发安全问题（data race、竞态条件）？
-- 是否有资源泄漏（未关闭的文件、连接、goroutine 泄漏）？
-- 是否有错误处理缺失或错误包装不符合规范？
-- 是否有 off-by-one、边界条件错误？
+1. <brief description of bug>（AGENTS.md says "<...>"）
 
-### 角度 3：Git 历史和上下文
-- 查看修改过的文件的 git blame，理解改动背景
-- 改动是否与历史意图一致？还是引入了与历史设计冲突的逻辑？
-- 是否有之前修复过但重新引入的同类 bug？
+<link to file and line with full sha1 + line range for context, note that you MUST provide the full sha and not use bash here, eg. https://github.com/anthropics/claude-code/blob/1d54823877c4de72b2316a64032a54afc404e619/README.md#L13-L17>
 
-### 角度 4：过往 PR 遗留问题
-- 检查过往 PR 中类似文件的 review 评论
-- 本次改动是否再次触发之前被标记为需要修复的问题？
-- 是否有之前被关闭的 TODO/FIXME 被忽略？
+2. <brief description of bug>（some/other/AGENTS.md says "<...>"）
 
-### 角度 5：代码注释和文档一致性
-- 代码注释是否准确描述了实际行为？是否存在注释与代码不一致？
-- PR 描述中的设计意图是否与实现匹配？
-- 帮助文本、错误消息、日志输出是否清晰准确？
+<link to file and line with full sha1 + line range for context>
 
-## 误报过滤清单
+3. <brief description of bug>（bug due to <file and code snippet>）
 
-以下情况**不算**需要报告的问题：
+<link to file and line with full sha1 + line range for context>
 
-- Linter、类型检查器、编译器能 catches 的问题（导入错误、类型错误、格式问题）
-- 纯风格偏好，不是项目规范明确要求的
-- 历史已经存在的问题，不是本次 PR 引入的
-- 改动前就存在的代码质量问题，除非本次改动涉及该区域
-- 过于琐碎的 nitpick，一个高级工程师不会专门指出的
-- 测试覆盖不足，除非 PR 明确要求补充测试
-- 与本次修改行无关的相邻代码问题
+---
 
-### 步骤 5：置信度评分
+- 或者，如果你没有发现任何问题：
 
-对步骤 4 中发现的每个问题，评估置信度，使用以下五级评分：
+---
 
-- **0**：完全不自信。这是误报，经不起简单推敲，或是 pre-existing issue。
-- **25**： somewhat confident。可能是真实问题，但也可能是误报。Agent 无法验证。
-- **50**： moderately confident。能验证这是真实问题，但可能是 nitpick 或不常发生。相对于 PR 的其他部分，不是很重要。
-- **75**： highly confident。双重检查后确认这很可能是真实问题，会在实践中遇到。现有方案不足。问题很重要，直接影响代码功能，或直接在相关 AGENTS.md 中被提到。
-- **100**： absolutely certain。双重检查后确认这 definitely 是真实问题，会在实践中频繁发生。证据直接确认。
+### Code review
 
-对于因 AGENTS.md 条款标记的问题，必须 double check 确认 AGENTS.md 确实明确指出了该问题。
+No issues found. Checked for bugs and AGENTS.md compliance.
 
-### 步骤 6：过滤低置信度问题
+---
 
-过滤掉所有分数低于 80 的问题。如果没有满足条件的问题，不继续后续步骤。
-
-### 步骤 7：重检资格
-
-重复步骤 1 的资格检查，确保 PR 仍然符合审查条件（未关闭、未 draft、无重复 review）。
-
-### 步骤 8：发布 Review
-
-使用 GitHub API 在 PR 上发布 review。写作时注意：
-- 保持输出简洁
-- 避免使用 emoji
-- 引用和链接相关代码、文件和 URL
-
-## 输出格式
-
-### Review Body（总评）
-
-```
-## 审查结果
-
-### 总评
-[简要总结审查结论]
-
-### 问题列表
-#### 🔴 严重问题
-1. [问题描述]（[文件路径]#L行号）
-   [为什么是问题，建议如何修复]
-
-#### 🟠 重要问题
-1. [问题描述]（[文件路径]#L行号）
-   [为什么是问题，建议如何修复]
-
-#### 🟡 建议改进
-1. [改进描述]（[文件路径]#L行号）
-   [改进理由]
-
-### 结论
-✅ APPROVE — 无阻塞问题
-❌ 需要修改 — 存在必须修复的问题
-💬 仅供参考 — 仅有建议，无阻塞问题
-```
-
-### 行内评论
-
-- 每个行内评论必须带 severity 标签：🔴🟠🟡
-- 只评论需要行动的问题，不评论可接受的代码
-- 简单修改使用 ```suggestion``` 语法
-- 引用格式：`[文件路径]#L行号`
-
-## Verdict 规则
-
-| 结论 | 条件 |
-|---|---|
-| ✅ APPROVE | 无 🔴🟠 级别问题 |
-| ❌ 需要修改 | 存在 🔴 或 🟠 级别问题 |
-| 💬 仅供参考 | 仅有 🟡 级别建议 |
-
-## 子 agent 拆解指南
-
-当 PR 改动较大时，使用 TaskToolSet 拆解任务：
-
-1. 按文件粒度拆分 diff
-2. 每个文件分配给一个 `file_reviewer` 子 agent
-3. 子 agent 返回 JSON 数组：`[{"path": "...", "line": N, "severity": "critical/major/minor", "body": "..."}]`
-4. 主 agent 合并子 agent 结果，去重，过滤低置信度
-5. 生成最终 review
-
-子 agent 的审查标准与本 skill 一致，使用相同的 severity 分级和输出格式。
-
-## 链接格式要求
-
-链接到代码时必须遵循精确格式，否则 Markdown 预览无法正确渲染：
-
-```
-https://github.com/<owner>/<repo>/blob/<full_sha>/<file>#L<start>-L<end>
-```
-
-要求：
-- 必须使用完整 git sha
-- 不能使用 bash 命令如 `$(git rev-parse HEAD)`
-- Repo 名称必须与审查的 repo 匹配
-- 文件名后必须有 `#` 符号
-- 行号范围格式为 `L[start]-L[结束]`
-- 必须提供至少 1 行上下文（如评论第 5-6 行，链接应为 `L4-7`）
-
-## 边界
-
-- 🚫 不要修改代码，只提供反馈
-- 🚫 不要提交 PR、不要关 issue、不要合并代码
-- 🚫 不要检查构建状态或尝试构建/类型检查。这些会由 CI 单独运行，与 code review 无关
-- ✅ 可以读文件、查 git 历史、运行静态检查命令
-- ✅ 可以在 PR 上发布 review 评论和行内评论
-- ✅ 使用 `gh` 与 GitHub 交互（获取 PR、创建行内评论），不要用 web fetch
-- ✅ 审查前先做 todo list
-- ✅ 必须引用和链接每个 bug（如引用 AGENTS.md 时必须提供链接）
+- 链接到代码时，请严格遵循以下格式，否则 Markdown 预览将无法正确渲染：https://github.com/anthropics/claude-cli-internal/blob/c21d3c10bc8e898b7ac1a2d745bdc9bc4e423afe/package.json#L10-L15
+  - 需要完整 git sha
+  - 你必须提供完整的 sha。像 `https://github.com/owner/repo/blob/$(git rev-parse HEAD)/foo/bar` 这样的命令是行不通的，因为你的评论将直接在 Markdown 中渲染。
+  - Repo 名称必须与你审查的 repo 匹配
+  - 文件名后必须有 `#` 符号
+  - 行号范围格式为 `L[start]-L[结束]`
+  - 提供至少 1 行上下文（例如：如果你评论第 5-6 行，链接应为 `L4-7`）
