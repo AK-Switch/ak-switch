@@ -2,7 +2,10 @@
 
 package config
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestFindField_Existing(t *testing.T) {
 	f := FindField("target")
@@ -215,5 +218,89 @@ func TestIsValidLogLevel(t *testing.T) {
 		if IsValidLogLevel(l) {
 			t.Errorf("IsValidLogLevel(%q) = true, want false", l)
 		}
+	}
+}
+
+// TestReflectBuild_Equivalence 证明 reflectBuildDescriptors 生成的元数据
+// 与现有手写表完全一致（金标准的运行时版本）。
+func TestReflectBuild_Equivalence(t *testing.T) {
+	reflected := reflectBuildDescriptors()
+	golden := ConfigFieldDescriptors // 现有手写表
+
+	if len(reflected) != len(golden) {
+		t.Fatalf("reflected count = %d, want %d (golden)", len(reflected), len(golden))
+	}
+	for i := range golden {
+		r, g := reflected[i], golden[i]
+		if r.Key != g.Key {
+			t.Errorf("[%d] Key = %q, want %q", i, r.Key, g.Key)
+		}
+		if r.DisplayName != g.DisplayName {
+			t.Errorf("[%d] (%s) DisplayName = %q, want %q", i, g.Key, r.DisplayName, g.DisplayName)
+		}
+		if r.Scope != g.Scope {
+			t.Errorf("[%d] (%s) Scope = %q, want %q", i, g.Key, r.Scope, g.Scope)
+		}
+		if r.TomlPath != g.TomlPath {
+			t.Errorf("[%d] (%s) TomlPath = %q, want %q", i, g.Key, r.TomlPath, g.TomlPath)
+		}
+		if r.Type != g.Type {
+			t.Errorf("[%d] (%s) Type = %q, want %q", i, g.Key, r.Type, g.Type)
+		}
+		if r.Default != g.Default {
+			t.Errorf("[%d] (%s) Default = %q, want %q", i, g.Key, r.Default, g.Default)
+		}
+		if r.RuntimeEditable != g.RuntimeEditable {
+			t.Errorf("[%d] (%s) RuntimeEditable = %v, want %v", i, g.Key, r.RuntimeEditable, g.RuntimeEditable)
+		}
+		if r.ReadOnly != g.ReadOnly {
+			t.Errorf("[%d] (%s) ReadOnly = %v, want %v", i, g.Key, r.ReadOnly, g.ReadOnly)
+		}
+		if r.MinInt != g.MinInt {
+			t.Errorf("[%d] (%s) MinInt = %d, want %d", i, g.Key, r.MinInt, g.MinInt)
+		}
+	}
+}
+
+// TestParseByType 覆盖四类型的默认 Parse。
+func TestParseByType(t *testing.T) {
+	tests := []struct {
+		typ  FieldType
+		in   string
+		want any
+	}{
+		{FieldTypeInt, "42", 42},
+		{FieldTypeFloat64, "2.5", 2.5},
+		{FieldTypeBool, "true", true},
+		{FieldTypeString, "abc", "abc"},
+	}
+	for _, tt := range tests {
+		got, err := parseByType(tt.typ, tt.in)
+		if err != nil {
+			t.Errorf("parseByType(%q, %q) err = %v", tt.typ, tt.in, err)
+			continue
+		}
+		if !reflect.DeepEqual(got, tt.want) {
+			t.Errorf("parseByType(%q, %q) = %v, want %v", tt.typ, tt.in, got, tt.want)
+		}
+	}
+}
+
+// TestFormatByType 覆盖四类型的默认 Format。
+func TestFormatByType(t *testing.T) {
+	if got := formatByType(FieldTypeInt, 42); got != "42" {
+		t.Errorf("formatByType(int, 42) = %q, want %q", got, "42")
+	}
+	if got := formatByType(FieldTypeFloat64, float64(2)); got != "2" {
+		t.Errorf("formatByType(float64, 2) = %q, want %q (整数去小数点)", got, "2")
+	}
+	if got := formatByType(FieldTypeFloat64, 2.5); got != "2.5" {
+		t.Errorf("formatByType(float64, 2.5) = %q, want %q", got, "2.5")
+	}
+	if got := formatByType(FieldTypeBool, true); got != "true" {
+		t.Errorf("formatByType(bool, true) = %q, want %q", got, "true")
+	}
+	if got := formatByType(FieldTypeString, "abc"); got != "abc" {
+		t.Errorf("formatByType(string, abc) = %q, want %q", got, "abc")
 	}
 }

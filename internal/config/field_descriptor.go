@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -509,29 +510,29 @@ var ConfigFieldDescriptors = []ConfigFieldDescriptor{
 			}
 		},
 	},
-		{
-			Key:             "key_selection",
-			DisplayName:     "Key Selection Mode",
-			Scope:           FieldScopeProvider,
-			TomlPath:        "provider.%s.key_selection",
-			Type:            FieldTypeString,
-			Default:         "polling",
-			RuntimeEditable: false,
-			Parse: func(s string) (any, error) {
-				v := strings.TrimSpace(strings.ToLower(s))
-				switch v {
-				case "polling", "random":
-					return v, nil
-				}
-				return nil, fmt.Errorf("invalid key_selection %q, use: polling, random", s)
-			},
-			Format: func(v any) string { return fmt.Sprintf("%v", v) },
-			Persist: func(tc *TomlConfig, provider string, c *Config, value any) {
-				if c != nil {
-					c.KeySelection = value.(string)
-				}
-			},
+	{
+		Key:             "key_selection",
+		DisplayName:     "Key Selection Mode",
+		Scope:           FieldScopeProvider,
+		TomlPath:        "provider.%s.key_selection",
+		Type:            FieldTypeString,
+		Default:         "polling",
+		RuntimeEditable: false,
+		Parse: func(s string) (any, error) {
+			v := strings.TrimSpace(strings.ToLower(s))
+			switch v {
+			case "polling", "random":
+				return v, nil
+			}
+			return nil, fmt.Errorf("invalid key_selection %q, use: polling, random", s)
 		},
+		Format: func(v any) string { return fmt.Sprintf("%v", v) },
+		Persist: func(tc *TomlConfig, provider string, c *Config, value any) {
+			if c != nil {
+				c.KeySelection = value.(string)
+			}
+		},
+	},
 
 	// ── Global fields ───────────────────────────────────────────────
 	{
@@ -594,4 +595,226 @@ func ParseDefault(d *ConfigFieldDescriptor) (any, error) {
 	default:
 		return nil, fmt.Errorf("unknown field type: %s", d.Type)
 	}
+}
+
+// fieldTag 解析后的 field struct tag。
+type fieldTag struct {
+	key             string
+	display         string
+	scope           FieldScope
+	defaultOverride string // 空表示未设
+	runtime         bool
+	readOnly        bool
+	min             int // 0 = 未设（与 ConfigFieldDescriptor.MinInt 的 Go 零值一致）
+}
+
+// hasValue 报告 s 是否非空。
+func hasValue(s string) bool { return s != "" }
+
+// parseFieldTag 解析 `field:"key,display:...,scope:...,default:...,runtime,readonly,min:N"` tag。
+func parseFieldTag(tag string) (fieldTag, bool) {
+	if tag == "" {
+		return fieldTag{}, false
+	}
+	ft := fieldTag{min: 0} // 0 = 未设（与 ConfigFieldDescriptor.MinInt 的 Go 零值一致）
+	parts := strings.Split(tag, ",")
+	if parts[0] == "" {
+		return fieldTag{}, false
+	}
+	ft.key = parts[0]
+	for _, p := range parts[1:] {
+		k, v, _ := strings.Cut(p, ":")
+		switch k {
+		case "display":
+			ft.display = v
+		case "scope":
+			ft.scope = FieldScope(v)
+		case "default":
+			ft.defaultOverride = v
+		case "runtime":
+			ft.runtime = true
+		case "readonly":
+			ft.readOnly = true
+		case "min":
+			if n, err := strconv.Atoi(v); err == nil {
+				ft.min = n
+			}
+		}
+	}
+	return ft, true
+}
+
+// reflectTypeField 映射 reflect.Kind → FieldType。
+func reflectTypeField(k reflect.Kind) FieldType {
+	switch k {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return FieldTypeInt
+	case reflect.String:
+		return FieldTypeString
+	case reflect.Bool:
+		return FieldTypeBool
+	case reflect.Float32, reflect.Float64:
+		return FieldTypeFloat64
+	default:
+		return FieldTypeString // 兜底，不应出现
+	}
+}
+
+// zeroDefault 返回类型零值的字符串表示。
+func zeroDefault(t FieldType) string {
+	switch t {
+	case FieldTypeInt:
+		return "0"
+	case FieldTypeFloat64:
+		return "0"
+	case FieldTypeBool:
+		return "false"
+	default:
+		return ""
+	}
+}
+
+// parseByType 是由 Type 决定的默认 Parse。
+func parseByType(t FieldType, s string) (any, error) {
+	switch t {
+	case FieldTypeInt:
+		return strconv.Atoi(s)
+	case FieldTypeFloat64:
+		return strconv.ParseFloat(s, 64)
+	case FieldTypeBool:
+		return strconv.ParseBool(s)
+	case FieldTypeString:
+		return s, nil
+	default:
+		return nil, fmt.Errorf("unknown field type: %s", t)
+	}
+}
+
+// formatByType 是由 Type 决定的默认 Format。
+func formatByType(t FieldType, v any) string {
+	switch t {
+	case FieldTypeInt:
+		return strconv.Itoa(v.(int))
+	case FieldTypeFloat64:
+		f := v.(float64)
+		if f == float64(int64(f)) {
+			return strconv.FormatInt(int64(f), 10)
+		}
+		return strconv.FormatFloat(f, 'f', 1, 64)
+	case FieldTypeBool:
+		return strconv.FormatBool(v.(bool))
+	case FieldTypeString:
+		return fmt.Sprintf("%v", v)
+	default:
+		return fmt.Sprintf("%v", v)
+	}
+}
+
+// makePersist 为 provider/global scope 构造派生 Persist 闭包。
+// structFieldName 是 Go struct 字段名（如 "CooldownSec"），用于反射定位。
+func makePersist(structFieldName string, scope FieldScope) func(tc *TomlConfig, provider string, c *Config, value any) {
+	return func(tc *TomlConfig, provider string, c *Config, value any) {
+		if scope == FieldScopeProvider {
+			if c == nil {
+				return
+			}
+			reflect.ValueOf(c).Elem().FieldByName(structFieldName).Set(reflect.ValueOf(value))
+			return
+		}
+		if tc == nil {
+			return
+		}
+		reflect.ValueOf(tc).Elem().FieldByName(structFieldName).Set(reflect.ValueOf(value))
+	}
+}
+
+// scanStruct 反射扫描一个 struct 的 field tag，生成基础 descriptor。
+// 传入 reflect.TypeOf(&ProviderConfig{}) 之类的指针类型。
+func scanStruct(typ reflect.Type, defaultScope FieldScope) []ConfigFieldDescriptor {
+	var out []ConfigFieldDescriptor
+	t := typ.Elem()
+	for i := 0; i < t.NumField(); i++ {
+		sf := t.Field(i)
+		ft, ok := parseFieldTag(sf.Tag.Get("field"))
+		if !ok {
+			continue // 无 field tag，跳过
+		}
+		scope := ft.scope
+		if scope == "" {
+			scope = defaultScope
+		}
+		fType := reflectTypeField(sf.Type.Kind())
+		tomlName := sf.Tag.Get("toml")
+		// toml tag 可能带 ",omitempty"，取逗号前部分
+		if c := strings.Index(tomlName, ","); c >= 0 {
+			tomlName = tomlName[:c]
+		}
+		var tomlPath string
+		if scope == FieldScopeProvider {
+			tomlPath = "provider.%s." + tomlName
+		} else {
+			tomlPath = tomlName
+		}
+		// Default 派生：field tag defaultOverride > default struct tag > 类型零值
+		def := ft.defaultOverride
+		if def == "" {
+			def = sf.Tag.Get("default")
+		}
+		if def == "" {
+			def = zeroDefault(fType)
+		}
+		d := ConfigFieldDescriptor{
+			Key:             ft.key,
+			DisplayName:     ft.display,
+			Scope:           scope,
+			TomlPath:        tomlPath,
+			Type:            fType,
+			Default:         def,
+			RuntimeEditable: ft.runtime,
+			ReadOnly:        ft.readOnly,
+			MinInt:          ft.min,
+			Parse:           func(s string) (any, error) { return parseByType(fType, s) },
+			Format:          func(v any) string { return formatByType(fType, v) },
+			Persist:         makePersist(sf.Name, scope),
+		}
+		out = append(out, d)
+	}
+	return out
+}
+
+// customClosure 存放无法反射派生的定制闭包。任一字段为 nil 表示用派生默认。
+type customClosure struct {
+	Parse        func(string) (any, error)
+	Format       func(any) string
+	ApplyRuntime func(ps any, provider string, value any) (any, error)
+}
+
+// customClosures 按 field key 索引定制闭包。Task 4 填充。
+var customClosures = map[string]customClosure{}
+
+// reflectBuildDescriptors 遍历 ProviderConfig + TomlConfig 的 field tag，
+// 反射生成所有字段的基础 descriptor（含派生 Parse/Format/Persist，无 ApplyRuntime）。
+func reflectBuildDescriptors() []ConfigFieldDescriptor {
+	out := scanStruct(reflect.TypeOf(&ProviderConfig{}), FieldScopeProvider)
+	out = append(out, scanStruct(reflect.TypeOf(&TomlConfig{}), FieldScopeGlobal)...)
+	return out
+}
+
+// buildDescriptors 组装最终 descriptor：反射基础 + customClosures overlay。
+func buildDescriptors() []ConfigFieldDescriptor {
+	base := reflectBuildDescriptors()
+	for i := range base {
+		if cc, ok := customClosures[base[i].Key]; ok {
+			if cc.Parse != nil {
+				base[i].Parse = cc.Parse
+			}
+			if cc.Format != nil {
+				base[i].Format = cc.Format
+			}
+			if cc.ApplyRuntime != nil {
+				base[i].ApplyRuntime = cc.ApplyRuntime
+			}
+		}
+	}
+	return base
 }
