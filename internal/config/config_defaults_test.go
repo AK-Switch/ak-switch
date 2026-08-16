@@ -377,3 +377,52 @@ func TestMergeWithDefaults_DisableThinkingInherited(t *testing.T) {
 		t.Errorf("DisableThinking = false, want true (inherited from base; override false must not clear)")
 	}
 }
+
+// TestDeepCopy_SliceIndependence 验证副本的 slice 不与原对象共享底层数组。
+func TestDeepCopy_SliceIndependence(t *testing.T) {
+	orig := &Config{
+		ProviderConfig: ProviderConfig{
+			Keys:     []string{"k1", "k2"},
+			KeyNames: []string{"n1", "n2"},
+		},
+	}
+	cp := orig.DeepCopy()
+
+	// 改副本不影响原对象
+	cp.Keys[0] = "changed"
+	cp.KeyNames[0] = "changed"
+	cp.Keys = append(cp.Keys, "k3")
+
+	if orig.Keys[0] != "k1" {
+		t.Errorf("orig.Keys[0] = %q, want %q (副本修改不应影响原对象)", orig.Keys[0], "k1")
+	}
+	if orig.KeyNames[0] != "n1" {
+		t.Errorf("orig.KeyNames[0] = %q, want %q", orig.KeyNames[0], "n1")
+	}
+	if len(orig.Keys) != 2 {
+		t.Errorf("len(orig.Keys) = %d, want 2", len(orig.Keys))
+	}
+}
+
+// TestSyncRuntimeConfig 验证按名同步 ProviderConfig → RuntimeConfig。
+func TestSyncRuntimeConfig(t *testing.T) {
+	pc := &ProviderConfig{
+		HTTPTimeoutSec:      45,
+		MaxRetries:          3,
+		CooldownSec:         20,
+		BackoffCapSec:       90,
+		BackoffMultiplier:   1.5,
+		CBResetSec:          25,
+		UpstreamCBThreshold: 7,
+		LogLevel:            "warn",
+	}
+	var rc RuntimeConfig
+	syncRuntimeConfig(&rc, pc)
+
+	if rc.HTTPTimeoutSec != 45 || rc.MaxRetries != 3 || rc.CooldownSec != 20 {
+		t.Error("syncRuntimeConfig 未正确同步字段")
+	}
+	if rc.BackoffMultiplier != 1.5 || rc.LogLevel != "warn" {
+		t.Error("syncRuntimeConfig 未正确同步 float/string 字段")
+	}
+}

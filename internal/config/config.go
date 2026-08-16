@@ -210,53 +210,47 @@ func (c *Config) Sanitized() *Config {
 	return &s
 }
 
+// reflectCopyStruct 遍历 src 的字段拷贝到 dst。slice 做深拷贝，其余值类型直接 Set。
+// dst/src 必须是指向同类型 struct 的指针。当前 ProviderConfig/RuntimeConfig 无指针/嵌套
+// struct 字段，故不递归（YAGNI）。
+func reflectCopyStruct(dst, src interface{}) {
+	dv := reflect.ValueOf(dst).Elem()
+	sv := reflect.ValueOf(src).Elem()
+	for i := 0; i < sv.NumField(); i++ {
+		sf := sv.Field(i)
+		if sf.Kind() == reflect.Slice {
+			if sf.IsNil() {
+				dv.Field(i).Set(sf)
+				continue
+			}
+			newSlice := reflect.MakeSlice(sf.Type(), sf.Len(), sf.Cap())
+			reflect.Copy(newSlice, sf)
+			dv.Field(i).Set(newSlice)
+		} else {
+			dv.Field(i).Set(sf)
+		}
+	}
+}
+
 // DeepCopy returns a deep copy of the Config.
 func (c *Config) DeepCopy() *Config {
-	keys := make([]string, len(c.Keys))
-	copy(keys, c.Keys)
-	keyNames := make([]string, len(c.KeyNames))
-	copy(keyNames, c.KeyNames)
-	return &Config{
-		ProviderConfig: ProviderConfig{
-			Port:                   c.Port,
-			Host:                   c.Host,
-			TargetBase:             c.TargetBase,
-			AdminToken:             c.AdminToken,
-			DisableThinking:        c.DisableThinking,
-			ThinkingMode:           c.ThinkingMode,
-			RectifyThinkingMapTo:   c.RectifyThinkingMapTo,
-			GenaiModel:             c.GenaiModel,
-			MaxRetries:             c.MaxRetries,
-			LogLevel:               c.LogLevel,
-			CooldownSec:            c.CooldownSec,
-			HTTPTimeoutSec:         c.HTTPTimeoutSec,
-			Keys:                   keys,
-			KeyNames:               keyNames,
-			KeysFile:               c.KeysFile,
-			KeySelection:           c.KeySelection,
-			BackoffCapSec:          c.BackoffCapSec,
-			BackoffMultiplier:      c.BackoffMultiplier,
-			CBResetSec:             c.CBResetSec,
-			UpstreamCBThreshold:    c.UpstreamCBThreshold,
-			HealthCheckIntervalSec: c.HealthCheckIntervalSec,
-			HealthCheckPath:        c.HealthCheckPath,
-			HealthCheckTimeoutSec:  c.HealthCheckTimeoutSec,
-			LogFile:                c.LogFile,
-			LogMaxSize:             c.LogMaxSize,
-			LogMaxAge:              c.LogMaxAge,
-			ErrorDumpMaxAge:        c.ErrorDumpMaxAge,
-			CalibrationIntervalSec: c.CalibrationIntervalSec,
-		},
-		RuntimeConfig: RuntimeConfig{
-			HTTPTimeoutSec:      c.RuntimeConfig.HTTPTimeoutSec,
-			MaxRetries:          c.RuntimeConfig.MaxRetries,
-			CooldownSec:         c.RuntimeConfig.CooldownSec,
-			BackoffCapSec:       c.RuntimeConfig.BackoffCapSec,
-			BackoffMultiplier:   c.RuntimeConfig.BackoffMultiplier,
-			CBResetSec:          c.RuntimeConfig.CBResetSec,
-			UpstreamCBThreshold: c.RuntimeConfig.UpstreamCBThreshold,
-			LogLevel:            c.RuntimeConfig.LogLevel,
-		},
+	cp := &Config{}
+	reflectCopyStruct(&cp.ProviderConfig, &c.ProviderConfig)
+	reflectCopyStruct(&cp.RuntimeConfig, &c.RuntimeConfig)
+	return cp
+}
+
+// syncRuntimeConfig 把 ProviderConfig 中与 RuntimeConfig 同名的字段同步过去。
+// 两者字段名一一对应（HTTPTimeoutSec/MaxRetries/CooldownSec/BackoffCapSec/
+// BackoffMultiplier/CBResetSec/UpstreamCBThreshold/LogLevel）。
+func syncRuntimeConfig(rc *RuntimeConfig, pc *ProviderConfig) {
+	rcVal := reflect.ValueOf(rc).Elem()
+	pcVal := reflect.ValueOf(pc).Elem()
+	for i := 0; i < rcVal.NumField(); i++ {
+		fieldName := rcVal.Type().Field(i).Name
+		if f := pcVal.FieldByName(fieldName); f.IsValid() {
+			rcVal.Field(i).Set(f)
+		}
 	}
 }
 
@@ -289,14 +283,7 @@ func mergeWithDefaults(base, override *Config) *Config {
 		}
 	}
 	// Sync runtime config
-	result.RuntimeConfig.HTTPTimeoutSec = result.HTTPTimeoutSec
-	result.RuntimeConfig.MaxRetries = result.MaxRetries
-	result.RuntimeConfig.CooldownSec = result.CooldownSec
-	result.RuntimeConfig.BackoffCapSec = result.BackoffCapSec
-	result.RuntimeConfig.BackoffMultiplier = result.BackoffMultiplier
-	result.RuntimeConfig.CBResetSec = result.CBResetSec
-	result.RuntimeConfig.UpstreamCBThreshold = result.UpstreamCBThreshold
-	result.RuntimeConfig.LogLevel = result.LogLevel
+	syncRuntimeConfig(&result.RuntimeConfig, &result.ProviderConfig)
 	return result
 }
 
