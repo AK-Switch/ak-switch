@@ -220,7 +220,7 @@ func reflectCopyStruct(dst, src interface{}) {
 		sf := sv.Field(i)
 		if sf.Kind() == reflect.Slice {
 			if sf.IsNil() {
-				dv.Field(i).Set(sf)
+				dv.Field(i).Set(reflect.MakeSlice(sf.Type(), 0, 0))
 				continue
 			}
 			newSlice := reflect.MakeSlice(sf.Type(), sf.Len(), sf.Cap())
