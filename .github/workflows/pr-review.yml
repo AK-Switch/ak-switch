@@ -32,3 +32,4 @@ jobs:
           llm-base-url: https://api.stepfun.com/step_plan/v1
           llm-api-key: ${{ secrets.LLM_API_KEY }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          use-sub-agents: true
