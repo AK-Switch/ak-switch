@@ -140,33 +140,16 @@ AK-Switch 有多个 AI 并行开发，以下规则确保分支不打架、PR 不
 
 AK-Switch 使用 conventional commits 格式。每个 commit 只做一件事，改完立即提交。
 
-### Commit 格式
-
-```
-类型: 简短描述（不超过 50 字，说清做了什么）
-```
-
-| 类型 | 含义 | 示例 |
-|------|------|------|
-| `feat` | 新增功能 | `feat: KeyPool 支持 polling/random 选择策略` |
-| `fix` | 修复 bug | `fix: config view 显示 thinking_mode 实际值` |
-| `refactor` | 重构（不改变行为） | `refactor: 拆分 admin_api.go 为 6 个职责文件` |
-| `docs` | 仅文档变更 | `docs: AGENTS.md 新增并行开发规范` |
-| `chore` | 杂务（构建、依赖、配置） | `chore(deps): bump softprops/action-gh-release` |
-| `test` | 测试变更 | `test: 补充 key export 成功路径测试` |
-| `ci` | CI 配置变更 | `ci: 集成测试增加 Docker 健康检查` |
-| `perf` | 性能优化 | `perf: 缓存 ConfigFieldDescriptors 查找结果` |
-
-### PR 标题
-
-PR 标题与 commit 格式一致：`类型: 描述`。如 `fix: 流式响应 response_body_size 追踪`。
-
 ### 提交前检查
 
 - [ ] 当前分支是否正确
 - [ ] 只改必要文件（不顺手改无关代码）
 - [ ] 已执行 `make check`（lint + vet + fmt）
 - [ ] 已执行 `make test-unit` 或目标模块的单元测试
+
+### 提交后的 babysit
+
+- [ ] 调用 /claude-mem:babysit 轮询 pr 的 review 状态, 有问题就改好再更新 pr
 
 ## Verification Loop
 
