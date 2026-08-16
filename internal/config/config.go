@@ -15,37 +15,36 @@ import (
 // ProviderConfig holds all provider-level configuration fields with TOML tags.
 // Embedded in Config so all existing callers can continue using cfg.FieldName.
 type ProviderConfig struct {
-	Port                 int      `toml:"port" default:"8080"`
-	Host                 string   `toml:"host,omitempty" default:"127.0.0.1"`
-	TargetBase           string   `toml:"target"`                            // Upstream target base URL (required)
-	AdminToken           string   `toml:"admin_token,omitempty"`             // Optional admin authentication token
-	DisableThinking      bool     `toml:"disable_thinking,omitempty"`        // Deprecated: use thinking_mode
-	ThinkingMode         string   `toml:"thinking_mode,omitempty"`           // "default" | "rectify"
-	RectifyThinkingMapTo string   `toml:"rectify_thinking_map_to,omitempty"` // "enabled" | "auto" | "disabled"
-	GenaiModel           string   `toml:"genai_model,omitempty"`             // Generative AI model name
-	MaxRetries           int      `toml:"max_retries,omitempty" default:"1"`
-	LogLevel             string   `toml:"log_level,omitempty" default:"info"`
-	CooldownSec          int      `toml:"cooldown_sec,omitempty" default:"15"`
-	HTTPTimeoutSec       int      `toml:"http_timeout_sec,omitempty" default:"30"`
-	Keys                 []string `toml:"-"` // API keys (at least one required)
-	KeyNames             []string `toml:"-"` // Corresponding key names (empty string if unnamed), same length as Keys
-	KeySelection         string   `toml:"key_selection,omitempty" default:"polling"`
-	KeysFile             string   `toml:"keys_file,omitempty" default:"keys.json"`
-
-	BackoffCapSec       int     `toml:"backoff_cap_sec,omitempty" default:"120"`
-	BackoffMultiplier   float64 `toml:"backoff_multiplier,omitempty" default:"2"`
-	CBResetSec          int     `toml:"cb_reset_sec,omitempty" default:"30"`
-	UpstreamCBThreshold int     `toml:"upstream_cb_threshold,omitempty" default:"5"`
-
-	HealthCheckIntervalSec int    `toml:"health_check_interval_sec,omitempty" default:"30"`
-	HealthCheckPath        string `toml:"-" default:"/health"`
-	HealthCheckTimeoutSec  int    `toml:"-" default:"5"`
-
-	LogFile                string `toml:"log_file,omitempty"` // 日志文件路径（空 = 不启用文件日志）
-	LogMaxSize             int    `toml:"log_max_size,omitempty" default:"100"`
-	LogMaxAge              int    `toml:"log_max_age,omitempty" default:"7"`
-	ErrorDumpMaxAge        int    `toml:"error_dump_max_age,omitempty" default:"7"`
-	CalibrationIntervalSec int    `toml:"calibration_interval_sec,omitempty" default:"3600"` // Token 校准间隔（秒，默认 1 小时）
+	// ── 进 descriptor 表的 provider 字段（顺序 = descriptor 顺序）──────────
+	TargetBase             string  `toml:"target" field:"target,display:Target URL,scope:provider"` // Upstream target base URL (required)
+	CooldownSec            int     `toml:"cooldown_sec,omitempty" default:"15" field:"cooldown_sec,display:Cooldown (sec),scope:provider,default:15,runtime,min:1"`
+	MaxRetries             int     `toml:"max_retries,omitempty" default:"1" field:"max_retries,display:Max Retries,scope:provider,default:1,runtime,min:0"`
+	BackoffCapSec          int     `toml:"backoff_cap_sec,omitempty" default:"120" field:"backoff_cap_sec,display:Backoff Cap (sec),scope:provider,default:120,runtime,min:1"`
+	BackoffMultiplier      float64 `toml:"backoff_multiplier,omitempty" default:"2" field:"backoff_multiplier,display:Backoff Multiplier,scope:provider,default:2,runtime"`
+	CBResetSec             int     `toml:"cb_reset_sec,omitempty" default:"30" field:"cb_reset_sec,display:Circuit Breaker Reset (sec),scope:provider,default:30,runtime,min:1"`
+	UpstreamCBThreshold    int     `toml:"upstream_cb_threshold,omitempty" default:"5" field:"upstream_cb_threshold,display:Upstream CB Threshold,scope:provider,default:5,runtime,min:1"`
+	HTTPTimeoutSec         int     `toml:"http_timeout_sec,omitempty" default:"30" field:"http_timeout_sec,display:HTTP Timeout (sec),scope:provider,default:30,runtime,min:1"`
+	LogLevel               string  `toml:"log_level,omitempty" default:"info" field:"log_level,display:Log Level,scope:provider,default:info,runtime"`
+	HealthCheckIntervalSec int     `toml:"health_check_interval_sec,omitempty" default:"30" field:"health_check_interval_sec,display:Health Check Interval (sec),scope:provider,default:30"`
+	AdminToken             string  `toml:"admin_token,omitempty" field:"admin_token,display:Admin Token,scope:provider,readonly"`                                    // Optional admin authentication token
+	DisableThinking        bool    `toml:"disable_thinking,omitempty" field:"disable_thinking,display:Disable Thinking,scope:provider,default:false"`                // Deprecated: use thinking_mode
+	ThinkingMode           string  `toml:"thinking_mode,omitempty" field:"thinking_mode,display:Thinking Mode,scope:provider,default:default,runtime"`               // "default" | "rectify"
+	RectifyThinkingMapTo   string  `toml:"rectify_thinking_map_to,omitempty" field:"rectify_thinking_map_to,display:Rectify Thinking Map To,scope:provider,runtime"` // "enabled" | "auto" | "disabled"
+	GenaiModel             string  `toml:"genai_model,omitempty" field:"genai_model,display:GenAI Model,scope:provider"`                                             // Generative AI model name
+	KeysFile               string  `toml:"keys_file,omitempty" default:"keys.json" field:"keys_file,display:Keys File,scope:provider,default:keys.json,readonly"`
+	KeySelection           string  `toml:"key_selection,omitempty" default:"polling" field:"key_selection,display:Key Selection Mode,scope:provider,default:polling"`
+	// ── 不进 descriptor 表的字段（无 field tag，反射跳过）──────────────────
+	Port                   int      `toml:"port" default:"8080"`
+	Host                   string   `toml:"host,omitempty" default:"127.0.0.1"`
+	Keys                   []string `toml:"-"` // API keys (at least one required)
+	KeyNames               []string `toml:"-"` // Corresponding key names (empty string if unnamed), same length as Keys
+	HealthCheckPath        string   `toml:"-" default:"/health"`
+	HealthCheckTimeoutSec  int      `toml:"-" default:"5"`
+	LogFile                string   `toml:"log_file,omitempty"` // 日志文件路径（空 = 不启用文件日志）
+	LogMaxSize             int      `toml:"log_max_size,omitempty" default:"100"`
+	LogMaxAge              int      `toml:"log_max_age,omitempty" default:"7"`
+	ErrorDumpMaxAge        int      `toml:"error_dump_max_age,omitempty" default:"7"`
+	CalibrationIntervalSec int      `toml:"calibration_interval_sec,omitempty" default:"3600"` // Token 校准间隔（秒，默认 1 小时）
 }
 
 // Config holds all provider-level configuration via embedded ProviderConfig.
@@ -211,53 +210,47 @@ func (c *Config) Sanitized() *Config {
 	return &s
 }
 
+// reflectCopyStruct 遍历 src 的字段拷贝到 dst。slice 做深拷贝，其余值类型直接 Set。
+// dst/src 必须是指向同类型 struct 的指针。当前 ProviderConfig/RuntimeConfig 无指针/嵌套
+// struct 字段，故不递归（YAGNI）。
+func reflectCopyStruct(dst, src interface{}) {
+	dv := reflect.ValueOf(dst).Elem()
+	sv := reflect.ValueOf(src).Elem()
+	for i := 0; i < sv.NumField(); i++ {
+		sf := sv.Field(i)
+		if sf.Kind() == reflect.Slice {
+			if sf.IsNil() {
+				dv.Field(i).Set(reflect.MakeSlice(sf.Type(), 0, 0))
+				continue
+			}
+			newSlice := reflect.MakeSlice(sf.Type(), sf.Len(), sf.Cap())
+			reflect.Copy(newSlice, sf)
+			dv.Field(i).Set(newSlice)
+		} else {
+			dv.Field(i).Set(sf)
+		}
+	}
+}
+
 // DeepCopy returns a deep copy of the Config.
 func (c *Config) DeepCopy() *Config {
-	keys := make([]string, len(c.Keys))
-	copy(keys, c.Keys)
-	keyNames := make([]string, len(c.KeyNames))
-	copy(keyNames, c.KeyNames)
-	return &Config{
-		ProviderConfig: ProviderConfig{
-			Port:                   c.Port,
-			Host:                   c.Host,
-			TargetBase:             c.TargetBase,
-			AdminToken:             c.AdminToken,
-			DisableThinking:        c.DisableThinking,
-			ThinkingMode:           c.ThinkingMode,
-			RectifyThinkingMapTo:   c.RectifyThinkingMapTo,
-			GenaiModel:             c.GenaiModel,
-			MaxRetries:             c.MaxRetries,
-			LogLevel:               c.LogLevel,
-			CooldownSec:            c.CooldownSec,
-			HTTPTimeoutSec:         c.HTTPTimeoutSec,
-			Keys:                   keys,
-			KeyNames:               keyNames,
-			KeysFile:               c.KeysFile,
-			KeySelection:           c.KeySelection,
-			BackoffCapSec:          c.BackoffCapSec,
-			BackoffMultiplier:      c.BackoffMultiplier,
-			CBResetSec:             c.CBResetSec,
-			UpstreamCBThreshold:    c.UpstreamCBThreshold,
-			HealthCheckIntervalSec: c.HealthCheckIntervalSec,
-			HealthCheckPath:        c.HealthCheckPath,
-			HealthCheckTimeoutSec:  c.HealthCheckTimeoutSec,
-			LogFile:                c.LogFile,
-			LogMaxSize:             c.LogMaxSize,
-			LogMaxAge:              c.LogMaxAge,
-			ErrorDumpMaxAge:        c.ErrorDumpMaxAge,
-			CalibrationIntervalSec: c.CalibrationIntervalSec,
-		},
-		RuntimeConfig: RuntimeConfig{
-			HTTPTimeoutSec:      c.RuntimeConfig.HTTPTimeoutSec,
-			MaxRetries:          c.RuntimeConfig.MaxRetries,
-			CooldownSec:         c.RuntimeConfig.CooldownSec,
-			BackoffCapSec:       c.RuntimeConfig.BackoffCapSec,
-			BackoffMultiplier:   c.RuntimeConfig.BackoffMultiplier,
-			CBResetSec:          c.RuntimeConfig.CBResetSec,
-			UpstreamCBThreshold: c.RuntimeConfig.UpstreamCBThreshold,
-			LogLevel:            c.RuntimeConfig.LogLevel,
-		},
+	cp := &Config{}
+	reflectCopyStruct(&cp.ProviderConfig, &c.ProviderConfig)
+	reflectCopyStruct(&cp.RuntimeConfig, &c.RuntimeConfig)
+	return cp
+}
+
+// syncRuntimeConfig 把 ProviderConfig 中与 RuntimeConfig 同名的字段同步过去。
+// 两者字段名一一对应（HTTPTimeoutSec/MaxRetries/CooldownSec/BackoffCapSec/
+// BackoffMultiplier/CBResetSec/UpstreamCBThreshold/LogLevel）。
+func syncRuntimeConfig(rc *RuntimeConfig, pc *ProviderConfig) {
+	rcVal := reflect.ValueOf(rc).Elem()
+	pcVal := reflect.ValueOf(pc).Elem()
+	for i := 0; i < rcVal.NumField(); i++ {
+		fieldName := rcVal.Type().Field(i).Name
+		if f := pcVal.FieldByName(fieldName); f.IsValid() {
+			rcVal.Field(i).Set(f)
+		}
 	}
 }
 
@@ -290,14 +283,7 @@ func mergeWithDefaults(base, override *Config) *Config {
 		}
 	}
 	// Sync runtime config
-	result.RuntimeConfig.HTTPTimeoutSec = result.HTTPTimeoutSec
-	result.RuntimeConfig.MaxRetries = result.MaxRetries
-	result.RuntimeConfig.CooldownSec = result.CooldownSec
-	result.RuntimeConfig.BackoffCapSec = result.BackoffCapSec
-	result.RuntimeConfig.BackoffMultiplier = result.BackoffMultiplier
-	result.RuntimeConfig.CBResetSec = result.CBResetSec
-	result.RuntimeConfig.UpstreamCBThreshold = result.UpstreamCBThreshold
-	result.RuntimeConfig.LogLevel = result.LogLevel
+	syncRuntimeConfig(&result.RuntimeConfig, &result.ProviderConfig)
 	return result
 }
 
