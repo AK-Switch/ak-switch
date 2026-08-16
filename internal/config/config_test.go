@@ -473,7 +473,6 @@ func TestTomlProviderConfig_AllFields(t *testing.T) {
 target = "https://api.example.com"
 cooldown_sec = 45
 max_retries = 7
-disable_thinking = true
 genai_model = "opus-4.8"
 log_level = "debug"
 admin_token = "myadmintoken"
@@ -513,9 +512,7 @@ target = "https://myapi.example.com"
 	if cfg.MaxRetries != 7 {
 		t.Errorf("MaxRetries = %d, want %d", cfg.MaxRetries, 7)
 	}
-	if !cfg.DisableThinking {
-		t.Error("DisableThinking = false, want true")
-	}
+
 	if cfg.GenaiModel != "opus-4.8" {
 		t.Errorf("GenaiModel = %q, want %q", cfg.GenaiModel, "opus-4.8")
 	}
@@ -589,9 +586,7 @@ target = "https://myapi.example.com"
 	if cfg.MaxRetries != 1 {
 		t.Errorf("MaxRetries = %d, want default 1", cfg.MaxRetries)
 	}
-	if cfg.DisableThinking {
-		t.Error("DisableThinking = true, want default false")
-	}
+
 	if cfg.GenaiModel != "" {
 		t.Errorf("GenaiModel = %q, want empty", cfg.GenaiModel)
 	}
@@ -636,7 +631,6 @@ func TestTomlProviderConfig_Roundtrip(t *testing.T) {
 	orig.Port = 7070
 	orig.CooldownSec = 45
 	orig.MaxRetries = 7
-	orig.DisableThinking = true
 	orig.GenaiModel = "sonnet-4.6"
 	orig.LogLevel = "warn"
 	orig.AdminToken = "secrettoken"
@@ -677,9 +671,6 @@ func TestTomlProviderConfig_Roundtrip(t *testing.T) {
 	}
 	if loaded.MaxRetries != orig.MaxRetries {
 		t.Errorf("MaxRetries = %d, want %d", loaded.MaxRetries, orig.MaxRetries)
-	}
-	if loaded.DisableThinking != orig.DisableThinking {
-		t.Errorf("DisableThinking = %v, want %v", loaded.DisableThinking, orig.DisableThinking)
 	}
 	if loaded.GenaiModel != orig.GenaiModel {
 		t.Errorf("GenaiModel = %q, want %q", loaded.GenaiModel, orig.GenaiModel)

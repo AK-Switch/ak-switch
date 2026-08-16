@@ -391,7 +391,7 @@ func TestConfigSetCmd_HelpTextListsAllKeys(t *testing.T) {
 		"port", "log_file", "target", "cooldown_sec", "max_retries",
 		"backoff_cap_sec", "backoff_multiplier", "cb_reset_sec",
 		"upstream_cb_threshold", "http_timeout_sec", "health_check_interval_sec",
-		"log_level", "disable_thinking", "genai_model", "admin_token", "keys_file",
+		"log_level", "genai_model", "admin_token", "keys_file",
 	}
 	for _, key := range expectedKeys {
 		if !strings.Contains(helpText, key) {
@@ -515,7 +515,7 @@ func TestConfigGetCmd_HelpTextListsAllKeys(t *testing.T) {
 	expectedKeys := []string{
 		"http_timeout_sec", "max_retries", "cooldown_sec", "backoff_cap_sec",
 		"backoff_multiplier", "cb_reset_sec", "upstream_cb_threshold",
-		"health_check_interval_sec", "log_level", "disable_thinking",
+		"health_check_interval_sec", "log_level",
 		"genai_model", "admin_token", "keys_file",
 		"port", "log_file",
 	}

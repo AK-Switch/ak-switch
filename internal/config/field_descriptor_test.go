@@ -32,7 +32,7 @@ func TestFindField_AllRegistered(t *testing.T) {
 		"backoff_multiplier", "cb_reset_sec", "upstream_cb_threshold",
 		"http_timeout_sec", "log_level", "thinking_mode",
 		"rectify_thinking_map_to", "health_check_interval_sec",
-		"admin_token", "disable_thinking", "genai_model", "keys_file", "key_selection",
+		"admin_token", "genai_model", "keys_file", "key_selection",
 		"port", "log_file",
 	}
 	for _, key := range expected {
@@ -63,20 +63,6 @@ func TestFieldDescriptor_ParseInvalidInt(t *testing.T) {
 	}
 	if _, err := f.Parse("abc"); err == nil {
 		t.Error("expected error for non-numeric input")
-	}
-}
-
-func TestFieldDescriptor_ParseBool(t *testing.T) {
-	f := FindField("disable_thinking")
-	if f == nil {
-		t.Fatal("field not found")
-	}
-	v, err := f.Parse("true")
-	if err != nil {
-		t.Fatalf("parse failed: %v", err)
-	}
-	if !v.(bool) {
-		t.Error("expected true")
 	}
 }
 

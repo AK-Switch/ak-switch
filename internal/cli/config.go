@@ -262,7 +262,7 @@ var configGetCmd = &cobra.Command{
 	Valid keys: port, log_file, target, cooldown_sec, max_retries,
 	backoff_cap_sec, backoff_multiplier, cb_reset_sec, upstream_cb_threshold,
 	http_timeout_sec, health_check_interval_sec, log_level,
-	disable_thinking, genai_model, admin_token, keys_file, key_selection
+	genai_model, admin_token, keys_file, key_selection
 
 	Examples:
 	  akswitch config get http_timeout_sec
@@ -350,7 +350,7 @@ var configSetCmd = &cobra.Command{
 	Valid keys: port, log_file, target, cooldown_sec, max_retries,
 	backoff_cap_sec, backoff_multiplier, cb_reset_sec, upstream_cb_threshold,
 	http_timeout_sec, health_check_interval_sec, log_level,
-	disable_thinking, genai_model, admin_token, keys_file, key_selection
+	genai_model, admin_token, keys_file, key_selection
 
 	Examples:
 	  akswitch config set http_timeout_sec 60
@@ -587,8 +587,7 @@ func readFieldFromProviderConfig(p *config.ProviderConfig, fd *config.ConfigFiel
 		return p.HealthCheckIntervalSec, nil
 	case "admin_token":
 		return p.AdminToken, nil
-	case "disable_thinking":
-		return p.DisableThinking, nil
+
 	case "genai_model":
 		return p.GenaiModel, nil
 	case "keys_file":
