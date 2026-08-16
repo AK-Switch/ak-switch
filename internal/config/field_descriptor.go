@@ -608,9 +608,6 @@ type fieldTag struct {
 	min             int // 0 = 未设（与 ConfigFieldDescriptor.MinInt 的 Go 零值一致）
 }
 
-// hasValue 报告 s 是否非空。
-func hasValue(s string) bool { return s != "" }
-
 // parseFieldTag 解析 `field:"key,display:...,scope:...,default:...,runtime,readonly,min:N"` tag。
 func parseFieldTag(tag string) (fieldTag, bool) {
 	if tag == "" {
