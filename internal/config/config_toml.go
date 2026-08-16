@@ -10,12 +10,12 @@ import (
 
 // TomlConfig 对应整个 config.toml 文件结构。
 type TomlConfig struct {
-	Port            int                `toml:"port"`
+	Port            int                `toml:"port" field:"port,display:Port,scope:global,default:8080,readonly"`
 	Host            string             `toml:"host,omitempty"`
 	DefaultProvider string             `toml:"default_provider,omitempty"`
 	Default         *Config            `toml:"provider.default,omitempty"`
 	CredentialsDir  string             `toml:"credentials_dir,omitempty"` // Directory containing provider credential files (JSONL)
-	LogFile         string             `toml:"log_file,omitempty"`
+	LogFile         string             `toml:"log_file,omitempty" field:"log_file,display:Log File,scope:global,readonly"`
 	LogMaxSize      int                `toml:"log_max_size,omitempty"`
 	LogMaxAge       int                `toml:"log_max_age,omitempty"`
 	ErrorDumpMaxAge int                `toml:"error_dump_max_age,omitempty"`
