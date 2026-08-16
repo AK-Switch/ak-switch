@@ -107,29 +107,30 @@ func TestGolden_DescriptorSnapshot(t *testing.T) {
 
 	// 期望值直接从现有手写表逐字段抄录（2026-08-16 main e3a9a4f）。
 	want := []goldenDescriptor{
-		{Key: "target", DisplayName: "Target URL", Scope: FieldScopeProvider, TomlPath: "provider.%s.target", Type: FieldTypeString, Default: "", RuntimeEditable: false, ReadOnly: false, MinInt: -1},
+		{Key: "target", DisplayName: "Target URL", Scope: FieldScopeProvider, TomlPath: "provider.%s.target", Type: FieldTypeString, Default: "", RuntimeEditable: false, ReadOnly: false, MinInt: 0},
 		// 注：原手写表 TomlPath 为 "provider.%s.target_base"，但该值是死元数据——
 		// (1) 没有任何生产代码或测试读取 TomlPath；(2) 实际 toml tag 是 `toml:"target"`，
 		// 不是 target_base。反射化按 toml tag 派生得到 "target"，此值正确。golden 快照
 		// 采用正确值，这是对原手写表死元数据的修正，零行为变更。
+		// 注2：MinInt 未显式设置的字段，Go 零值为 0（不是 -1）。手写表与反射派生均为 0。
 		{Key: "cooldown_sec", DisplayName: "Cooldown (sec)", Scope: FieldScopeProvider, TomlPath: "provider.%s.cooldown_sec", Type: FieldTypeInt, Default: "15", RuntimeEditable: true, ReadOnly: false, MinInt: 1},
 		{Key: "max_retries", DisplayName: "Max Retries", Scope: FieldScopeProvider, TomlPath: "provider.%s.max_retries", Type: FieldTypeInt, Default: "1", RuntimeEditable: true, ReadOnly: false, MinInt: 0},
 		{Key: "backoff_cap_sec", DisplayName: "Backoff Cap (sec)", Scope: FieldScopeProvider, TomlPath: "provider.%s.backoff_cap_sec", Type: FieldTypeInt, Default: "120", RuntimeEditable: true, ReadOnly: false, MinInt: 1},
-		{Key: "backoff_multiplier", DisplayName: "Backoff Multiplier", Scope: FieldScopeProvider, TomlPath: "provider.%s.backoff_multiplier", Type: FieldTypeFloat64, Default: "2", RuntimeEditable: true, ReadOnly: false, MinInt: -1},
+		{Key: "backoff_multiplier", DisplayName: "Backoff Multiplier", Scope: FieldScopeProvider, TomlPath: "provider.%s.backoff_multiplier", Type: FieldTypeFloat64, Default: "2", RuntimeEditable: true, ReadOnly: false, MinInt: 0},
 		{Key: "cb_reset_sec", DisplayName: "Circuit Breaker Reset (sec)", Scope: FieldScopeProvider, TomlPath: "provider.%s.cb_reset_sec", Type: FieldTypeInt, Default: "30", RuntimeEditable: true, ReadOnly: false, MinInt: 1},
 		{Key: "upstream_cb_threshold", DisplayName: "Upstream CB Threshold", Scope: FieldScopeProvider, TomlPath: "provider.%s.upstream_cb_threshold", Type: FieldTypeInt, Default: "5", RuntimeEditable: true, ReadOnly: false, MinInt: 1},
 		{Key: "http_timeout_sec", DisplayName: "HTTP Timeout (sec)", Scope: FieldScopeProvider, TomlPath: "provider.%s.http_timeout_sec", Type: FieldTypeInt, Default: "30", RuntimeEditable: true, ReadOnly: false, MinInt: 1},
-		{Key: "log_level", DisplayName: "Log Level", Scope: FieldScopeProvider, TomlPath: "provider.%s.log_level", Type: FieldTypeString, Default: "info", RuntimeEditable: true, ReadOnly: false, MinInt: -1},
-		{Key: "health_check_interval_sec", DisplayName: "Health Check Interval (sec)", Scope: FieldScopeProvider, TomlPath: "provider.%s.health_check_interval_sec", Type: FieldTypeInt, Default: "30", RuntimeEditable: false, ReadOnly: false, MinInt: -1},
-		{Key: "admin_token", DisplayName: "Admin Token", Scope: FieldScopeProvider, TomlPath: "provider.%s.admin_token", Type: FieldTypeString, Default: "", RuntimeEditable: false, ReadOnly: true, MinInt: -1},
-		{Key: "disable_thinking", DisplayName: "Disable Thinking", Scope: FieldScopeProvider, TomlPath: "provider.%s.disable_thinking", Type: FieldTypeBool, Default: "false", RuntimeEditable: false, ReadOnly: false, MinInt: -1},
-		{Key: "thinking_mode", DisplayName: "Thinking Mode", Scope: FieldScopeProvider, TomlPath: "provider.%s.thinking_mode", Type: FieldTypeString, Default: "default", RuntimeEditable: true, ReadOnly: false, MinInt: -1},
-		{Key: "rectify_thinking_map_to", DisplayName: "Rectify Thinking Map To", Scope: FieldScopeProvider, TomlPath: "provider.%s.rectify_thinking_map_to", Type: FieldTypeString, Default: "", RuntimeEditable: true, ReadOnly: false, MinInt: -1},
-		{Key: "genai_model", DisplayName: "GenAI Model", Scope: FieldScopeProvider, TomlPath: "provider.%s.genai_model", Type: FieldTypeString, Default: "", RuntimeEditable: false, ReadOnly: false, MinInt: -1},
-		{Key: "keys_file", DisplayName: "Keys File", Scope: FieldScopeProvider, TomlPath: "provider.%s.keys_file", Type: FieldTypeString, Default: "keys.json", RuntimeEditable: false, ReadOnly: true, MinInt: -1},
-		{Key: "key_selection", DisplayName: "Key Selection Mode", Scope: FieldScopeProvider, TomlPath: "provider.%s.key_selection", Type: FieldTypeString, Default: "polling", RuntimeEditable: false, ReadOnly: false, MinInt: -1},
-		{Key: "port", DisplayName: "Port", Scope: FieldScopeGlobal, TomlPath: "port", Type: FieldTypeInt, Default: "8080", RuntimeEditable: false, ReadOnly: true, MinInt: -1},
-		{Key: "log_file", DisplayName: "Log File", Scope: FieldScopeGlobal, TomlPath: "log_file", Type: FieldTypeString, Default: "", RuntimeEditable: false, ReadOnly: true, MinInt: -1},
+		{Key: "log_level", DisplayName: "Log Level", Scope: FieldScopeProvider, TomlPath: "provider.%s.log_level", Type: FieldTypeString, Default: "info", RuntimeEditable: true, ReadOnly: false, MinInt: 0},
+		{Key: "health_check_interval_sec", DisplayName: "Health Check Interval (sec)", Scope: FieldScopeProvider, TomlPath: "provider.%s.health_check_interval_sec", Type: FieldTypeInt, Default: "30", RuntimeEditable: false, ReadOnly: false, MinInt: 0},
+		{Key: "admin_token", DisplayName: "Admin Token", Scope: FieldScopeProvider, TomlPath: "provider.%s.admin_token", Type: FieldTypeString, Default: "", RuntimeEditable: false, ReadOnly: true, MinInt: 0},
+		{Key: "disable_thinking", DisplayName: "Disable Thinking", Scope: FieldScopeProvider, TomlPath: "provider.%s.disable_thinking", Type: FieldTypeBool, Default: "false", RuntimeEditable: false, ReadOnly: false, MinInt: 0},
+		{Key: "thinking_mode", DisplayName: "Thinking Mode", Scope: FieldScopeProvider, TomlPath: "provider.%s.thinking_mode", Type: FieldTypeString, Default: "default", RuntimeEditable: true, ReadOnly: false, MinInt: 0},
+		{Key: "rectify_thinking_map_to", DisplayName: "Rectify Thinking Map To", Scope: FieldScopeProvider, TomlPath: "provider.%s.rectify_thinking_map_to", Type: FieldTypeString, Default: "", RuntimeEditable: true, ReadOnly: false, MinInt: 0},
+		{Key: "genai_model", DisplayName: "GenAI Model", Scope: FieldScopeProvider, TomlPath: "provider.%s.genai_model", Type: FieldTypeString, Default: "", RuntimeEditable: false, ReadOnly: false, MinInt: 0},
+		{Key: "keys_file", DisplayName: "Keys File", Scope: FieldScopeProvider, TomlPath: "provider.%s.keys_file", Type: FieldTypeString, Default: "keys.json", RuntimeEditable: false, ReadOnly: true, MinInt: 0},
+		{Key: "key_selection", DisplayName: "Key Selection Mode", Scope: FieldScopeProvider, TomlPath: "provider.%s.key_selection", Type: FieldTypeString, Default: "polling", RuntimeEditable: false, ReadOnly: false, MinInt: 0},
+		{Key: "port", DisplayName: "Port", Scope: FieldScopeGlobal, TomlPath: "port", Type: FieldTypeInt, Default: "8080", RuntimeEditable: false, ReadOnly: true, MinInt: 0},
+		{Key: "log_file", DisplayName: "Log File", Scope: FieldScopeGlobal, TomlPath: "log_file", Type: FieldTypeString, Default: "", RuntimeEditable: false, ReadOnly: true, MinInt: 0},
 	}
 
 	if len(got) != len(want) {
@@ -402,7 +403,7 @@ type fieldTag struct {
 	defaultOverride string // 空表示未设
 	runtime         bool
 	readOnly        bool
-	min             int // -1 = 未设
+	min             int // 0 = 未设（与 ConfigFieldDescriptor.MinInt 的 Go 零值一致）
 }
 
 // hasValue 报告 s 是否非空。
@@ -413,7 +414,7 @@ func parseFieldTag(tag string) (fieldTag, bool) {
 	if tag == "" {
 		return fieldTag{}, false
 	}
-	ft := fieldTag{min: -1}
+	ft := fieldTag{min: 0} // 0 = 未设（与 ConfigFieldDescriptor.MinInt 的 Go 零值一致）
 	parts := strings.Split(tag, ",")
 	if parts[0] == "" {
 		return fieldTag{}, false
