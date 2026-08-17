@@ -281,7 +281,7 @@ func TestAllKeysCooling_Returns429(t *testing.T) {
 	}
 
 	// Verify the error body contains the expected error code
-	if !strings.Contains(w.Body.String(), "all_keys_cooling") {
+	if !strings.Contains(w.Body.String(), "ALL_KEYS_COOLING") {
 		t.Errorf("response body missing error code: %s", w.Body.String())
 	}
 }
