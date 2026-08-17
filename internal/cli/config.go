@@ -450,7 +450,7 @@ var configSetCmd = &cobra.Command{
 					// TOML was already persisted; a missing server should not
 					// fail the command wholesale.
 					if strings.Contains(err.Error(), "not reachable") {
-						fmt.Fprintf(cmd.ErrOrStderr(), "warning: TOML updated but server not reachable — runtime change will apply on next start\n")
+						_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: TOML updated but server not reachable — runtime change will apply on next start\n")
 						continue
 					}
 					return err
@@ -476,7 +476,7 @@ func applyRuntimeField(provider string, fd *config.ConfigFieldDescriptor, value 
 	}
 
 	// Build POST to /api/runtime-config
-	payloadMap := map[string]interface{}{"key": fd.Key}
+	payloadMap := map[string]any{"key": fd.Key}
 	switch v := value.(type) {
 	case int:
 		payloadMap["value"] = float64(v)

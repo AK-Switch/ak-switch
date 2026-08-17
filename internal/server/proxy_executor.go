@@ -310,8 +310,7 @@ func (px *ProxyExecutor) handleSuccess(w http.ResponseWriter, ps *ProviderState,
 
 		// Token estimation from buffered body
 		var inputTokens, outputTokens int
-		var model string
-		model = tokenestimator.ExtractModel(bodyBytes)
+		model := tokenestimator.ExtractModel(bodyBytes)
 		inputTokens, outputTokens, _ = tokenestimator.ProcessResponse(body)
 		outputEstimate := tokenestimator.EstimateOutput(string(body), model)
 		tokenestimator.RecordCalibration(px.calibrator, model,

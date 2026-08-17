@@ -328,7 +328,7 @@ func PeriodicKeyProbe(pool *keypool.KeyPool, target string, interval time.Durati
 					_ = pool.Enable(i)
 					slog.Info("key re-enabled by periodic probe", "key_name", keyName)
 				}
-				resp.Body.Close()
+				_ = resp.Body.Close()
 			}
 		}
 	}
