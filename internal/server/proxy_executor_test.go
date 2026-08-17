@@ -390,7 +390,151 @@ func TestReadRequestBody_EmptyBody(t *testing.T) {
 	}
 }
 
-// ── SSE stream parsing ──────────────────────────────
+// ── SSE stream truncation detection ──────────────────
+
+func TestStreamSSE_Truncated_InjectsErrorEvent(t *testing.T) {
+	// Construct a truncated SSE stream (no message_stop or [DONE])
+	body := "data: {\"type\":\"content_block_delta\",\"delta\":{\"text\":\"hello\"}}\n\ndata: {\"type\":\"content_block_delta\",\"delta\":{\"text\":\" world\"}}\n\n"
+	resp := newHTTPResponse(http.StatusOK, body)
+	w := httptest.NewRecorder()
+
+	streamSSEAndEstimateTokens(w, resp, []byte(`{"model":"claude-3"}`), "claude-3")
+
+	output := w.Body.String()
+	if !strings.Contains(output, "event: error") {
+		t.Errorf("truncated stream should inject error event, got: %s", output)
+	}
+	if !strings.Contains(output, "event: message_stop") {
+		t.Errorf("truncated stream should inject message_stop event, got: %s", output)
+	}
+	if !strings.Contains(output, "overloaded_error") {
+		t.Errorf("truncated stream should inject overloaded_error, got: %s", output)
+	}
+}
+
+func TestStreamSSE_NormalCompletion_NoErrorEvent(t *testing.T) {
+	// Construct a normal SSE stream ending with message_stop
+	body := "data: {\"type\":\"content_block_delta\",\"delta\":{\"text\":\"hello\"}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+	resp := newHTTPResponse(http.StatusOK, body)
+	w := httptest.NewRecorder()
+
+	streamSSEAndEstimateTokens(w, resp, []byte(`{"model":"claude-3"}`), "claude-3")
+
+	output := w.Body.String()
+	if strings.Contains(output, "event: error") {
+		t.Errorf("normal stream should not inject error event, got: %s", output)
+	}
+	if !strings.Contains(output, "message_stop") {
+		t.Errorf("normal stream should contain message_stop, got: %s", output)
+	}
+}
+
+func TestInjectTruncationError_WritesExpectedEvents(t *testing.T) {
+	w := httptest.NewRecorder()
+	injectTruncationError(w, nil, false)
+
+	output := w.Body.String()
+	if !strings.Contains(output, "event: error") {
+		t.Errorf("expected event: error, got: %s", output)
+	}
+	if !strings.Contains(output, "event: message_stop") {
+		t.Errorf("expected event: message_stop, got: %s", output)
+	}
+	if !strings.Contains(output, "overloaded_error") {
+		t.Errorf("expected overloaded_error, got: %s", output)
+	}
+}
+
+// ── BufferMode ────────────────────────────────────────
+
+func TestIsCompleteStream_WithTerminalEvent(t *testing.T) {
+	body := []byte("data: hello\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n")
+	if !isCompleteStream(body) {
+		t.Error("isCompleteStream should return true for body containing message_stop")
+	}
+
+	body = []byte("data: hello\n\ndata: [DONE]\n\n")
+	if !isCompleteStream(body) {
+		t.Error("isCompleteStream should return true for body containing [DONE]")
+	}
+}
+
+func TestIsCompleteStream_WithoutTerminalEvent(t *testing.T) {
+	body := []byte("data: hello\n\ndata: world\n\n")
+	if isCompleteStream(body) {
+		t.Error("isCompleteStream should return false for body without terminal event")
+	}
+
+	body = []byte("")
+	if isCompleteStream(body) {
+		t.Error("isCompleteStream should return false for empty body")
+	}
+}
+
+func TestHandleSuccess_BufferMode_ReturnsFalseOnIncomplete(t *testing.T) {
+	ps := newTestProviderState(t, "test", []string{"key-a", "key-b"})
+	ps.config.BufferMode = true
+	px, _, _ := newProxyExecutor(t)
+
+	// Incomplete SSE stream (no message_stop, no [DONE])
+	body := "data: {\"type\":\"content_block_delta\",\"delta\":{\"text\":\"partial\"}}\n\n"
+	resp := newHTTPResponse(http.StatusOK, body)
+	resp.Header.Set("Content-Type", "text/event-stream")
+	w := httptest.NewRecorder()
+
+	result := px.handleSuccess(w, ps, 0, resp, testStartTime(), 0, "POST", "http://upstream/v1/messages", []byte(`{"model":"claude-3"}`), 0, false)
+
+	if result {
+		t.Error("handleSuccess should return false for incomplete stream in buffer mode")
+	}
+	// Client should not receive any content
+	if w.Body.Len() > 0 {
+		t.Errorf("client should receive no content on incomplete stream, got: %s", w.Body.String())
+	}
+}
+
+func TestHandleSuccess_BufferMode_ReturnsTrueOnComplete(t *testing.T) {
+	ps := newTestProviderState(t, "test", []string{"key-a", "key-b"})
+	ps.config.BufferMode = true
+	px, _, _ := newProxyExecutor(t)
+
+	// Complete SSE stream (contains message_stop)
+	body := "data: {\"type\":\"content_block_delta\",\"delta\":{\"text\":\"hello\"}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+	resp := newHTTPResponse(http.StatusOK, string(body))
+	resp.Header.Set("Content-Type", "text/event-stream")
+	w := httptest.NewRecorder()
+
+	result := px.handleSuccess(w, ps, 0, resp, testStartTime(), 0, "POST", "http://upstream/v1/messages", []byte(`{"model":"claude-3"}`), 0, false)
+
+	if !result {
+		t.Error("handleSuccess should return true for complete stream in buffer mode")
+	}
+	if w.Code != http.StatusOK {
+		t.Errorf("response status = %d, want 200", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "message_stop") {
+		t.Errorf("client should receive the complete stream, got: %s", w.Body.String())
+	}
+}
+
+func TestHandleSuccess_NonBufferMode_ReturnsTrue(t *testing.T) {
+	ps := newTestProviderState(t, "test", []string{"key-a"})
+	ps.config.BufferMode = false
+	px, _, _ := newProxyExecutor(t)
+
+	body := []byte(`{"result":"ok"}`)
+	resp := newHTTPResponse(http.StatusOK, string(body))
+	w := httptest.NewRecorder()
+
+	result := px.handleSuccess(w, ps, 0, resp, testStartTime(), 0, "POST", "http://upstream/v1/chat", body, 0, false)
+
+	if !result {
+		t.Error("handleSuccess should return true in non-buffer mode always")
+	}
+	if w.Code != http.StatusOK {
+		t.Errorf("response status = %d, want 200", w.Code)
+	}
+}
 
 func TestStreamSSEAndEstimateTokens_EmptyStream(t *testing.T) {
 	body := []byte("data: [DONE]\n\n")

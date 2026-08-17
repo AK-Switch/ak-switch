@@ -73,6 +73,7 @@ func TestGolden_DescriptorSnapshot(t *testing.T) {
 		{Key: "genai_model", DisplayName: "GenAI Model", Scope: FieldScopeProvider, TomlPath: "provider.%s.genai_model", Type: FieldTypeString, Default: "", RuntimeEditable: false, ReadOnly: false, MinInt: 0},
 		{Key: "keys_file", DisplayName: "Keys File", Scope: FieldScopeProvider, TomlPath: "provider.%s.keys_file", Type: FieldTypeString, Default: "keys.json", RuntimeEditable: false, ReadOnly: true, MinInt: 0},
 		{Key: "key_selection", DisplayName: "Key Selection Mode", Scope: FieldScopeProvider, TomlPath: "provider.%s.key_selection", Type: FieldTypeString, Default: "polling", RuntimeEditable: false, ReadOnly: false, MinInt: 0},
+		{Key: "buffer_mode", DisplayName: "Buffer Mode", Scope: FieldScopeProvider, TomlPath: "provider.%s.buffer_mode", Type: FieldTypeBool, Default: "false", RuntimeEditable: false, ReadOnly: false, MinInt: 0},
 		{Key: "port", DisplayName: "Port", Scope: FieldScopeGlobal, TomlPath: "port", Type: FieldTypeInt, Default: "4000", RuntimeEditable: false, ReadOnly: true, MinInt: 0},
 		{Key: "log_file", DisplayName: "Log File", Scope: FieldScopeGlobal, TomlPath: "log_file", Type: FieldTypeString, Default: "", RuntimeEditable: false, ReadOnly: true, MinInt: 0},
 	}

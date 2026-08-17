@@ -33,6 +33,7 @@ type ProviderConfig struct {
 	GenaiModel           string `toml:"genai_model,omitempty" field:"genai_model,display:GenAI Model,scope:provider"`                                             // Generative AI model name
 	KeysFile             string `toml:"keys_file,omitempty" default:"keys.json" field:"keys_file,display:Keys File,scope:provider,default:keys.json,readonly"`
 	KeySelection         string `toml:"key_selection,omitempty" default:"polling" field:"key_selection,display:Key Selection Mode,scope:provider,default:polling"`
+	BufferMode           bool   `toml:"buffer_mode,omitempty" field:"buffer_mode,display:Buffer Mode,scope:provider,default:false"`
 	// ── 不进 descriptor 表的字段（无 field tag，反射跳过）──────────────────
 	Port                   int      `toml:"port" default:"4000"`
 	Host                   string   `toml:"host,omitempty" default:"127.0.0.1"`

@@ -152,8 +152,10 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 			continue
 
 		default:
-			px.handleSuccess(w, ps, idx, resp, start, ttfb, r.Method, target, bodyBytes, round, rectified)
-			return
+			if px.handleSuccess(w, ps, idx, resp, start, ttfb, r.Method, target, bodyBytes, round, rectified) {
+				return
+			}
+			continue
 		}
 	}
 
@@ -277,11 +279,53 @@ func (px *ProxyExecutor) handleNonRetryable(w http.ResponseWriter, ps *ProviderS
 // handleSuccess processes a successful 2xx/3xx response, including streaming
 // for SSE and chunked responses. For non-streaming responses, it extracts
 // token usage from the response body and records it in the log entry.
-func (px *ProxyExecutor) handleSuccess(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, ttfb time.Duration, method, target string, bodyBytes []byte, attempt int, rectified bool) {
+// Returns true if the response was committed to the client, false if the caller
+// should retry (buffer mode with incomplete stream).
+func (px *ProxyExecutor) handleSuccess(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, ttfb time.Duration, method, target string, bodyBytes []byte, attempt int, rectified bool) bool {
 	pool := ps.pool
 	keyName, _ := pool.Name(idx)
 	pool.RecordSuccess(idx)
 	ps.RecordUpstreamSuccess()
+
+	contentType := resp.Header.Get("Content-Type")
+	isSSE := strings.Contains(contentType, "text/event-stream")
+
+	// Buffer mode: read the full response first, verify completeness before forwarding
+	if ps.BufferMode() && isSSE {
+		body, err := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if err != nil || !isCompleteStream(body) {
+			slog.Warn("buffer mode: incomplete response, will retry",
+				"provider", ps.Name(),
+				"key_index", idx,
+				"key_name", keyName,
+				"resp_body_size", len(body),
+				"error", err,
+			)
+			return false
+		}
+		// Complete response: write to client
+		copyHeaders(w.Header(), resp.Header)
+		w.WriteHeader(resp.StatusCode)
+		_, _ = w.Write(body)
+
+		// Token estimation from buffered body
+		var inputTokens, outputTokens int
+		var model string
+		model = tokenestimator.ExtractModel(bodyBytes)
+		inputTokens, outputTokens, _ = tokenestimator.ProcessResponse(body)
+		outputEstimate := tokenestimator.EstimateOutput(string(body), model)
+		tokenestimator.RecordCalibration(px.calibrator, model,
+			tokenestimator.EstimateInput(bodyBytes, model), inputTokens,
+			outputEstimate, outputTokens)
+		if outputTokens == 0 && outputEstimate > 0 {
+			outputTokens = outputEstimate
+		}
+
+		pool.IncrementRequestCount(idx)
+		px.recordMetricsAndLog(ps, idx, keyName, start, ttfb, method, target, bodyBytes, inputTokens, outputTokens, int64(len(body)), attempt, rectified, resp)
+		return true
+	}
 
 	copyHeaders(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
@@ -295,8 +339,7 @@ func (px *ProxyExecutor) handleSuccess(w http.ResponseWriter, ps *ProviderState,
 
 	var respBodySize int64
 
-	contentType := resp.Header.Get("Content-Type")
-	if strings.Contains(contentType, "text/event-stream") {
+	if isSSE {
 		inputTokens, outputTokens, respBodySize = streamSSEAndEstimateTokens(w, resp, bodyBytes, model)
 	} else {
 		// Non-streaming: read body to extract token usage, then write to client
@@ -317,13 +360,19 @@ func (px *ProxyExecutor) handleSuccess(w http.ResponseWriter, ps *ProviderState,
 	}
 
 	// Apply calibration to streaming estimates
-	if model != "" && strings.Contains(contentType, "text/event-stream") {
+	if model != "" && isSSE {
 		if outputTokens > 0 {
 			outputTokens = px.calibrator.Apply(model, outputTokens)
 		}
 	}
 
 	pool.IncrementRequestCount(idx)
+	px.recordMetricsAndLog(ps, idx, keyName, start, ttfb, method, target, bodyBytes, inputTokens, outputTokens, respBodySize, attempt, rectified, resp)
+	return true
+}
+
+// recordMetricsAndLog records metrics and detailed logging for a successful proxy response.
+func (px *ProxyExecutor) recordMetricsAndLog(ps *ProviderState, idx int, keyName string, start time.Time, ttfb time.Duration, method, target string, bodyBytes []byte, inputTokens, outputTokens int, respBodySize int64, attempt int, rectified bool, resp *http.Response) {
 	if inputTokens > 0 {
 		px.metrics.TokenUsage.WithLabelValues(ps.Name(), "input").Add(float64(inputTokens))
 	}
@@ -385,6 +434,7 @@ func streamSSEAndEstimateTokens(w http.ResponseWriter, resp *http.Response, body
 	var outputBuf strings.Builder
 	var respBodySize int64
 	var apiOutputTokens int
+	var receivedTerminalEvent bool // 是否收到 message_stop/[DONE] 终止标记
 
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
@@ -393,6 +443,11 @@ func streamSSEAndEstimateTokens(w http.ResponseWriter, resp *http.Response, body
 
 	for scanner.Scan() {
 		line := scanner.Text()
+
+		// 检测终端标记（Anthropic: message_stop, OpenAI: [DONE]）
+		if strings.Contains(line, "message_stop") || strings.Contains(line, "[DONE]") {
+			receivedTerminalEvent = true
+		}
 
 		// Debug: log raw SSE lines for token estimation diagnosis
 		if strings.HasPrefix(line, "data:") {
@@ -426,6 +481,16 @@ func streamSSEAndEstimateTokens(w http.ResponseWriter, resp *http.Response, body
 		}
 	}
 
+	// 截断检测：流正常结束（EOF）但未收到终止标记，且已转发过内容 → 注入 error 事件
+	if !receivedTerminalEvent && respBodySize > 0 {
+		injectTruncationError(w, f, canFlush)
+		slog.Warn("stream truncated",
+			"model", model,
+			"resp_body_size", respBodySize,
+			"received_terminal", false,
+		)
+	}
+
 	// Use API's output_tokens from message_delta when available (most accurate)
 	if apiOutputTokens > 0 {
 		inputTokens := tokenestimator.EstimateInput(bodyBytes, model)
@@ -436,4 +501,28 @@ func streamSSEAndEstimateTokens(w http.ResponseWriter, resp *http.Response, body
 	outputTokens := tokenestimator.EstimateOutput(outputBuf.String(), model)
 	inputTokens := tokenestimator.EstimateInput(bodyBytes, model)
 	return inputTokens, outputTokens, respBodySize
+}
+
+// injectTruncationError 在截断的 SSE 流末尾注入错误事件 + 终止标记。
+// Anthropic Messages 格式：event: error + event: message_stop。
+// 业界标准（OpenRouter）：mid-stream 错误以 SSE 事件注入，客户端至少显示
+// "Server error mid-response" 而非静默挂起。
+func injectTruncationError(w http.ResponseWriter, f http.Flusher, canFlush bool) {
+	errorEvent := "event: error\ndata: {\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\",\"message\":\"upstream stream truncated, please retry\"}}\n\n"
+	stopEvent := "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+	_, _ = w.Write([]byte(errorEvent))
+	_, _ = w.Write([]byte(stopEvent))
+	if canFlush && f != nil {
+		f.Flush()
+	}
+}
+
+// isCompleteStream 判断整段响应体是否包含终止标记（message_stop/[DONE]）。
+// 与 streamSSEAndEstimateTokens 内部的截断检测逻辑独立，供 buffer_mode 使用。
+func isCompleteStream(body []byte) bool {
+	if len(body) == 0 {
+		return false
+	}
+	content := string(body)
+	return strings.Contains(content, "message_stop") || strings.Contains(content, "[DONE]")
 }
