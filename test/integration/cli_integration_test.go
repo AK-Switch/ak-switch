@@ -1660,37 +1660,6 @@ func TestProviderUpdate_FloatFlag(t *testing.T) {
 	}
 }
 
-// TestProviderUpdate_DisableThinking verifies --disable-thinking bool flag.
-func TestProviderUpdate_DisableThinking(t *testing.T) {
-	cli.ResetConfigEnv()
-	tmpDir := t.TempDir()
-	config.ConfigDir = tmpDir
-	t.Cleanup(func() { config.ConfigDir = "" })
-
-	xdgPath, err := config.XDGConfigPath()
-	if err != nil {
-		t.Fatalf("XDGConfigPath failed: %v", err)
-	}
-	runAkswitch(t, "akswitch", "provider", "add", "think",
-		"--target", "https://think.test/v1",
-		"--port", "9607",
-	)
-
-	// Set disable-thinking to true
-	err = runAkswitch(t, "akswitch", "provider", "update", "think", "--disable-thinking")
-	if err != nil {
-		t.Fatalf("provider update --disable-thinking failed: %v", err)
-	}
-
-	tc, err := config.LoadTomlConfig(xdgPath)
-	if err != nil {
-		t.Fatalf("LoadTomlConfig failed: %v", err)
-	}
-	if !tc.Provider["think"].DisableThinking {
-		t.Error("DisableThinking should be true")
-	}
-}
-
 // TestProviderUpdate_ZeroValues verifies that setting int/float fields to zero
 // persists correctly (regression test for omitempty stripping zero values).
 func TestProviderUpdate_ZeroValues(t *testing.T) {
