@@ -284,9 +284,6 @@ func (px *ProxyExecutor) handleNonRetryable(w http.ResponseWriter, ps *ProviderS
 func (px *ProxyExecutor) handleSuccess(w http.ResponseWriter, ps *ProviderState, idx int, resp *http.Response, start time.Time, ttfb time.Duration, method, target string, bodyBytes []byte, attempt int, rectified bool) bool {
 	pool := ps.pool
 	keyName, _ := pool.Name(idx)
-	pool.RecordSuccess(idx)
-	ps.RecordUpstreamSuccess()
-
 	contentType := resp.Header.Get("Content-Type")
 	isSSE := strings.Contains(contentType, "text/event-stream")
 
@@ -304,7 +301,9 @@ func (px *ProxyExecutor) handleSuccess(w http.ResponseWriter, ps *ProviderState,
 			)
 			return false
 		}
-		// Complete response: write to client
+		// Complete response: record success, then write to client
+		pool.RecordSuccess(idx)
+		ps.RecordUpstreamSuccess()
 		copyHeaders(w.Header(), resp.Header)
 		w.WriteHeader(resp.StatusCode)
 		_, _ = w.Write(body)
@@ -326,6 +325,9 @@ func (px *ProxyExecutor) handleSuccess(w http.ResponseWriter, ps *ProviderState,
 		px.recordMetricsAndLog(ps, idx, keyName, start, ttfb, method, target, bodyBytes, inputTokens, outputTokens, int64(len(body)), attempt, rectified, resp)
 		return true
 	}
+
+	pool.RecordSuccess(idx)
+	ps.RecordUpstreamSuccess()
 
 	copyHeaders(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
