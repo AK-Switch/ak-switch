@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"akswitch/internal/circuitbreaker"
 	"akswitch/internal/config"
 	"akswitch/internal/keypool"
 	akswitchmetrics "akswitch/internal/metrics"
@@ -158,6 +159,16 @@ func (m *BackgroundTaskManager) StartCalibrator(calibrator *tracker.Calibrator, 
 	}()
 }
 
+// StartKeyProbe periodically probes permanently disabled keys and re-enables
+// them if their quota has recovered (upstream returns 200).
+func (m *BackgroundTaskManager) StartKeyProbe(pool *keypool.KeyPool, targetBase string) {
+	m.wg.Add(1)
+	go func() {
+		defer m.wg.Done()
+		PeriodicKeyProbe(pool, targetBase, 5*time.Minute, m.stop)
+	}()
+}
+
 // StartUptimeTicker periodically updates the uptime metric gauge.
 func (m *BackgroundTaskManager) StartUptimeTicker(startTime time.Time) {
 	m.wg.Add(1)
@@ -278,6 +289,48 @@ func StartupKeyProbe(pool *keypool.KeyPool, target string) {
 		slog.Info("startup key probe complete", "active", pool.ActiveCount(), "disabled", pool.DisabledCount())
 	default:
 		slog.Info("startup key probe complete", "active", pool.ActiveCount())
+	}
+}
+
+// PeriodicKeyProbe periodically probes permanently disabled keys by sending
+// GET /models to the upstream. If the upstream returns 200 OK, the key is
+// re-enabled (quota has recovered). 429, 401, and 403 responses keep the key
+// disabled. Network errors are logged at debug level and do not affect the
+// key's state.
+func PeriodicKeyProbe(pool *keypool.KeyPool, target string, interval time.Duration, stop <-chan struct{}) {
+	client := &http.Client{Timeout: 3 * time.Second}
+	probeURL := strings.TrimRight(target, "/") + "/models"
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-stop:
+			return
+		case <-ticker.C:
+			for i := 0; i < pool.Len(); i++ {
+				if pool.CB(i).State() != circuitbreaker.Permanent {
+					continue
+				}
+				keyName, _ := pool.Name(i)
+				key := pool.Keys()[i]
+				req, err := http.NewRequest("GET", probeURL, nil)
+				if err != nil {
+					continue
+				}
+				req.Header.Set("Authorization", "Bearer "+key)
+				resp, err := client.Do(req)
+				if err != nil {
+					slog.Debug("periodic key probe network error", "key_name", keyName, "error", err)
+					continue
+				}
+				if resp.StatusCode == http.StatusOK {
+					_ = pool.Enable(i)
+					slog.Info("key re-enabled by periodic probe", "key_name", keyName)
+				}
+				resp.Body.Close()
+			}
+		}
 	}
 }
 

@@ -7,9 +7,12 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"akswitch/internal/circuitbreaker"
 	"akswitch/internal/keypool"
 	"akswitch/internal/metrics"
 	"akswitch/internal/tracker"
@@ -372,4 +375,52 @@ func TestServerLifecycle_Start_DoubleStart(t *testing.T) {
 		t.Fatalf("second StartWithListener: %v", err)
 	}
 	sl.Shutdown(context.Background())
+}
+
+// ── PeriodicKeyProbe ────────────────────────────────────
+
+// TestPeriodicKeyProbe_ReenablesRecoveredKey verifies that a permanently disabled
+// key is re-enabled when the upstream returns 200.
+func TestPeriodicKeyProbe_ReenablesRecoveredKey(t *testing.T) {
+	// Mock upstream that returns 200 on GET /models
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Errorf("expected GET, got %s", r.Method)
+		}
+		if !strings.HasSuffix(r.URL.Path, "/models") {
+			t.Errorf("expected /models path, got %s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	// Create a pool with one key and permanently disable it
+	pool := keypool.NewKeyPool([]string{"sk-test-key"}, []string{"test-key"})
+	pool.ConfigureCBs(30*time.Second, 120*time.Second, 2.0)
+	if err := pool.Disable(0); err != nil {
+		t.Fatal(err)
+	}
+	if !pool.IsDisabled(0) {
+		t.Fatal("key should be disabled after Disable")
+	}
+
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		PeriodicKeyProbe(pool, upstream.URL, 50*time.Millisecond, stop)
+	}()
+
+	// Let the probe fire at least once
+	time.Sleep(150 * time.Millisecond)
+	close(stop)
+	wg.Wait()
+
+	if pool.IsDisabled(0) {
+		t.Error("key should have been re-enabled by periodic probe")
+	}
+	if pool.CB(0).State() != circuitbreaker.Closed {
+		t.Errorf("CB state = %d, want %d (Closed)", pool.CB(0).State(), circuitbreaker.Closed)
+	}
 }

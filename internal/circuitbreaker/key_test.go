@@ -63,30 +63,32 @@ func TestKeyCircuitBreaker_ExponentialBackoff(t *testing.T) {
 	}
 }
 
-func TestKeyCircuitBreaker_ReachesCap(t *testing.T) {
+func TestRecordFailure_ReachesCap_Permanent(t *testing.T) {
 	cb := newTestBreaker()
 
 	// attempt=0 → raw=30s < 120s → OPEN
 	cb.RecordFailure()
 	// attempt=1 → raw=60s < 120s → OPEN
 	cb.RecordFailure()
-	// attempt=2 → raw=120s >= 120s → OPEN with long cooldown (not PERMANENT)
+	// attempt=2 → raw=120s >= 120s → PERMANENT (quota exhausted)
 	cb.RecordFailure()
 
-	if cb.State() != Open {
-		t.Errorf("State() = %d, want %d (Open)", cb.State(), Open)
+	if cb.State() != Permanent {
+		t.Errorf("State() = %d, want %d (Permanent)", cb.State(), Permanent)
 	}
 	if cb.Allow() {
-		t.Error("Allow() = true, want false (key should still be cooling)")
+		t.Error("Allow() = true, want false (Permanent key should not be allowed)")
 	}
-	// Cooldown should be approximately backoffCap (120s)
-	remaining := cb.CooldownRemaining()
-	if remaining <= 0 || remaining > 121*time.Second {
-		t.Errorf("CooldownRemaining() = %v, want ~120s (backoffCap)", remaining)
+	// CooldownRemaining should be -1 for Permanent
+	if got := cb.CooldownRemaining(); got != -1 {
+		t.Errorf("CooldownRemaining() = %v, want -1 (Permanent)", got)
 	}
-	// Attempt should be reset to 0
-	if cb.Attempt() != 0 {
-		t.Errorf("Attempt() = %d, want 0 (reset after cap)", cb.Attempt())
+	// Attempt should NOT be reset (stays at 2, the value before cap)
+	if cb.Attempt() != 2 {
+		t.Errorf("Attempt() = %d, want 2 (not reset)", cb.Attempt())
+	}
+	if cb.TrippedReason() != "quota_exhausted" {
+		t.Errorf("TrippedReason() = %q, want %q", cb.TrippedReason(), "quota_exhausted")
 	}
 }
 

@@ -259,6 +259,8 @@ func (pr *ProviderRouter) StartBackgroundTasks() {
 			interval := time.Duration(p.config.CalibrationIntervalSec) * time.Second
 			pr.taskManager.StartCalibrator(pr.calibrator, p.pool, p.config.TargetBase, p.config.GenaiModel, interval)
 		}
+		// Start periodic key probe for each provider (5-minute interval)
+		pr.taskManager.StartKeyProbe(p.pool, p.config.TargetBase)
 	})
 	pr.taskManager.StartUptimeTicker(time.Now())
 }

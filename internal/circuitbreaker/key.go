@@ -41,9 +41,8 @@ func NewKeyCircuitBreaker(base, backoffCap time.Duration, multiplier float64, pe
 }
 
 // RecordFailure records a 429 response and applies exponential backoff.
-// Once the computed backoff reaches the cap, the key enters a long cooldown
-// (equal to the cap duration) rather than permanent disable.
-// Returns the cooldown duration that was applied.
+// Once the computed backoff reaches the cap, the key is permanently disabled
+// (StatePermanent) and will only be re-enabled by the periodic probe.
 func (k *KeyCircuitBreaker) RecordFailure() time.Duration {
 	k.mu.Lock()
 	defer k.mu.Unlock()
@@ -55,12 +54,13 @@ func (k *KeyCircuitBreaker) RecordFailure() time.Duration {
 	// Calculate raw cooldown before capping
 	raw := k.base * time.Duration(math.Pow(k.multiplier, float64(k.attempt)))
 
-	// If raw cooldown reaches or exceeds backoffCap, use a long cooldown
-	// at the cap duration instead of permanent disable.
+	// If raw cooldown reaches or exceeds backoffCap, permanently disable the key.
+	// Quota exhaustion (429) at this point means the key has no budget left;
+	// permanently disable it and let the periodic probe re-enable it once
+	// quota recovers.
 	if raw >= k.backoffCap {
-		k.state = Open
-		k.cooldownUntil = time.Now().Add(k.backoffCap)
-		k.attempt = 0
+		k.state = Permanent
+		k.trippedReason = "quota_exhausted"
 		return k.backoffCap
 	}
 
