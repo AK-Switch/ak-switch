@@ -595,3 +595,45 @@ func TestGetMergedFieldValue(t *testing.T) {
 		})
 	}
 }
+
+func TestConfigSet_LogLevel_PersistsToToml(t *testing.T) {
+	tmpDir := t.TempDir()
+	tc := &config.TomlConfig{
+		Port: 4000,
+		Provider: map[string]*config.Config{
+			"test": {ProviderConfig: config.ProviderConfig{
+				TargetBase: "http://localhost:11434",
+				LogLevel:   "debug",
+			}},
+		},
+	}
+	tomlPath := filepath.Join(tmpDir, "config.toml")
+	if err := config.SaveTomlConfig(tc, tomlPath); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	origDir := config.ConfigDir
+	defer func() { config.ConfigDir = origDir }()
+	config.ConfigDir = tmpDir
+
+	fd := config.FindField("log_level")
+	if fd == nil {
+		t.Fatal("log_level field not found")
+	}
+	parsed, parseErr := fd.Parse("info")
+	if parseErr != nil {
+		t.Fatalf("parse log_level 'info': %v", parseErr)
+	}
+
+	if err := persistFieldToToml("test", fd, parsed); err != nil {
+		t.Fatalf("persistFieldToToml: %v", err)
+	}
+
+	loaded, loadErr := config.LoadTomlConfig(tomlPath)
+	if loadErr != nil {
+		t.Fatalf("reload: %v", loadErr)
+	}
+	if loaded.Provider["test"].LogLevel != "info" {
+		t.Errorf("log_level = %q, want %q", loaded.Provider["test"].LogLevel, "info")
+	}
+}

@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"akswitch/internal/config"
@@ -433,19 +434,25 @@ var configSetCmd = &cobra.Command{
 			}
 		}
 
-		// 1. Apply to runtime (call server API for provider-scoped runtime-editable fields)
-		if fd.Scope == config.FieldScopeProvider && fd.RuntimeEditable {
+		// 1. Persist to TOML first (always, even if server is not running)
+		if !runtimeOnly {
 			for _, p := range providerList {
-				if err := applyRuntimeField(p, fd, parsed); err != nil {
+				if err := persistFieldToToml(p, fd, parsed); err != nil {
 					return err
 				}
 			}
 		}
 
-		// 2. Persist to TOML
-		if !runtimeOnly {
+		// 2. Apply to runtime (call server API for provider-scoped runtime-editable fields)
+		if fd.Scope == config.FieldScopeProvider && fd.RuntimeEditable {
 			for _, p := range providerList {
-				if err := persistFieldToToml(p, fd, parsed); err != nil {
+				if err := applyRuntimeField(p, fd, parsed); err != nil {
+					// TOML was already persisted; a missing server should not
+					// fail the command wholesale.
+					if strings.Contains(err.Error(), "not reachable") {
+						fmt.Fprintf(cmd.ErrOrStderr(), "warning: TOML updated but server not reachable — runtime change will apply on next start\n")
+						continue
+					}
 					return err
 				}
 			}
