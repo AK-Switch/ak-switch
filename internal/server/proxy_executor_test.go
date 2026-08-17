@@ -248,7 +248,71 @@ func TestHandleSuccess_PassthroughBody(t *testing.T) {
 	}
 }
 
-// ── recordProxyMetrics ──────────────────────────────
+// ── Execute: all keys cooling ─────────────────────────
+
+func TestAllKeysCooling_Returns429(t *testing.T) {
+	ps := newTestProviderState(t, "test", []string{"key-a", "key-b"})
+	pool := ps.pool
+
+	// Put all keys on cooldown (Open state, not Permanent)
+	for i := 0; i < 2; i++ {
+		pool.Cooldown(i, 10*time.Minute)
+	}
+
+	// Verify preconditions: all keys are cooling but not disabled
+	if !pool.AnyActive() {
+		t.Fatal("AnyActive() should be true (keys are cooling, not disabled)")
+	}
+	if _, _, ok := pool.SelectKey(); ok {
+		t.Fatal("SelectKey() should return false when all keys are cooling")
+	}
+
+	px, _, _ := newProxyExecutor(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions",
+		strings.NewReader(`{"model":"gpt-4"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	px.Execute(w, req, ps)
+
+	if w.Code != http.StatusTooManyRequests {
+		t.Errorf("status = %d, want 429", w.Code)
+	}
+
+	// Verify the error body contains the expected error code
+	if !strings.Contains(w.Body.String(), "all_keys_cooling") {
+		t.Errorf("response body missing error code: %s", w.Body.String())
+	}
+}
+
+func TestAllKeysCooling_NoSleepLoop(t *testing.T) {
+	ps := newTestProviderState(t, "test", []string{"key-a"})
+	pool := ps.pool
+
+	// Put the only key on cooldown
+	pool.Cooldown(0, 10*time.Minute)
+
+	px, _, _ := newProxyExecutor(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions",
+		strings.NewReader(`{"model":"gpt-4"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	start := time.Now()
+	px.Execute(w, req, ps)
+	elapsed := time.Since(start)
+
+	if w.Code != http.StatusTooManyRequests {
+		t.Errorf("status = %d, want 429", w.Code)
+	}
+
+	// Response must complete in under 2 seconds (no sleep loop)
+	if elapsed >= 2*time.Second {
+		t.Errorf("response took %v, expected < 2s (no sleep loop)", elapsed)
+	}
+}
 
 func TestRecordProxyMetrics_Noop(t *testing.T) {
 	px, _, _ := newProxyExecutor(t)

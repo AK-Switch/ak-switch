@@ -14,6 +14,7 @@ const (
 	ErrorBadRequest       ErrorCode = "BAD_REQUEST"
 	ErrorUpstreamError    ErrorCode = "UPSTREAM_ERROR"
 	ErrorAllKeysInvalid   ErrorCode = "ALL_KEYS_INVALID"
+	ErrorAllKeysCooling   ErrorCode = "all_keys_cooling"
 	ErrorExhaustedRetries ErrorCode = "EXHAUSTED_RETRIES"
 )
 

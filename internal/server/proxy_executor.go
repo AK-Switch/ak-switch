@@ -89,9 +89,12 @@ func (px *ProxyExecutor) Execute(w http.ResponseWriter, r *http.Request, ps *Pro
 				px.writeAllKeysExhausted(w, ps, r.Method, start)
 				return
 			}
-			slog.Warn("no available keys this round, all cooling", "provider", ps.Name(), "round", round, "max", ps.MaxRetries())
-			time.Sleep(time.Second)
-			continue
+			// 所有 key 都在冷却中：立即返回 429，让客户端识别为限流并重试
+			slog.Warn("all keys cooling, returning 429", "provider", ps.Name(), "round", round, "max", ps.MaxRetries())
+			writeProxyError(w, http.StatusTooManyRequests, ErrorAllKeysCooling,
+				fmt.Sprintf("%s 所有 API Key 均在冷却中，请稍后重试", ps.Name()))
+			px.recordProxyMetrics(r.Method, "429", "", start)
+			return
 		}
 
 		keyName, _ := pool.Name(idx)
