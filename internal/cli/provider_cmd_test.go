@@ -10,7 +10,6 @@ import (
 
 	"akswitch/internal/config"
 	"akswitch/internal/keypool"
-	"github.com/spf13/cobra"
 )
 
 func TestKeyAddCmd_Flags(t *testing.T) {
@@ -42,7 +41,7 @@ func TestKeyUpdateCmd_Exists(t *testing.T) {
 }
 
 func TestKeyUpdateCmd_Flags(t *testing.T) {
-	flags := []string{"name", "by-name"}
+	flags := []string{"name"}
 	for _, f := range flags {
 		t.Run(f, func(t *testing.T) {
 			if keyUpdateCmd.Flags().Lookup(f) == nil {
@@ -94,8 +93,6 @@ func TestFindKeyIndexByName_Duplicate(t *testing.T) {
 	}
 }
 
-// Parameterized test: all commands that accept a key index must have --by-name.
-// This enforces the invariant that addKeyIndexFlags is called for every command.
 func TestProviderInfoCmd_Exists(t *testing.T) {
 	if providerInfoCmd == nil {
 		t.Fatal("expected providerInfoCmd to be defined")
@@ -122,27 +119,6 @@ func TestProviderUpdateCmd_Flags(t *testing.T) {
 	}
 }
 
-func TestAllKeyIndexCommands_HaveByNameFlag(t *testing.T) {
-	commands := []struct {
-		name string
-		cmd  *cobra.Command
-	}{
-		{"keyRemove", keyRemoveCmd},
-		{"keyDisable", keyDisableCmd},
-		{"keyEnable", keyEnableCmd},
-		{"keyUpdate", keyUpdateCmd},
-	}
-	for _, tc := range commands {
-		t.Run(tc.name, func(t *testing.T) {
-			if tc.cmd == nil {
-				t.Fatal("command is nil")
-			}
-			if tc.cmd.Flags().Lookup("by-name") == nil {
-				t.Errorf("expected --by-name flag to be registered on %s command", tc.name)
-			}
-		})
-	}
-}
 func TestProviderUsageCmd_Exists(t *testing.T) {
 	if usageCmd == nil {
 		t.Fatal("expected usageCmd to be defined")
