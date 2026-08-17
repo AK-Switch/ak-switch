@@ -30,7 +30,7 @@ vegeta version
 # 列出所有可用场景
 .\test\load\run-load-test.ps1 -ListScenarios
 
-# 运行正常并发场景（目标默认 http://localhost:8080）
+# 运行正常并发场景（目标默认 http://localhost:4000）
 .\test\load\run-load-test.ps1 -Scenario normal-concurrent
 
 # 指定目标地址
@@ -46,7 +46,7 @@ $env:AKSWITCH_TARGET = 'http://localhost:4000'
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
 | `-Scenario` | 场景名：`normal-concurrent`, `all-keys-cooldown`, `upstream-flaky` | 必填 |
-| `-Target` | 目标代理地址 | `$env:AKSWITCH_TARGET` 或 `http://localhost:8080` |
+| `-Target` | 目标代理地址 | `$env:AKSWITCH_TARGET` 或 `http://localhost:4000` |
 | `-OutputDir` | 结果输出目录 | `test/load/results/` |
 | `-ListScenarios` | 列出可用场景 | - |
 
@@ -83,7 +83,7 @@ test/load/results/
 
 **执行**:
 ```powershell
-.\test\load\run-load-test.ps1 -Scenario normal-concurrent -Target http://localhost:8080
+.\test\load\run-load-test.ps1 -Scenario normal-concurrent -Target http://localhost:4000
 ```
 
 ### 2. 全 Key 冷却 (`all-keys-cooldown`)
@@ -100,7 +100,7 @@ test/load/results/
 
 **执行**:
 ```powershell
-.\test\load\run-load-test.ps1 -Scenario all-keys-cooldown -Target http://localhost:8080
+.\test\load\run-load-test.ps1 -Scenario all-keys-cooldown -Target http://localhost:4000
 ```
 
 **模拟方法**: 启动 AK Switch 时配置上游指向一个专门返回 429 的 mock server。
@@ -119,7 +119,7 @@ test/load/results/
 
 **执行**:
 ```powershell
-.\test\load\run-load-test.ps1 -Scenario upstream-flaky -Target http://localhost:8080
+.\test\load\run-load-test.ps1 -Scenario upstream-flaky -Target http://localhost:4000
 ```
 
 ## Go Benchmark

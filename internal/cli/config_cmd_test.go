@@ -17,7 +17,7 @@ import (
 func TestConfigSetCmd_AllUpdatesAllProviders(t *testing.T) {
 	tmpDir := t.TempDir()
 	tc := &config.TomlConfig{
-		Port: 8080,
+		Port: 4000,
 		Provider: map[string]*config.Config{
 			"alpha": {ProviderConfig: config.ProviderConfig{CooldownSec: 60}},
 			"beta":  {ProviderConfig: config.ProviderConfig{CooldownSec: 60}},
@@ -171,7 +171,7 @@ func TestConfigSetCmd_NoPersistFlag(t *testing.T) {
 func TestConfigSetCmd_RuntimeOnlyAppliesButDoesNotPersist(t *testing.T) {
 	tmpDir := t.TempDir()
 	tc := &config.TomlConfig{
-		Port: 8080,
+		Port: 4000,
 		Provider: map[string]*config.Config{
 			"test": {ProviderConfig: config.ProviderConfig{
 				TargetBase:  "http://localhost:11434",
@@ -296,7 +296,7 @@ func TestConfigGetCmd_AllLoadsTomlOnce(t *testing.T) {
 	tmpDir := t.TempDir()
 	// Use non-default values so we verify TOML is actually read (not just defaults)
 	tc := &config.TomlConfig{
-		Port: 8080,
+		Port: 4000,
 		Provider: map[string]*config.Config{
 			"alpha": {ProviderConfig: config.ProviderConfig{CooldownSec: 123}},
 			"beta":  {ProviderConfig: config.ProviderConfig{CooldownSec: 456}},
@@ -350,7 +350,7 @@ func TestConfigGetCmd_AllLoadsTomlOnce(t *testing.T) {
 func TestConfigSetCmd_RejectsNonExistentProvider(t *testing.T) {
 	tmpDir := t.TempDir()
 	tc := &config.TomlConfig{
-		Port: 8080,
+		Port: 4000,
 		Provider: map[string]*config.Config{
 			"real": {ProviderConfig: config.ProviderConfig{TargetBase: "http://localhost:11434"}},
 		},
@@ -468,7 +468,7 @@ func TestMaskSensitiveValue_KeysFileMasked(t *testing.T) {
 func TestConfigListCmd_NoArgsShowsFirstProvider(t *testing.T) {
 	tmpDir := t.TempDir()
 	tc := &config.TomlConfig{
-		Port: 8080,
+		Port: 4000,
 		Provider: map[string]*config.Config{
 			"alpha": {ProviderConfig: config.ProviderConfig{TargetBase: "http://a.example.com"}},
 			"beta":  {ProviderConfig: config.ProviderConfig{TargetBase: "http://b.example.com"}},

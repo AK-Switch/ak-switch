@@ -10,7 +10,7 @@ import (
 
 // TomlConfig 对应整个 config.toml 文件结构。
 type TomlConfig struct {
-	Port            int                `toml:"port" field:"port,display:Port,scope:global,default:8080,readonly"`
+	Port            int                `toml:"port" field:"port,display:Port,scope:global,default:4000,readonly"`
 	Host            string             `toml:"host,omitempty"`
 	DefaultProvider string             `toml:"default_provider,omitempty"`
 	Default         *Config            `toml:"provider.default,omitempty"`

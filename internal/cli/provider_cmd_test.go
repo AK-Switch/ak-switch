@@ -172,7 +172,7 @@ func TestProviderUpdateCmd_BackoffMultiplierRangeValidation(t *testing.T) {
 
 	// Save a config with one provider so the update command can find it
 	tc := &config.TomlConfig{
-		Port: 8080,
+		Port: 4000,
 		Provider: map[string]*config.Config{
 			"test": {ProviderConfig: config.ProviderConfig{TargetBase: "http://localhost:11434"}},
 		},
@@ -206,7 +206,7 @@ func TestProviderUpdateCmd_BackoffMultiplierRangeValidation(t *testing.T) {
 func TestProviderUpdateCmd_ReadOnlyGuard(t *testing.T) {
 	tmpDir := t.TempDir()
 	tc := &config.TomlConfig{
-		Port: 8080,
+		Port: 4000,
 		Provider: map[string]*config.Config{
 			"test": {ProviderConfig: config.ProviderConfig{
 				TargetBase: "http://localhost:11434",
@@ -238,7 +238,7 @@ func TestProviderUpdateCmd_ReadOnlyGuard(t *testing.T) {
 func TestProviderUpdateCmd_TargetEmptyCheckBeforePersist(t *testing.T) {
 	tmpDir := t.TempDir()
 	tc := &config.TomlConfig{
-		Port: 8080,
+		Port: 4000,
 		Provider: map[string]*config.Config{
 			"test": {ProviderConfig: config.ProviderConfig{
 				TargetBase:  "http://localhost:11434",
@@ -276,7 +276,7 @@ func TestProviderUpdateCmd_TargetEmptyCheckBeforePersist(t *testing.T) {
 func TestProviderUpdateCmd_LogLevelApplied(t *testing.T) {
 	tmpDir := t.TempDir()
 	tc := &config.TomlConfig{
-		Port: 8080,
+		Port: 4000,
 		Provider: map[string]*config.Config{
 			"test": {ProviderConfig: config.ProviderConfig{
 				TargetBase: "http://localhost:11434",

@@ -34,7 +34,7 @@ type ProviderConfig struct {
 	KeysFile             string `toml:"keys_file,omitempty" default:"keys.json" field:"keys_file,display:Keys File,scope:provider,default:keys.json,readonly"`
 	KeySelection         string `toml:"key_selection,omitempty" default:"polling" field:"key_selection,display:Key Selection Mode,scope:provider,default:polling"`
 	// ── 不进 descriptor 表的字段（无 field tag，反射跳过）──────────────────
-	Port                   int      `toml:"port" default:"8080"`
+	Port                   int      `toml:"port" default:"4000"`
 	Host                   string   `toml:"host,omitempty" default:"127.0.0.1"`
 	Keys                   []string `toml:"-"` // API keys (at least one required)
 	KeyNames               []string `toml:"-"` // Corresponding key names (empty string if unnamed), same length as Keys
@@ -92,7 +92,7 @@ func (e *ConfigError) Error() string { return e.Message }
 // DefaultProviderConfig returns a ProviderConfig with all optional fields set to their defaults.
 func DefaultProviderConfig() *ProviderConfig {
 	return &ProviderConfig{
-		Port:                   8080,
+		Port:                   4000,
 		Host:                   "127.0.0.1",
 		MaxRetries:             1,
 		LogLevel:               "info",

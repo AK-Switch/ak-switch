@@ -91,7 +91,7 @@ var configInitCmd = &cobra.Command{
 
 		// Write example config with placeholder providers
 		tc := &config.TomlConfig{
-			Port: 8080,
+			Port: 4000,
 			Provider: map[string]*config.Config{
 				"example-a": {
 					ProviderConfig: config.ProviderConfig{

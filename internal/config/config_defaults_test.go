@@ -116,7 +116,7 @@ func TestDeepCopy(t *testing.T) {
 
 func TestLoadAllTomlProviders_WithDefaultSection(t *testing.T) {
 	toml := `
-port = 8080
+port = 4000
 
 [provider.default]
 max_retries = 3
