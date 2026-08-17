@@ -2,6 +2,8 @@
 
 AK-Switch 是一个 AI API Key 代理网关（Go 1.26 + Cobra），为多个 LLM provider 提供统一的 API 接入层，内置两层熔断器、Key 轮询和 Prometheus 指标。单可执行文件，支持 Docker 部署。
 
+如果遇到子代理崩溃的情况, 绝对 **不准** 自己上手! 重新派发能明白吗? 给我死死记住!
+
 ## Dev Environment Tips
 
 - 安装依赖: `go mod download`
