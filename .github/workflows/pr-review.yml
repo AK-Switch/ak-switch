@@ -29,7 +29,7 @@ jobs:
         shell: bash
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          GO_CI_WORKFLOW: "Go CI"
+          GO_CI_JOBS: "Lint & Security,Unit Tests,Integration Tests,E2E Tests,Docker Build"
           WAIT_INTERVAL: 15
           TIMEOUT_SECONDS: 1800
           DISCOVERY_SLEEP: 20
@@ -37,10 +37,13 @@ jobs:
         run: |
           set -uo pipefail
           end=$(( $(date +%s) + TIMEOUT_SECONDS ))
-          echo "等待 Go CI 通过 (head_sha=${HEAD_SHA})..."
+          echo "等待 CI 通过 (head_sha=${HEAD_SHA})..."
 
           # CI check-runs 可能还没创建，先等一会
           sleep "${DISCOVERY_SLEEP}"
+
+          # 把 GO_CI_JOBS 转成 jq 数组
+          expected="$(printf '%s' "$GO_CI_JOBS" | jq -R 'split(",")')"
 
           while [ "$(date +%s)" -lt "$end" ]; do
             resp="$(
@@ -56,13 +59,13 @@ jobs:
               continue
             fi
 
-            # 只看 Go CI workflow 的 check-runs
-            runs="$(printf '%s' "$resp" | jq -c --arg wf "$GO_CI_WORKFLOW" \
-              '[.check_runs[] | select(.check_suite.name == $wf)]')"
+            # 按 job name 过滤，排除 PR Review 自己的 check-runs
+            runs="$(printf '%s' "$resp" | jq -c --argjson expected "$expected" \
+              '[.check_runs[] | select(.name as $n | $expected | index($n))]')"
 
             count="$(printf '%s' "$runs" | jq 'length')"
             if [ "$count" -eq 0 ]; then
-              echo "[等待] Go CI check-runs 尚未出现，重试..."
+              echo "[等待] CI check-runs 尚未出现，重试..."
               sleep "$WAIT_INTERVAL"
               continue
             fi
@@ -71,7 +74,7 @@ jobs:
             failed="$(printf '%s' "$runs" | jq -r \
               '[.[] | select(.status=="completed" and .conclusion=="failure")] | length')"
             if [ "$failed" -gt 0 ]; then
-              echo "::warning::Go CI 有 ${failed} 个 check 失败，跳过 PR review"
+              echo "::warning::CI 有 ${failed} 个 check 失败，跳过 PR review"
               echo "ci_passed=false" >> "$GITHUB_OUTPUT"
               exit 0
             fi
@@ -79,10 +82,10 @@ jobs:
             # 是否还有未完成的 check
             pending="$(printf '%s' "$runs" | jq '[.[] | select(.status != "completed")] | length')"
             if [ "$pending" -eq 0 ]; then
-              echo "::group::Go CI check 结果"
+              echo "::group::CI check 结果"
               printf '%s' "$runs" | jq -r '.[] | "  \(.name): \(.conclusion // "running")"'
               echo "::endgroup::"
-              echo "Go CI 全部通过，继续执行 PR review"
+              echo "CI 全部通过，继续执行 PR review"
               echo "ci_passed=true" >> "$GITHUB_OUTPUT"
               exit 0
             fi
@@ -91,7 +94,7 @@ jobs:
             sleep "$WAIT_INTERVAL"
           done
 
-          echo "::warning::等待 Go CI 超时 (${TIMEOUT_SECONDS}s)，跳过 PR review"
+          echo "::warning::等待 CI 超时 (${TIMEOUT_SECONDS}s)，跳过 PR review"
           echo "ci_passed=false" >> "$GITHUB_OUTPUT"
 
       - name: Checkout extensions repo
