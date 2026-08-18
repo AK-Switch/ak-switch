@@ -296,4 +296,4 @@ func TestCB_UpstreamCircuitBreakerOpens(t *testing.T) {
 		t.Errorf("expected at most ~3 upstream calls after CB opens, got %d", count)
 	}
 	t.Logf("upstream call count: %d (threshold=3, should be ~3)", count)
-}
+}}
