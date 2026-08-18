@@ -39,6 +39,15 @@ triggers:
    b. 避免使用 emoji
    c. 引用和链接相关代码、文件和 URL
 
+   **发布 review 前必须验证行号（步骤 8 的强制要求）**：
+   d. 在发布 inline review comment 之前，对每个 `line` 字段，必须用 `gh pr diff --repo {repo} {pr-number}` 获取 diff 内容，并确认该行号在 diff hunk（`@@` 块）的范围内。如果行号不在 diff 范围内，则 **不要** 将它作为 inline comment 发布，而是将其移入 review body 的文本描述中。
+   
+   **422 回退策略（步骤 8 的强制要求）**：
+   e. 如果 `gh api -X POST` 返回 422 错误（"Unprocessable Entity"），说明某些行号与 diff 不匹配。此时：
+      - 将所有 inline comments 转换为 review body 中的纯文本描述（格式：`文件路径#L行号: 问题描述`）
+      - 重新发布，使用 `"comments": []`（空的 comments 数组）
+      - 如果 422 仍然发生，则直接只发布 review body，不带任何 inline comments
+
 误报示例（步骤 #4 和 #5）：
 
 - Pre-existing issues
