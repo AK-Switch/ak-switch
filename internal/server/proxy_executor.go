@@ -201,10 +201,10 @@ func (px *ProxyExecutor) handleRateLimited(w http.ResponseWriter, ps *ProviderSt
 	px.metrics.UpstreamErrors.WithLabelValues("rate_limited").Inc()
 
 	if ps.PoolCB(idx).State() == circuitbreaker.Permanent {
-			slog.Warn("key quota exhausted, disabling permanently", "provider", ps.Name(), "key_index", idx, "key_name", keyName)
-			// pool.Disable(idx) 会通过 RecordPerma("manual") 覆盖掉
-			// RecordFailure 刚设的 trippedReason="quota_exhausted"，所以跳过 Disable()。
-			if ps.PoolActiveCount() == 0 {
+		slog.Warn("key quota exhausted, disabling permanently", "provider", ps.Name(), "key_index", idx, "key_name", keyName)
+		// pool.Disable(idx) 会通过 RecordPerma("manual") 覆盖掉
+		// RecordFailure 刚设的 trippedReason="quota_exhausted"，所以跳过 Disable()。
+		if ps.PoolActiveCount() == 0 {
 			return px.writeAllKeysExhausted(w, ps, method, start)
 		}
 	}
