@@ -272,7 +272,7 @@ func StartupKeyProbe(pool *keypool.KeyPool, target string) {
 			slog.Warn("key probe failed (network)", "key_index", i, "key_name", keyName, "error", err)
 			continue
 		}
-		defer func() { _ = resp.Body.Close() }()
+		_ = resp.Body.Close()
 
 		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 			_ = pool.Disable(i)
@@ -310,6 +310,13 @@ func PeriodicKeyProbe(pool *keypool.KeyPool, target string, interval time.Durati
 		case <-ticker.C:
 			for i := 0; i < pool.Len(); i++ {
 				if pool.CB(i).State() != circuitbreaker.Permanent {
+					continue
+				}
+				// Only probe quota-exhausted keys. Keys permanently disabled by
+				// auth failure (401/403) or manual intervention must NOT be
+				// automatically re-enabled -- a 200 on GET /models only proves
+				// read access, not that the broken credential is valid again.
+				if reason := pool.CB(i).TrippedReason(); !(reason == "quota_exhausted" || reason == "preserved") {
 					continue
 				}
 				keyName, _ := pool.Name(i)
