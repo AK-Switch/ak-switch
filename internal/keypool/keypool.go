@@ -106,7 +106,9 @@ func (p *KeyPool) selectKeyPolling() (int, string, bool) {
 }
 
 // selectKeyRandom implements the "random" strategy.
-// It collects all available keys and picks one uniformly at random.
+// It collects all available keys and picks the one with the lowest RPM,
+// so a key that just finished cooldown is not immediately selected again.
+// This mirrors the RPM priority used by Next().
 func (p *KeyPool) selectKeyRandom() (int, string, bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -120,8 +122,19 @@ func (p *KeyPool) selectKeyRandom() (int, string, bool) {
 	if len(available) == 0 {
 		return -1, "", false
 	}
-	idx := available[rand.Intn(len(available))]
-	return idx, p.keys[idx], true
+
+	// 在可用 key 中选 RPM 最低的，而非均匀随机
+	// 这保证刚冷却完的 key 不会被立即选中
+	bestIdx := available[0]
+	bestRPM := p.RequestsInLastMinute(bestIdx)
+	for _, idx := range available[1:] {
+		rpm := p.RequestsInLastMinute(idx)
+		if rpm < bestRPM {
+			bestRPM = rpm
+			bestIdx = idx
+		}
+	}
+	return bestIdx, p.keys[bestIdx], true
 }
 
 // validateIndex checks that the given index is within the valid range of keys.
@@ -373,9 +386,14 @@ func (p *KeyPool) ConfigureCBs(base, backoffCap time.Duration, multiplier float6
 	defer p.mu.Unlock()
 	for i := range p.cbs {
 		wasPermanent := p.cbs[i].State() == circuitbreaker.Permanent
+		oldReason := p.cbs[i].TrippedReason()
 		p.cbs[i] = circuitbreaker.NewKeyCircuitBreaker(base, backoffCap, multiplier)
 		if wasPermanent {
-			p.cbs[i].RecordPerma("preserved")
+			if oldReason != "" {
+				p.cbs[i].RecordPerma(oldReason)
+			} else {
+				p.cbs[i].RecordPerma("preserved")
+			}
 		}
 	}
 }
