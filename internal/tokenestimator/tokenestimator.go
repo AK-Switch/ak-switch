@@ -215,12 +215,14 @@ func parseAnthropicSSE(raw []byte) (outputTokens int, textDelta string, thinking
 }
 
 // parseOpenAISSE handles OpenAI format SSE events.
-// Supports: choices[].delta.content format.
+// Supports: choices[].delta.content, choices[].delta.thinking, choices[].delta.partial_json.
 func parseOpenAISSE(raw []byte) (outputTokens int, textDelta string, thinkingDelta string) {
 	var result struct {
 		Choices []struct {
 			Delta *struct {
-				Content string `json:"content"`
+				Content     string `json:"content"`
+				Thinking    string `json:"thinking"`
+				PartialJSON string `json:"partial_json"`
 			} `json:"delta,omitempty"`
 		} `json:"choices"`
 	}
@@ -230,9 +232,11 @@ func parseOpenAISSE(raw []byte) (outputTokens int, textDelta string, thinkingDel
 	for _, choice := range result.Choices {
 		if choice.Delta != nil {
 			textDelta += choice.Delta.Content
+			textDelta += choice.Delta.PartialJSON
+			thinkingDelta += choice.Delta.Thinking
 		}
 	}
-	return 0, textDelta, ""
+	return 0, textDelta, thinkingDelta
 }
 
 // ParseSSEEvent parses a single SSE "data: " event line and returns
