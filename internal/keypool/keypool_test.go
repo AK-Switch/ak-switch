@@ -439,13 +439,50 @@ func TestSelectKey_Random(t *testing.T) {
 			t.Fatalf("iteration %d: SelectKey() returned ok=false", i)
 		}
 		counts[key]++
-		p.Release(idx)
+		// 模拟真实使用：命中后记录请求，RPM 上升后会让选中偏向其他 key
+		p.IncrementRequestCount(idx)
 	}
 
 	for _, k := range keys {
 		if counts[k] == 0 {
 			t.Errorf("key %q was never selected in 30 iterations", k)
 		}
+	}
+}
+
+func TestSelectKeyRandom_PrefersLowRPM(t *testing.T) {
+	pool := NewKeyPool(
+		[]string{"key1", "key2", "key3"},
+		[]string{"k1", "k2", "k3"},
+	)
+	pool.ConfigureCBs(10*time.Second, 120*time.Second, 2.0)
+	pool.SetSelectionMode(KeySelectionRandom)
+
+	// 模拟 key1 有高 RPM（10次），key2 中 RPM（5次），key3 低 RPM（1次）
+	now := time.Now()
+	for i := 0; i < 10; i++ {
+		pool.requestHistory[0] = append(pool.requestHistory[0], now.Add(-time.Duration(i)*time.Second))
+	}
+	for i := 0; i < 5; i++ {
+		pool.requestHistory[1] = append(pool.requestHistory[1], now.Add(-time.Duration(i)*time.Second))
+	}
+	for i := 0; i < 1; i++ {
+		pool.requestHistory[2] = append(pool.requestHistory[2], now.Add(-time.Duration(i)*time.Second))
+	}
+
+	// 运行多次，统计哪个 key 被选中最多
+	counts := make(map[int]int)
+	for i := 0; i < 100; i++ {
+		idx, _, ok := pool.SelectKey()
+		if !ok {
+			t.Fatal("SelectKey returned false")
+		}
+		counts[idx]++
+	}
+
+	// 绝大部分选择应落在低 RPM 的 key 上
+	if counts[0] > counts[2] {
+		t.Errorf("key3 (low RPM) should be selected more than key1 (high RPM): counts=%v", counts)
 	}
 }
 
