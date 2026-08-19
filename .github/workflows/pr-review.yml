@@ -8,6 +8,7 @@ permissions:
   contents: read
   pull-requests: write
   issues: write
+  checks: read
 
 jobs:
   review:
@@ -23,7 +24,81 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Wait for Go CI to pass
+        id: ci-gate
+        shell: bash
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GO_CI_JOBS: "Lint & Security,Unit Tests,Integration Tests,E2E Tests,Docker Build"
+          WAIT_INTERVAL: 15
+          TIMEOUT_SECONDS: 1800
+          DISCOVERY_SLEEP: 20
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          end=$(( $(date +%s) + TIMEOUT_SECONDS ))
+          echo "等待 CI 通过 (head_sha=${HEAD_SHA})..."
+
+          # CI check-runs 可能还没创建，先等一会
+          sleep "${DISCOVERY_SLEEP}"
+
+          # 把 GO_CI_JOBS 转成 jq 数组
+          expected="$(printf '%s' "$GO_CI_JOBS" | jq -R 'split(",")')"
+
+          while [ "$(date +%s)" -lt "$end" ]; do
+            resp="$(
+              curl -sS -f \
+                -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/check-runs?per_page=100"
+            )" 2>/dev/null || resp=""
+
+            if [ -z "$resp" ]; then
+              echo "[等待] check-runs 暂不可用，重试..."
+              sleep "$WAIT_INTERVAL"
+              continue
+            fi
+
+            # 按 job name 过滤，排除 PR Review 自己的 check-runs
+            runs="$(printf '%s' "$resp" | jq -c --argjson expected "$expected" \
+              '[.check_runs[] | select(.name as $n | $expected | index($n))]')"
+
+            count="$(printf '%s' "$runs" | jq 'length')"
+            if [ "$count" -eq 0 ]; then
+              echo "[等待] CI check-runs 尚未出现，重试..."
+              sleep "$WAIT_INTERVAL"
+              continue
+            fi
+
+            # 有任一 check 失败 → 跳过 review，省 token
+            failed="$(printf '%s' "$runs" | jq -r \
+              '[.[] | select(.status=="completed" and .conclusion=="failure")] | length')"
+            if [ "$failed" -gt 0 ]; then
+              echo "::warning::CI 有 ${failed} 个 check 失败，跳过 PR review"
+              echo "ci_passed=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            # 是否还有未完成的 check
+            pending="$(printf '%s' "$runs" | jq '[.[] | select(.status != "completed")] | length')"
+            if [ "$pending" -eq 0 ]; then
+              echo "::group::CI check 结果"
+              printf '%s' "$runs" | jq -r '.[] | "  \(.name): \(.conclusion // "running")"'
+              echo "::endgroup::"
+              echo "CI 全部通过，继续执行 PR review"
+              echo "ci_passed=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            echo "[等待] 还有 ${pending} 个 check 未完成，继续等待..."
+            sleep "$WAIT_INTERVAL"
+          done
+
+          echo "::warning::等待 CI 超时 (${TIMEOUT_SECONDS}s)，跳过 PR review"
+          echo "ci_passed=false" >> "$GITHUB_OUTPUT"
+
       - name: Checkout extensions repo
+        if: steps.ci-gate.outputs.ci_passed == 'true'
         uses: actions/checkout@v4
         with:
           repository: OpenHands/extensions
@@ -31,6 +106,7 @@ jobs:
           sparse-checkout: plugins/pr-review
 
       - name: Run PR Review
+        if: steps.ci-gate.outputs.ci_passed == 'true'
         uses: ./plugins/pr-review
         with:
           llm-model: openai/step-3.7-flash
