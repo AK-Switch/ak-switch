@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	adminPort = 8080
+	adminPort = 4000
 	adminHost = "127.0.0.1"
 )
 

@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"akswitch/internal/config"
@@ -91,7 +92,7 @@ var configInitCmd = &cobra.Command{
 
 		// Write example config with placeholder providers
 		tc := &config.TomlConfig{
-			Port: 8080,
+			Port: 4000,
 			Provider: map[string]*config.Config{
 				"example-a": {
 					ProviderConfig: config.ProviderConfig{
@@ -262,7 +263,7 @@ var configGetCmd = &cobra.Command{
 	Valid keys: port, log_file, target, cooldown_sec, max_retries,
 	backoff_cap_sec, backoff_multiplier, cb_reset_sec, upstream_cb_threshold,
 	http_timeout_sec, health_check_interval_sec, log_level,
-	disable_thinking, genai_model, admin_token, keys_file, key_selection
+	genai_model, admin_token, keys_file, key_selection
 
 	Examples:
 	  akswitch config get http_timeout_sec
@@ -350,7 +351,7 @@ var configSetCmd = &cobra.Command{
 	Valid keys: port, log_file, target, cooldown_sec, max_retries,
 	backoff_cap_sec, backoff_multiplier, cb_reset_sec, upstream_cb_threshold,
 	http_timeout_sec, health_check_interval_sec, log_level,
-	disable_thinking, genai_model, admin_token, keys_file, key_selection
+	genai_model, admin_token, keys_file, key_selection
 
 	Examples:
 	  akswitch config set http_timeout_sec 60
@@ -433,19 +434,25 @@ var configSetCmd = &cobra.Command{
 			}
 		}
 
-		// 1. Apply to runtime (call server API for provider-scoped runtime-editable fields)
-		if fd.Scope == config.FieldScopeProvider && fd.RuntimeEditable {
+		// 1. Persist to TOML first (always, even if server is not running)
+		if !runtimeOnly {
 			for _, p := range providerList {
-				if err := applyRuntimeField(p, fd, parsed); err != nil {
+				if err := persistFieldToToml(p, fd, parsed); err != nil {
 					return err
 				}
 			}
 		}
 
-		// 2. Persist to TOML
-		if !runtimeOnly {
+		// 2. Apply to runtime (call server API for provider-scoped runtime-editable fields)
+		if fd.Scope == config.FieldScopeProvider && fd.RuntimeEditable {
 			for _, p := range providerList {
-				if err := persistFieldToToml(p, fd, parsed); err != nil {
+				if err := applyRuntimeField(p, fd, parsed); err != nil {
+					// TOML was already persisted; a missing server should not
+					// fail the command wholesale.
+					if strings.Contains(err.Error(), "not reachable") {
+						_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: TOML updated but server not reachable — runtime change will apply on next start\n")
+						continue
+					}
 					return err
 				}
 			}
@@ -469,7 +476,7 @@ func applyRuntimeField(provider string, fd *config.ConfigFieldDescriptor, value 
 	}
 
 	// Build POST to /api/runtime-config
-	payloadMap := map[string]interface{}{"key": fd.Key}
+	payloadMap := map[string]any{"key": fd.Key}
 	switch v := value.(type) {
 	case int:
 		payloadMap["value"] = float64(v)
@@ -587,8 +594,7 @@ func readFieldFromProviderConfig(p *config.ProviderConfig, fd *config.ConfigFiel
 		return p.HealthCheckIntervalSec, nil
 	case "admin_token":
 		return p.AdminToken, nil
-	case "disable_thinking":
-		return p.DisableThinking, nil
+
 	case "genai_model":
 		return p.GenaiModel, nil
 	case "keys_file":

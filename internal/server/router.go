@@ -127,6 +127,7 @@ func (ps *ProviderState) SetRectifyThinkingMapTo(v string) { ps.config.RectifyTh
 func (ps *ProviderState) GenaiModel() string               { return ps.config.GenaiModel }
 func (ps *ProviderState) CalibrationIntervalSec() int      { return ps.config.CalibrationIntervalSec }
 func (ps *ProviderState) ErrorDumpMaxAge() int             { return ps.config.ErrorDumpMaxAge }
+func (ps *ProviderState) BufferMode() bool                 { return ps.config.BufferMode }
 func (ps *ProviderState) TargetBase() string               { return ps.config.TargetBase }
 
 // Pool proxy methods — forward to ps.pool
@@ -259,6 +260,8 @@ func (pr *ProviderRouter) StartBackgroundTasks() {
 			interval := time.Duration(p.config.CalibrationIntervalSec) * time.Second
 			pr.taskManager.StartCalibrator(pr.calibrator, p.pool, p.config.TargetBase, p.config.GenaiModel, interval)
 		}
+		// Start periodic key probe for each provider (5-minute interval)
+		pr.taskManager.StartKeyProbe(p.pool, p.config.TargetBase)
 	})
 	pr.taskManager.StartUptimeTicker(time.Now())
 }

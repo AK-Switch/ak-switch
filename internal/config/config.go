@@ -26,15 +26,16 @@ type ProviderConfig struct {
 	HTTPTimeoutSec         int     `toml:"http_timeout_sec,omitempty" default:"30" field:"http_timeout_sec,display:HTTP Timeout (sec),scope:provider,default:30,runtime,min:1"`
 	LogLevel               string  `toml:"log_level,omitempty" default:"info" field:"log_level,display:Log Level,scope:provider,default:info,runtime"`
 	HealthCheckIntervalSec int     `toml:"health_check_interval_sec,omitempty" default:"30" field:"health_check_interval_sec,display:Health Check Interval (sec),scope:provider,default:30"`
-	AdminToken             string  `toml:"admin_token,omitempty" field:"admin_token,display:Admin Token,scope:provider,readonly"`                                    // Optional admin authentication token
-	DisableThinking        bool    `toml:"disable_thinking,omitempty" field:"disable_thinking,display:Disable Thinking,scope:provider,default:false"`                // Deprecated: use thinking_mode
-	ThinkingMode           string  `toml:"thinking_mode,omitempty" field:"thinking_mode,display:Thinking Mode,scope:provider,default:default,runtime"`               // "default" | "rectify"
-	RectifyThinkingMapTo   string  `toml:"rectify_thinking_map_to,omitempty" field:"rectify_thinking_map_to,display:Rectify Thinking Map To,scope:provider,runtime"` // "enabled" | "auto" | "disabled"
-	GenaiModel             string  `toml:"genai_model,omitempty" field:"genai_model,display:GenAI Model,scope:provider"`                                             // Generative AI model name
-	KeysFile               string  `toml:"keys_file,omitempty" default:"keys.json" field:"keys_file,display:Keys File,scope:provider,default:keys.json,readonly"`
-	KeySelection           string  `toml:"key_selection,omitempty" default:"polling" field:"key_selection,display:Key Selection Mode,scope:provider,default:polling"`
+	AdminToken             string  `toml:"admin_token,omitempty" field:"admin_token,display:Admin Token,scope:provider,readonly"` // Optional admin authentication token
+
+	ThinkingMode         string `toml:"thinking_mode,omitempty" field:"thinking_mode,display:Thinking Mode,scope:provider,default:default,runtime"`               // "default" | "rectify"
+	RectifyThinkingMapTo string `toml:"rectify_thinking_map_to,omitempty" field:"rectify_thinking_map_to,display:Rectify Thinking Map To,scope:provider,runtime"` // "enabled" | "auto" | "disabled"
+	GenaiModel           string `toml:"genai_model,omitempty" field:"genai_model,display:GenAI Model,scope:provider"`                                             // Generative AI model name
+	KeysFile             string `toml:"keys_file,omitempty" default:"keys.json" field:"keys_file,display:Keys File,scope:provider,default:keys.json,readonly"`
+	KeySelection         string `toml:"key_selection,omitempty" default:"polling" field:"key_selection,display:Key Selection Mode,scope:provider,default:polling"`
+	BufferMode           bool   `toml:"buffer_mode,omitempty" field:"buffer_mode,display:Buffer Mode,scope:provider,default:false"`
 	// ── 不进 descriptor 表的字段（无 field tag，反射跳过）──────────────────
-	Port                   int      `toml:"port" default:"8080"`
+	Port                   int      `toml:"port" default:"4000"`
 	Host                   string   `toml:"host,omitempty" default:"127.0.0.1"`
 	Keys                   []string `toml:"-"` // API keys (at least one required)
 	KeyNames               []string `toml:"-"` // Corresponding key names (empty string if unnamed), same length as Keys
@@ -92,7 +93,7 @@ func (e *ConfigError) Error() string { return e.Message }
 // DefaultProviderConfig returns a ProviderConfig with all optional fields set to their defaults.
 func DefaultProviderConfig() *ProviderConfig {
 	return &ProviderConfig{
-		Port:                   8080,
+		Port:                   4000,
 		Host:                   "127.0.0.1",
 		MaxRetries:             1,
 		LogLevel:               "info",
@@ -285,16 +286,6 @@ func mergeWithDefaults(base, override *Config) *Config {
 	// Sync runtime config
 	syncRuntimeConfig(&result.RuntimeConfig, &result.ProviderConfig)
 	return result
-}
-
-// migrateDisableThinking handles backward compatibility for the deprecated
-// DisableThinking field. When DisableThinking is true and ThinkingMode is
-// unset, it maps to the new field names.
-func (pc *ProviderConfig) migrateDisableThinking() {
-	if pc.DisableThinking && pc.ThinkingMode == "" {
-		pc.ThinkingMode = "rectify"
-		pc.RectifyThinkingMapTo = "enabled"
-	}
 }
 
 // mergeDefaults fills in zero-value fields with their default values using

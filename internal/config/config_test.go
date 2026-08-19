@@ -52,7 +52,7 @@ func TestValidate_RequiredFields(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := DefaultConfig()
-			cfg.Port = 8080
+			cfg.Port = 4000
 			cfg.TargetBase = "https://example.com"
 			cfg.Keys = []string{"nvapi-key1"}
 			tt.modify(cfg)
@@ -76,7 +76,7 @@ func TestValidate_CircuitBreakerFields(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := DefaultConfig()
-			cfg.Port = 8080
+			cfg.Port = 4000
 			cfg.TargetBase = "https://example.com"
 			cfg.Keys = []string{"nvapi-key1"}
 			tt.modify(cfg)
@@ -146,7 +146,7 @@ func TestConfig_HealthCheckDefaults(t *testing.T) {
 
 func TestConfig_HealthCheckIntervalTooSmall(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.Port = 8080
+	cfg.Port = 4000
 	cfg.TargetBase = "https://example.com"
 	cfg.Keys = []string{"nvapi-key1"}
 	cfg.HealthCheckIntervalSec = 4
@@ -164,7 +164,7 @@ func TestConfig_HTTPTimeoutSec_Default(t *testing.T) {
 
 func TestConfig_HTTPTimeoutSec_TooSmall(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.Port = 8080
+	cfg.Port = 4000
 	cfg.TargetBase = "https://example.com"
 	cfg.Keys = []string{"nvapi-key1"}
 	cfg.HTTPTimeoutSec = 0
@@ -175,7 +175,7 @@ func TestConfig_HTTPTimeoutSec_TooSmall(t *testing.T) {
 
 func TestConfig_HTTPTimeoutSec_Valid(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.Port = 8080
+	cfg.Port = 4000
 	cfg.TargetBase = "https://example.com"
 	cfg.Keys = []string{"nvapi-key1"}
 	cfg.HTTPTimeoutSec = 15
@@ -186,7 +186,7 @@ func TestConfig_HTTPTimeoutSec_Valid(t *testing.T) {
 
 func TestConfig_HealthCheckTimeoutTooSmall(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.Port = 8080
+	cfg.Port = 4000
 	cfg.TargetBase = "https://example.com"
 	cfg.Keys = []string{"nvapi-key1"}
 	cfg.HealthCheckTimeoutSec = 0
@@ -449,8 +449,8 @@ target = "https://api.example.com"
 		t.Errorf("TargetBase = %q, want %q", cfg.TargetBase, "https://api.example.com")
 	}
 	// Port should use default from DefaultConfig
-	if cfg.Port != 8080 {
-		t.Errorf("Port = %d, want default 8080", cfg.Port)
+	if cfg.Port != 4000 {
+		t.Errorf("Port = %d, want default 4000", cfg.Port)
 	}
 	// CooldownSec should use default from DefaultConfig
 	if cfg.CooldownSec != 15 {
@@ -473,7 +473,6 @@ func TestTomlProviderConfig_AllFields(t *testing.T) {
 target = "https://api.example.com"
 cooldown_sec = 45
 max_retries = 7
-disable_thinking = true
 genai_model = "opus-4.8"
 log_level = "debug"
 admin_token = "myadmintoken"
@@ -513,9 +512,7 @@ target = "https://myapi.example.com"
 	if cfg.MaxRetries != 7 {
 		t.Errorf("MaxRetries = %d, want %d", cfg.MaxRetries, 7)
 	}
-	if !cfg.DisableThinking {
-		t.Error("DisableThinking = false, want true")
-	}
+
 	if cfg.GenaiModel != "opus-4.8" {
 		t.Errorf("GenaiModel = %q, want %q", cfg.GenaiModel, "opus-4.8")
 	}
@@ -580,8 +577,8 @@ target = "https://myapi.example.com"
 	}
 
 	// All optional fields should fall through to DefaultConfig
-	if cfg.Port != 8080 {
-		t.Errorf("Port = %d, want default 8080", cfg.Port)
+	if cfg.Port != 4000 {
+		t.Errorf("Port = %d, want default 4000", cfg.Port)
 	}
 	if cfg.CooldownSec != 15 {
 		t.Errorf("CooldownSec = %d, want default 15", cfg.CooldownSec)
@@ -589,9 +586,7 @@ target = "https://myapi.example.com"
 	if cfg.MaxRetries != 1 {
 		t.Errorf("MaxRetries = %d, want default 1", cfg.MaxRetries)
 	}
-	if cfg.DisableThinking {
-		t.Error("DisableThinking = true, want default false")
-	}
+
 	if cfg.GenaiModel != "" {
 		t.Errorf("GenaiModel = %q, want empty", cfg.GenaiModel)
 	}
@@ -636,7 +631,6 @@ func TestTomlProviderConfig_Roundtrip(t *testing.T) {
 	orig.Port = 7070
 	orig.CooldownSec = 45
 	orig.MaxRetries = 7
-	orig.DisableThinking = true
 	orig.GenaiModel = "sonnet-4.6"
 	orig.LogLevel = "warn"
 	orig.AdminToken = "secrettoken"
@@ -677,9 +671,6 @@ func TestTomlProviderConfig_Roundtrip(t *testing.T) {
 	}
 	if loaded.MaxRetries != orig.MaxRetries {
 		t.Errorf("MaxRetries = %d, want %d", loaded.MaxRetries, orig.MaxRetries)
-	}
-	if loaded.DisableThinking != orig.DisableThinking {
-		t.Errorf("DisableThinking = %v, want %v", loaded.DisableThinking, orig.DisableThinking)
 	}
 	if loaded.GenaiModel != orig.GenaiModel {
 		t.Errorf("GenaiModel = %q, want %q", loaded.GenaiModel, orig.GenaiModel)
@@ -929,7 +920,7 @@ target = "https://integrate.api.nvidia.com/v1"
 
 func TestLoadAllTomlProviders_EmptyProvider(t *testing.T) {
 	content := `[server]
-port = 8080
+port = 4000
 `
 	path := writeTempToml(t, content)
 	_, err := LoadAllTomlProviders(path)
@@ -962,8 +953,8 @@ target = "https://api.example.com"
 	if cfg.TargetBase != "https://api.example.com" {
 		t.Errorf("TargetBase = %q, want %q", cfg.TargetBase, "https://api.example.com")
 	}
-	if cfg.Port != 8080 {
-		t.Errorf("Port = %d, want default 8080", cfg.Port)
+	if cfg.Port != 4000 {
+		t.Errorf("Port = %d, want default 4000", cfg.Port)
 	}
 	if cfg.CooldownSec != 15 {
 		t.Errorf("CooldownSec = %d, want default 15", cfg.CooldownSec)
@@ -976,11 +967,11 @@ target = "https://api.example.com"
 // ── FindServerPort ───────────────────────────────
 
 func TestFindServerPort_WithPort(t *testing.T) {
-	content := "port = 8080\n\n[provider.test]\ntarget = \"https://api.example.com\"\n\n"
+	content := "port = 4000\n\n[provider.test]\ntarget = \"https://api.example.com\"\n\n"
 	path := writeTempToml(t, content)
 	port := FindServerPort(path)
-	if port != 8080 {
-		t.Errorf("FindServerPort() = %d, want 8080", port)
+	if port != 4000 {
+		t.Errorf("FindServerPort() = %d, want 4000", port)
 	}
 }
 
@@ -988,8 +979,8 @@ func TestFindServerPort_NoPort(t *testing.T) {
 	content := "port = 0\n\n[provider.test]\ntarget = \"https://api.example.com\"\n\n"
 	path := writeTempToml(t, content)
 	port := FindServerPort(path)
-	if port != 8080 {
-		t.Errorf("FindServerPort() = %d, want 8080 (default)", port)
+	if port != 4000 {
+		t.Errorf("FindServerPort() = %d, want 4000 (default)", port)
 	}
 }
 
@@ -1015,8 +1006,8 @@ func TestFindServerPort_FirstProviderPicked(t *testing.T) {
 
 func TestDefaultProviderConfig(t *testing.T) {
 	pc := DefaultProviderConfig()
-	if pc.Port != 8080 {
-		t.Errorf("Port = %d, want 8080", pc.Port)
+	if pc.Port != 4000 {
+		t.Errorf("Port = %d, want 4000", pc.Port)
 	}
 	if pc.Host != "127.0.0.1" {
 		t.Errorf("Host = %q, want %q", pc.Host, "127.0.0.1")
@@ -1062,7 +1053,7 @@ func TestProviderConfig_Validate_PortRange(t *testing.T) {
 		port    int
 		wantErr bool
 	}{
-		{0, true}, {-1, true}, {65536, true}, {8080, false},
+		{0, true}, {-1, true}, {65536, true}, {4000, false},
 	}
 	for _, tt := range tests {
 		pc.Port = tt.port
@@ -1110,8 +1101,8 @@ func TestProviderConfig_Validate_HealthCheckTimeoutSec(t *testing.T) {
 
 func TestConfig_BackwardCompatibility(t *testing.T) {
 	cfg := DefaultConfig()
-	if cfg.Port != 8080 {
-		t.Errorf("Port = %d, want 8080", cfg.Port)
+	if cfg.Port != 4000 {
+		t.Errorf("Port = %d, want 4000", cfg.Port)
 	}
 	if cfg.HTTPTimeoutSec != 30 {
 		t.Errorf("HTTPTimeoutSec = %d, want 30", cfg.HTTPTimeoutSec)

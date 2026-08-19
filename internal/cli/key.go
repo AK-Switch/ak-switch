@@ -75,13 +75,6 @@ func updateKey(provider string, idx int, op KeyMutation) error {
 	return nil
 }
 
-// addKeyIndexFlags registers the standard --by-name flag on a command
-// that accepts a key index or name. Using this factory function ensures
-// all key-index commands consistently support --by-name.
-func addKeyIndexFlags(cmd *cobra.Command) {
-	cmd.Flags().Bool("by-name", false, "Look up key by name instead of index")
-}
-
 func init() {
 	rootCmd.AddCommand(keyCmd)
 	keyCmd.AddCommand(keyAddCmd)
@@ -99,22 +92,16 @@ func init() {
 	keyImportCmd.Flags().Bool("create", false, "Auto-create the provider if it doesn't exist")
 
 	keyUpdateCmd.Flags().StringP("name", "n", "", "New display name for the key")
-	addKeyIndexFlags(keyRemoveCmd)
-	addKeyIndexFlags(keyDisableCmd)
-	addKeyIndexFlags(keyEnableCmd)
-	addKeyIndexFlags(keyUpdateCmd)
 
 	keyAddCmd.Flags().StringP("name", "n", "", "Display name for the key")
 	keyAddCmd.Flags().Bool("insecure-storage", false, "Store keys in plaintext (WARNING: not encrypted)")
 	keyListCmd.Flags().Bool("runtime", false, "Query live status from running server (shows cooldown, RPM)")
-	addKeyIndexFlags(keyCooldownCmd)
 	keyCmd.AddCommand(keyExportCmd)
 	keyExportCmd.Flags().StringP("output", "o", "", "Write to file instead of stdout")
 	keyCmd.AddCommand(keyUpstreamCBResetCmd)
 	keyCmd.AddCommand(keyRestoreCmd)
 	keyCmd.AddCommand(keyPurgeCmd)
 	keyListCmd.Flags().Bool("all", false, "Show all keys including deleted ones")
-	addKeyIndexFlags(keyRestoreCmd)
 }
 
 var keyCmd = &cobra.Command{
@@ -349,18 +336,20 @@ Examples:
 }
 
 var keyUpdateCmd = &cobra.Command{
-	Use:   "update <provider> <index> [key]",
-	Short: "Update an API key at the specified index",
-	Long: `Replace an existing API key at the specified index with a new key value,
-or rename it without changing the value.
-
-The key's position, disabled state, and circuit breaker state are preserved.
-Only --name without [key] renames the key without changing its value.
-
-Examples:
-  akswitch key update sensenova 0 sk-xxxxxxxxxxxxxxxx
-  akswitch key update sensenova 0 --name d1-2
-  akswitch key update sensenova d1-2 sk-xxxxxxxxxxxxxxxx --by-name`,
+	Use:   "update <provider> <key-id> [key]",
+	Short: "Update an API key at the specified index or name",
+	Long: `Replace an existing API key at the specified index or name with a new key value,
+	or rename it without changing the value.
+	
+	<key-id> can be a numeric index (e.g. 0) or a key name (e.g. d1-2).
+	The system auto-detects: numbers are treated as indexes, non-numeric strings as names.
+	The key's position, disabled state, and circuit breaker state are preserved.
+	Only --name without [key] renames the key without changing its value.
+	
+	Examples:
+	  akswitch key update sensenova 0 sk-xxxxxxxxxxxxxxxx
+	  akswitch key update sensenova 0 --name d1-2
+	  akswitch key update sensenova d1-2 sk-xxxxxxxxxxxxxxxx`,
 	Args: cobra.RangeArgs(2, 3),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		provider := args[0]
@@ -372,19 +361,10 @@ Examples:
 			return fmt.Errorf("no keys found for provider %q", provider)
 		}
 
-		var idx int
-		if byName, _ := cmd.Flags().GetBool("by-name"); byName {
-			idx, err = findKeyIndexByName(store, args[1])
-			if err != nil {
-				return err
-			}
-		} else {
-			idx, err = strconv.Atoi(args[1])
-			if err != nil {
-				return fmt.Errorf("invalid index %q: must be a non-negative integer", args[1])
-			}
+		idx, err := resolveKeyIndex(store, args[1])
+		if err != nil {
+			return err
 		}
-
 		if idx < 0 || idx >= len(store.Keys) {
 			return fmt.Errorf("index %d out of range: provider %q has %d keys (valid: 0-%d)",
 				idx, provider, len(store.Keys), len(store.Keys)-1)
@@ -427,39 +407,31 @@ Examples:
 }
 
 var keyCooldownCmd = &cobra.Command{
-	Use:   "cooldown <provider> <index>",
+	Use:   "cooldown <provider> <key-id>",
 	Short: "Force a key into cooldown",
 	Long: `Force an API key into cooldown for the configured cooldown duration.
-Use --by-name to look up a key by its display name instead.
+<key-id> can be a numeric index (e.g. 1) or a key name (e.g. my-key).
+The system auto-detects: numbers are treated as indexes, non-numeric strings as names.
 
 Calls the running server's management API.
 
 Examples:
   akswitch key cooldown nvidia 1
-  akswitch key cooldown nvidia my-key --by-name`,
+  akswitch key cooldown nvidia my-key`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		provider := args[0]
 
-		// Load store once and resolve index inline to avoid TOCTOU between
-		// resolveKeyIndex (which loads store internally for --by-name) and
-		// the subsequent LoadKeys for pool-index mapping.
+		// Load store once, then resolve index from it. The store doubles as
+		// the pool-index mapping source for the runtime API call below.
 		store, err := keypool.LoadKeys(provider)
 		if err != nil {
 			return fmt.Errorf("failed to load keys for %q: %w", provider, err)
 		}
 
-		var idx int
-		if byName, _ := cmd.Flags().GetBool("by-name"); byName {
-			idx, err = findKeyIndexByName(store, args[1])
-			if err != nil {
-				return err
-			}
-		} else {
-			idx, err = strconv.Atoi(args[1])
-			if err != nil {
-				return fmt.Errorf("invalid index %q: must be a non-negative integer", args[1])
-			}
+		idx, err := resolveKeyIndex(store, args[1])
+		if err != nil {
+			return err
 		}
 
 		if idx < 0 || idx >= len(store.Keys) {
@@ -551,27 +523,27 @@ Example output:
 }
 
 var keyRemoveCmd = &cobra.Command{
-	Use:   "remove <provider> <index>",
+	Use:   "remove <provider> <key-id>",
 	Short: "Remove (soft delete) an API key by index or name",
 	Long: `Mark an API key as deleted at the specified index or matching name.
 
-	The index corresponds to the key's position as shown in 'akswitch key list'.
-	Use --by-name to look up a key by its display name instead.
-	Deleted keys are hidden from 'key list' but can be restored with 'key restore'.
-	Use 'key purge' to permanently delete all marked keys.
+		<key-id> can be a numeric index (e.g. 0) or a key name (e.g. my-key).
+		The system auto-detects: numbers are treated as indexes, non-numeric strings as names.
+		Deleted keys are hidden from 'key list' but can be restored with 'key restore'.
+		Use 'key purge' to permanently delete all marked keys.
 
-	Examples:
-	  akswitch key remove nvidia 0
-	  akswitch key remove nvidia my-key --by-name`,
+		Examples:
+		  akswitch key remove nvidia 0
+		  akswitch key remove nvidia my-key`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		idx, err := resolveKeyIndex(cmd, args)
-		if err != nil {
-			return err
-		}
 		store, err := keypool.LoadKeys(args[0])
 		if err != nil {
 			return fmt.Errorf("failed to load keys for %q: %w", args[0], err)
+		}
+		idx, err := resolveKeyIndex(store, args[1])
+		if err != nil {
+			return err
 		}
 		if store == nil || idx >= len(store.Keys) {
 			return fmt.Errorf("index %d out of range", idx)
@@ -591,22 +563,27 @@ var keyRemoveCmd = &cobra.Command{
 }
 
 var keyDisableCmd = &cobra.Command{
-	Use:   "disable <provider> <index>",
+	Use:   "disable <provider> <key-id>",
 	Short: "Disable an API key by index or name",
 	Long: `Mark an API key as disabled at the specified index or matching name.
 
-	Disabled keys are not used for new requests but remain in the key store.
-	Deleted keys cannot be disabled — use 'key restore' to recover them first.
-	Use --by-name to look up a key by its display name instead.
-	Use 'akswitch key remove' to soft-delete a key (recoverable via 'key restore').
-	Use 'akswitch key purge' to permanently remove deleted keys.
+		<key-id> can be a numeric index (e.g. 1) or a key name (e.g. my-key).
+		The system auto-detects: numbers are treated as indexes, non-numeric strings as names.
+		Disabled keys are not used for new requests but remain in the key store.
+		Deleted keys cannot be disabled — use 'key restore' to recover them first.
+		Use 'akswitch key remove' to soft-delete a key (recoverable via 'key restore').
+		Use 'akswitch key purge' to permanently remove deleted keys.
 
-	Examples:
-	  akswitch key disable nvidia 1
-	  akswitch key disable nvidia my-key --by-name`,
+		Examples:
+		  akswitch key disable nvidia 1
+		  akswitch key disable nvidia my-key`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		idx, err := resolveKeyIndex(cmd, args)
+		store, err := keypool.LoadKeys(args[0])
+		if err != nil {
+			return fmt.Errorf("failed to load keys for %q: %w", args[0], err)
+		}
+		idx, err := resolveKeyIndex(store, args[1])
 		if err != nil {
 			return err
 		}
@@ -615,20 +592,25 @@ var keyDisableCmd = &cobra.Command{
 }
 
 var keyEnableCmd = &cobra.Command{
-	Use:   "enable <provider> <index>",
+	Use:   "enable <provider> <key-id>",
 	Short: "Enable an API key by index or name",
 	Long: `Re-enable a previously disabled API key at the specified index or matching name.
 
-	The key will be used again for new requests.  The operation triggers a
-	reload so the server picks up the change.
-	Deleted keys cannot be enabled — use 'key restore' to recover them first.
-	Use --by-name to look up a key by its display name instead.
-	Examples:
-	  akswitch key enable nvidia 1
-	  akswitch key enable nvidia my-key --by-name`,
+		<key-id> can be a numeric index (e.g. 1) or a key name (e.g. my-key).
+		The system auto-detects: numbers are treated as indexes, non-numeric strings as names.
+		The key will be used again for new requests.  The operation triggers a
+		reload so the server picks up the change.
+		Deleted keys cannot be enabled — use 'key restore' to recover them first.
+		Examples:
+		  akswitch key enable nvidia 1
+		  akswitch key enable nvidia my-key`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		idx, err := resolveKeyIndex(cmd, args)
+		store, err := keypool.LoadKeys(args[0])
+		if err != nil {
+			return fmt.Errorf("failed to load keys for %q: %w", args[0], err)
+		}
+		idx, err := resolveKeyIndex(store, args[1])
 		if err != nil {
 			return err
 		}
@@ -680,21 +662,22 @@ Examples:
 }
 
 var keyRestoreCmd = &cobra.Command{
-	Use:   "restore <provider> <index>",
+	Use:   "restore <provider> <key-id>",
 	Short: "Restore a previously deleted API key",
 	Long: `Restore a soft-deleted API key. The key is no longer deleted and
-	appears in key list again. Use 'key enable' separately if it was disabled.
-Use --by-name to look up a key by its display name.
-Use 'key list --all' to see deleted keys.`,
+		appears in key list again. Use 'key enable' separately if it was disabled.
+	<key-id> can be a numeric index (e.g. 0) or a key name (e.g. my-key).
+	The system auto-detects: numbers are treated as indexes, non-numeric strings as names.
+	Use 'key list --all' to see deleted keys.`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		idx, err := resolveKeyIndex(cmd, args)
-		if err != nil {
-			return err
-		}
 		store, err := keypool.LoadKeys(args[0])
 		if err != nil {
 			return fmt.Errorf("failed to load keys for %q: %w", args[0], err)
+		}
+		idx, err := resolveKeyIndex(store, args[1])
+		if err != nil {
+			return err
 		}
 		if store == nil || idx >= len(store.Keys) {
 			return fmt.Errorf("index %d out of range", idx)
@@ -800,24 +783,19 @@ Examples:
 	},
 }
 
-// resolveKeyIndex resolves a key index from command arguments.
-// If --by-name is set, looks up the index by name; otherwise parses it as an integer.
-func resolveKeyIndex(cmd *cobra.Command, args []string) (int, error) {
-	if byName, _ := cmd.Flags().GetBool("by-name"); byName {
-		store, err := keypool.LoadKeys(args[0])
-		if err != nil {
-			return 0, fmt.Errorf("failed to load keys for %q: %w", args[0], err)
-		}
-		if store == nil {
-			return 0, fmt.Errorf("no keys found for provider %q", args[0])
-		}
-		return findKeyIndexByName(store, args[1])
+// resolveKeyIndex resolves a key-id: numbers are treated as indexes,
+// non-numeric strings are looked up by name.
+func resolveKeyIndex(store *keypool.KeyStore, keyID string) (int, error) {
+	if store == nil {
+		return 0, fmt.Errorf("no keys found for provider")
 	}
-	idx, err := strconv.Atoi(args[1])
-	if err != nil {
-		return 0, fmt.Errorf("invalid index %q: must be a non-negative integer", args[1])
+	if idx, err := strconv.Atoi(keyID); err == nil {
+		if idx < 0 || idx >= len(store.Keys) {
+			return 0, fmt.Errorf("key index %d out of range (0-%d)", idx, len(store.Keys)-1)
+		}
+		return idx, nil
 	}
-	return idx, nil
+	return findKeyIndexByName(store, keyID)
 }
 
 // findKeyIndexByName searches a KeyStore for a key with the given name.

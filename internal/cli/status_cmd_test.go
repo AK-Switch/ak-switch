@@ -114,8 +114,8 @@ func TestStatusCmd_URLConstruction(t *testing.T) {
 		{"alpha", true},
 	}
 	for _, tc := range tests {
-		h := appendProvider("http://localhost:8080/health", tc.provider)
-		s := appendProvider("http://localhost:8080/api/stats", tc.provider)
+		h := appendProvider("http://localhost:4000/health", tc.provider)
+		s := appendProvider("http://localhost:4000/api/stats", tc.provider)
 		if tc.hasQuery {
 			if !strings.Contains(h, "?provider="+tc.provider) {
 				t.Errorf("healthURL missing provider query (provider=%q): %s", tc.provider, h)

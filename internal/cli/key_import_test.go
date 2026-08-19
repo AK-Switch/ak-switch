@@ -988,7 +988,7 @@ func TestKeyUpdateCmd_Behavior(t *testing.T) {
 		},
 		{
 			name: "update by name",
-			args: []string{"akswitch", "key", "update", provider, "key-b", "sk-update-2-by-name", "--by-name"},
+			args: []string{"akswitch", "key", "update", provider, "key-b", "sk-update-2-by-name"},
 			check: func(t *testing.T, store *keypool.KeyStore, output string) {
 				if store.Keys[1].Name != "key-b" {
 					t.Errorf("key[1].Name = %q, want %q", store.Keys[1].Name, "key-b")
@@ -1021,7 +1021,7 @@ func TestKeyUpdateCmd_Behavior(t *testing.T) {
 			// Reset flag state between cases: Execute() re-parses flags but
 			// pflag keeps the "changed" flag set from the previous case, which
 			// keyUpdateCmd.RunE reads via cmd.Flags().Changed("name").
-			for _, name := range []string{"name", "by-name"} {
+			for _, name := range []string{"name"} {
 				if f := keyUpdateCmd.Flags().Lookup(name); f != nil {
 					f.Changed = false
 				}
@@ -1072,8 +1072,8 @@ func TestKeyUpdateCmd_RejectDeleted(t *testing.T) {
 			delIdx: 0,
 		},
 		{
-			name:   "deleted key with --by-name",
-			args:   []string{"akswitch", "key", "update", "PROVIDER", "key-a", "sk-new-value", "--by-name"},
+			name:   "deleted key by name",
+			args:   []string{"akswitch", "key", "update", "PROVIDER", "key-a", "sk-new-value"},
 			delIdx: 0,
 		},
 	}
@@ -1086,7 +1086,7 @@ func TestKeyUpdateCmd_RejectDeleted(t *testing.T) {
 			}, tt.delIdx)
 
 			// Reset flag state that may have been set by previous tests
-			for _, name := range []string{"name", "by-name"} {
+			for _, name := range []string{"name"} {
 				if f := keyUpdateCmd.Flags().Lookup(name); f != nil {
 					f.Changed = false
 					if err := f.Value.Set(f.DefValue); err != nil {
@@ -1164,7 +1164,7 @@ func TestKeyCooldownCmd_RejectDeleted(t *testing.T) {
 		},
 		{
 			name: "cooldown deleted key by name",
-			args: []string{"akswitch", "key", "cooldown", "PROVIDER", "key-a", "--by-name"},
+			args: []string{"akswitch", "key", "cooldown", "PROVIDER", "key-a"},
 		},
 	}
 
@@ -1176,7 +1176,7 @@ func TestKeyCooldownCmd_RejectDeleted(t *testing.T) {
 			}, 0) // soft-delete index 0
 
 			// Reset flag state that may have been set by previous tests
-			for _, name := range []string{"by-name"} {
+			for _, name := range []string{} {
 				if f := keyCooldownCmd.Flags().Lookup(name); f != nil {
 					f.Changed = false
 					if err := f.Value.Set(f.DefValue); err != nil {

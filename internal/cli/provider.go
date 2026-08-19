@@ -46,7 +46,7 @@ func init() {
 	providerUpdateCmd.Flags().Int("http-timeout-sec", -1, "HTTP timeout seconds (-1 to skip)")
 	providerUpdateCmd.Flags().Int("health-check-interval-sec", -1, "Health check interval seconds (-1 to skip)")
 	providerUpdateCmd.Flags().String("admin-token", "", "Admin authentication token (empty to clear)")
-	providerUpdateCmd.Flags().Bool("disable-thinking", false, "Disable thinking mode")
+
 	providerUpdateCmd.Flags().String("genai-model", "", "Generative AI model name")
 	providerUpdateCmd.Flags().String("log-level", "", "Log level (debug, info, warn, error)")
 	providerUpdateCmd.Flags().String("keys-file", "", "Keys file path (empty for default)")
@@ -349,10 +349,10 @@ Example:
 			"http-timeout-sec":          "http_timeout_sec",
 			"health-check-interval-sec": "health_check_interval_sec",
 			"admin-token":               "admin_token",
-			"disable-thinking":          "disable_thinking",
-			"genai-model":               "genai_model",
-			"keys-file":                 "keys_file",
-			"log-level":                 "log_level",
+
+			"genai-model": "genai_model",
+			"keys-file":   "keys_file",
+			"log-level":   "log_level",
 		}
 
 		// Fail-fast: check --target before any field is persisted

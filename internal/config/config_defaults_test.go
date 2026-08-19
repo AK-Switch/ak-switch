@@ -116,7 +116,7 @@ func TestDeepCopy(t *testing.T) {
 
 func TestLoadAllTomlProviders_WithDefaultSection(t *testing.T) {
 	toml := `
-port = 8080
+port = 4000
 
 [provider.default]
 max_retries = 3
@@ -237,9 +237,7 @@ func TestMergeWithDefaults_AllFieldsInherit(t *testing.T) {
 			HealthCheckIntervalSec: 10,
 			LogLevel:               "warn",
 			AdminToken:             "global-token",
-			DisableThinking:        true,
-			ThinkingMode:           "rectify",
-			RectifyThinkingMapTo:   "enabled",
+			ThinkingMode:           "rectify", RectifyThinkingMapTo: "enabled",
 			GenaiModel:             "claude-opus-4",
 			KeysFile:               "global.keys",
 			KeySelection:           "random",
@@ -281,7 +279,7 @@ func TestMergeWithDefaults_AllFieldsInherit(t *testing.T) {
 		{"HealthCheckIntervalSec", result.HealthCheckIntervalSec, 10},
 		{"LogLevel", result.LogLevel, "warn"},
 		{"AdminToken", result.AdminToken, "global-token"},
-		{"DisableThinking", result.DisableThinking, true},
+
 		{"ThinkingMode", result.ThinkingMode, "rectify"},
 		{"RectifyThinkingMapTo", result.RectifyThinkingMapTo, "enabled"},
 		{"GenaiModel", result.GenaiModel, "claude-opus-4"},
@@ -356,25 +354,6 @@ func TestMergeWithDefaults_OverridePriority(t *testing.T) {
 	}
 	if len(result.Keys) != 1 || result.Keys[0] != "override-key" {
 		t.Errorf("Keys = %v, want [override-key]", result.Keys)
-	}
-}
-
-func TestMergeWithDefaults_DisableThinkingInherited(t *testing.T) {
-	// DisableThinking=true 在 base 中，override 显式设 false → 不应覆盖（bool false 是零值）
-	base := &Config{
-		ProviderConfig: ProviderConfig{
-			DisableThinking: true,
-		},
-	}
-	override := &Config{
-		ProviderConfig: ProviderConfig{
-			TargetBase:      "https://example.com",
-			DisableThinking: false,
-		},
-	}
-	result := mergeWithDefaults(base, override)
-	if !result.DisableThinking {
-		t.Errorf("DisableThinking = false, want true (inherited from base; override false must not clear)")
 	}
 }
 

@@ -17,7 +17,7 @@ import (
 func TestConfigSetCmd_AllUpdatesAllProviders(t *testing.T) {
 	tmpDir := t.TempDir()
 	tc := &config.TomlConfig{
-		Port: 8080,
+		Port: 4000,
 		Provider: map[string]*config.Config{
 			"alpha": {ProviderConfig: config.ProviderConfig{CooldownSec: 60}},
 			"beta":  {ProviderConfig: config.ProviderConfig{CooldownSec: 60}},
@@ -171,7 +171,7 @@ func TestConfigSetCmd_NoPersistFlag(t *testing.T) {
 func TestConfigSetCmd_RuntimeOnlyAppliesButDoesNotPersist(t *testing.T) {
 	tmpDir := t.TempDir()
 	tc := &config.TomlConfig{
-		Port: 8080,
+		Port: 4000,
 		Provider: map[string]*config.Config{
 			"test": {ProviderConfig: config.ProviderConfig{
 				TargetBase:  "http://localhost:11434",
@@ -296,7 +296,7 @@ func TestConfigGetCmd_AllLoadsTomlOnce(t *testing.T) {
 	tmpDir := t.TempDir()
 	// Use non-default values so we verify TOML is actually read (not just defaults)
 	tc := &config.TomlConfig{
-		Port: 8080,
+		Port: 4000,
 		Provider: map[string]*config.Config{
 			"alpha": {ProviderConfig: config.ProviderConfig{CooldownSec: 123}},
 			"beta":  {ProviderConfig: config.ProviderConfig{CooldownSec: 456}},
@@ -350,7 +350,7 @@ func TestConfigGetCmd_AllLoadsTomlOnce(t *testing.T) {
 func TestConfigSetCmd_RejectsNonExistentProvider(t *testing.T) {
 	tmpDir := t.TempDir()
 	tc := &config.TomlConfig{
-		Port: 8080,
+		Port: 4000,
 		Provider: map[string]*config.Config{
 			"real": {ProviderConfig: config.ProviderConfig{TargetBase: "http://localhost:11434"}},
 		},
@@ -391,7 +391,7 @@ func TestConfigSetCmd_HelpTextListsAllKeys(t *testing.T) {
 		"port", "log_file", "target", "cooldown_sec", "max_retries",
 		"backoff_cap_sec", "backoff_multiplier", "cb_reset_sec",
 		"upstream_cb_threshold", "http_timeout_sec", "health_check_interval_sec",
-		"log_level", "disable_thinking", "genai_model", "admin_token", "keys_file",
+		"log_level", "genai_model", "admin_token", "keys_file",
 	}
 	for _, key := range expectedKeys {
 		if !strings.Contains(helpText, key) {
@@ -468,7 +468,7 @@ func TestMaskSensitiveValue_KeysFileMasked(t *testing.T) {
 func TestConfigListCmd_NoArgsShowsFirstProvider(t *testing.T) {
 	tmpDir := t.TempDir()
 	tc := &config.TomlConfig{
-		Port: 8080,
+		Port: 4000,
 		Provider: map[string]*config.Config{
 			"alpha": {ProviderConfig: config.ProviderConfig{TargetBase: "http://a.example.com"}},
 			"beta":  {ProviderConfig: config.ProviderConfig{TargetBase: "http://b.example.com"}},
@@ -515,7 +515,7 @@ func TestConfigGetCmd_HelpTextListsAllKeys(t *testing.T) {
 	expectedKeys := []string{
 		"http_timeout_sec", "max_retries", "cooldown_sec", "backoff_cap_sec",
 		"backoff_multiplier", "cb_reset_sec", "upstream_cb_threshold",
-		"health_check_interval_sec", "log_level", "disable_thinking",
+		"health_check_interval_sec", "log_level",
 		"genai_model", "admin_token", "keys_file",
 		"port", "log_file",
 	}
@@ -593,5 +593,47 @@ func TestGetMergedFieldValue(t *testing.T) {
 				t.Errorf("getMergedFieldValue(%q, %q, %q) = %v (%T), want %v (%T)", tc.provider, tc.key, tc.key, got, got, tc.want, tc.want)
 			}
 		})
+	}
+}
+
+func TestConfigSet_LogLevel_PersistsToToml(t *testing.T) {
+	tmpDir := t.TempDir()
+	tc := &config.TomlConfig{
+		Port: 4000,
+		Provider: map[string]*config.Config{
+			"test": {ProviderConfig: config.ProviderConfig{
+				TargetBase: "http://localhost:11434",
+				LogLevel:   "debug",
+			}},
+		},
+	}
+	tomlPath := filepath.Join(tmpDir, "config.toml")
+	if err := config.SaveTomlConfig(tc, tomlPath); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	origDir := config.ConfigDir
+	defer func() { config.ConfigDir = origDir }()
+	config.ConfigDir = tmpDir
+
+	fd := config.FindField("log_level")
+	if fd == nil {
+		t.Fatal("log_level field not found")
+	}
+	parsed, parseErr := fd.Parse("info")
+	if parseErr != nil {
+		t.Fatalf("parse log_level 'info': %v", parseErr)
+	}
+
+	if err := persistFieldToToml("test", fd, parsed); err != nil {
+		t.Fatalf("persistFieldToToml: %v", err)
+	}
+
+	loaded, loadErr := config.LoadTomlConfig(tomlPath)
+	if loadErr != nil {
+		t.Fatalf("reload: %v", loadErr)
+	}
+	if loaded.Provider["test"].LogLevel != "info" {
+		t.Errorf("log_level = %q, want %q", loaded.Provider["test"].LogLevel, "info")
 	}
 }

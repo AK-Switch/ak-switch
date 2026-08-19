@@ -52,7 +52,7 @@ func TestGolden_DescriptorSnapshot(t *testing.T) {
 	//     采用正确值，这是对原手写表死元数据的修正，零行为变更。
 	//   - MinInt: 未显式设置 MinInt 的字段 Go 零值为 0（非 -1）。golden 快照使用实际值 0，
 	//     涉及字段：target, backoff_multiplier, log_level, health_check_interval_sec,
-	//     admin_token, disable_thinking, thinking_mode, rectify_thinking_map_to,
+	//     admin_token, thinking_mode, rectify_thinking_map_to,
 	//     genai_model, keys_file, key_selection, port, log_file。
 	//     原计划文件中的 -1 为笔误，已修正为 0 以匹配实际手写表。
 	want := []goldenDescriptor{
@@ -67,13 +67,14 @@ func TestGolden_DescriptorSnapshot(t *testing.T) {
 		{Key: "log_level", DisplayName: "Log Level", Scope: FieldScopeProvider, TomlPath: "provider.%s.log_level", Type: FieldTypeString, Default: "info", RuntimeEditable: true, ReadOnly: false, MinInt: 0},
 		{Key: "health_check_interval_sec", DisplayName: "Health Check Interval (sec)", Scope: FieldScopeProvider, TomlPath: "provider.%s.health_check_interval_sec", Type: FieldTypeInt, Default: "30", RuntimeEditable: false, ReadOnly: false, MinInt: 0},
 		{Key: "admin_token", DisplayName: "Admin Token", Scope: FieldScopeProvider, TomlPath: "provider.%s.admin_token", Type: FieldTypeString, Default: "", RuntimeEditable: false, ReadOnly: true, MinInt: 0},
-		{Key: "disable_thinking", DisplayName: "Disable Thinking", Scope: FieldScopeProvider, TomlPath: "provider.%s.disable_thinking", Type: FieldTypeBool, Default: "false", RuntimeEditable: false, ReadOnly: false, MinInt: 0},
+
 		{Key: "thinking_mode", DisplayName: "Thinking Mode", Scope: FieldScopeProvider, TomlPath: "provider.%s.thinking_mode", Type: FieldTypeString, Default: "default", RuntimeEditable: true, ReadOnly: false, MinInt: 0},
 		{Key: "rectify_thinking_map_to", DisplayName: "Rectify Thinking Map To", Scope: FieldScopeProvider, TomlPath: "provider.%s.rectify_thinking_map_to", Type: FieldTypeString, Default: "", RuntimeEditable: true, ReadOnly: false, MinInt: 0},
 		{Key: "genai_model", DisplayName: "GenAI Model", Scope: FieldScopeProvider, TomlPath: "provider.%s.genai_model", Type: FieldTypeString, Default: "", RuntimeEditable: false, ReadOnly: false, MinInt: 0},
 		{Key: "keys_file", DisplayName: "Keys File", Scope: FieldScopeProvider, TomlPath: "provider.%s.keys_file", Type: FieldTypeString, Default: "keys.json", RuntimeEditable: false, ReadOnly: true, MinInt: 0},
 		{Key: "key_selection", DisplayName: "Key Selection Mode", Scope: FieldScopeProvider, TomlPath: "provider.%s.key_selection", Type: FieldTypeString, Default: "polling", RuntimeEditable: false, ReadOnly: false, MinInt: 0},
-		{Key: "port", DisplayName: "Port", Scope: FieldScopeGlobal, TomlPath: "port", Type: FieldTypeInt, Default: "8080", RuntimeEditable: false, ReadOnly: true, MinInt: 0},
+		{Key: "buffer_mode", DisplayName: "Buffer Mode", Scope: FieldScopeProvider, TomlPath: "provider.%s.buffer_mode", Type: FieldTypeBool, Default: "false", RuntimeEditable: false, ReadOnly: false, MinInt: 0},
+		{Key: "port", DisplayName: "Port", Scope: FieldScopeGlobal, TomlPath: "port", Type: FieldTypeInt, Default: "4000", RuntimeEditable: false, ReadOnly: true, MinInt: 0},
 		{Key: "log_file", DisplayName: "Log File", Scope: FieldScopeGlobal, TomlPath: "log_file", Type: FieldTypeString, Default: "", RuntimeEditable: false, ReadOnly: true, MinInt: 0},
 	}
 

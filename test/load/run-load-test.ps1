@@ -15,7 +15,7 @@
     - upstream-flaky     (上游 429 抖动)
 
 .PARAMETER Target
-    目标代理地址。默认从环境变量 AKSWITCH_TARGET 读取，未设置则默认为 http://localhost:8080
+    目标代理地址。默认从环境变量 AKSWITCH_TARGET 读取，未设置则默认为 http://localhost:4000
 
 .PARAMETER OutputDir
     结果输出目录。默认 test/load/results/
@@ -36,7 +36,7 @@ param(
     [string]$Scenario,
 
     [Parameter(ParameterSetName = 'Run')]
-    [string]$Target = $(if ($env:AKSWITCH_TARGET) { $env:AKSWITCH_TARGET } else { 'http://localhost:8080' }),
+    [string]$Target = $(if ($env:AKSWITCH_TARGET) { $env:AKSWITCH_TARGET } else { 'http://localhost:4000' }),
 
     [Parameter(ParameterSetName = 'Run')]
     [string]$OutputDir = $(Join-Path $PSScriptRoot 'results'),

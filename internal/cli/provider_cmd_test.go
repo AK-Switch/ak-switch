@@ -10,7 +10,6 @@ import (
 
 	"akswitch/internal/config"
 	"akswitch/internal/keypool"
-	"github.com/spf13/cobra"
 )
 
 func TestKeyAddCmd_Flags(t *testing.T) {
@@ -42,7 +41,7 @@ func TestKeyUpdateCmd_Exists(t *testing.T) {
 }
 
 func TestKeyUpdateCmd_Flags(t *testing.T) {
-	flags := []string{"name", "by-name"}
+	flags := []string{"name"}
 	for _, f := range flags {
 		t.Run(f, func(t *testing.T) {
 			if keyUpdateCmd.Flags().Lookup(f) == nil {
@@ -94,8 +93,6 @@ func TestFindKeyIndexByName_Duplicate(t *testing.T) {
 	}
 }
 
-// Parameterized test: all commands that accept a key index must have --by-name.
-// This enforces the invariant that addKeyIndexFlags is called for every command.
 func TestProviderInfoCmd_Exists(t *testing.T) {
 	if providerInfoCmd == nil {
 		t.Fatal("expected providerInfoCmd to be defined")
@@ -112,7 +109,7 @@ func TestProviderUpdateCmd_Flags(t *testing.T) {
 	flags := []string{"target", "cooldown-sec", "max-retries",
 		"backoff-cap-sec", "backoff-multiplier", "cb-reset-sec",
 		"upstream-cb-threshold", "http-timeout-sec", "health-check-interval-sec",
-		"admin-token", "disable-thinking", "genai-model", "keys-file", "default"}
+		"admin-token", "genai-model", "keys-file", "default"}
 	for _, f := range flags {
 		t.Run(f, func(t *testing.T) {
 			if providerUpdateCmd.Flags().Lookup(f) == nil {
@@ -122,27 +119,6 @@ func TestProviderUpdateCmd_Flags(t *testing.T) {
 	}
 }
 
-func TestAllKeyIndexCommands_HaveByNameFlag(t *testing.T) {
-	commands := []struct {
-		name string
-		cmd  *cobra.Command
-	}{
-		{"keyRemove", keyRemoveCmd},
-		{"keyDisable", keyDisableCmd},
-		{"keyEnable", keyEnableCmd},
-		{"keyUpdate", keyUpdateCmd},
-	}
-	for _, tc := range commands {
-		t.Run(tc.name, func(t *testing.T) {
-			if tc.cmd == nil {
-				t.Fatal("command is nil")
-			}
-			if tc.cmd.Flags().Lookup("by-name") == nil {
-				t.Errorf("expected --by-name flag to be registered on %s command", tc.name)
-			}
-		})
-	}
-}
 func TestProviderUsageCmd_Exists(t *testing.T) {
 	if usageCmd == nil {
 		t.Fatal("expected usageCmd to be defined")
@@ -172,7 +148,7 @@ func TestProviderUpdateCmd_BackoffMultiplierRangeValidation(t *testing.T) {
 
 	// Save a config with one provider so the update command can find it
 	tc := &config.TomlConfig{
-		Port: 8080,
+		Port: 4000,
 		Provider: map[string]*config.Config{
 			"test": {ProviderConfig: config.ProviderConfig{TargetBase: "http://localhost:11434"}},
 		},
@@ -206,7 +182,7 @@ func TestProviderUpdateCmd_BackoffMultiplierRangeValidation(t *testing.T) {
 func TestProviderUpdateCmd_ReadOnlyGuard(t *testing.T) {
 	tmpDir := t.TempDir()
 	tc := &config.TomlConfig{
-		Port: 8080,
+		Port: 4000,
 		Provider: map[string]*config.Config{
 			"test": {ProviderConfig: config.ProviderConfig{
 				TargetBase: "http://localhost:11434",
@@ -238,7 +214,7 @@ func TestProviderUpdateCmd_ReadOnlyGuard(t *testing.T) {
 func TestProviderUpdateCmd_TargetEmptyCheckBeforePersist(t *testing.T) {
 	tmpDir := t.TempDir()
 	tc := &config.TomlConfig{
-		Port: 8080,
+		Port: 4000,
 		Provider: map[string]*config.Config{
 			"test": {ProviderConfig: config.ProviderConfig{
 				TargetBase:  "http://localhost:11434",
@@ -273,93 +249,10 @@ func TestProviderUpdateCmd_TargetEmptyCheckBeforePersist(t *testing.T) {
 	}
 }
 
-func TestProviderUpdateCmd_BoolFlagNoValue(t *testing.T) {
-	tmpDir := t.TempDir()
-	tc := &config.TomlConfig{
-		Port: 8080,
-		Provider: map[string]*config.Config{
-			"test": {ProviderConfig: config.ProviderConfig{
-				TargetBase:      "http://localhost:11434",
-				DisableThinking: false,
-			}},
-		},
-	}
-	tomlPath := filepath.Join(tmpDir, "config.toml")
-	if err := config.SaveTomlConfig(tc, tomlPath); err != nil {
-		t.Fatalf("setup save config: %v", err)
-	}
-
-	origDir := config.ConfigDir
-	defer func() { config.ConfigDir = origDir }()
-	config.ConfigDir = tmpDir
-
-	// Simulate: user runs `akswitch provider update test --disable-thinking`
-	// (no explicit value — boolean flag should default to true)
-	origArgs := os.Args
-	os.Args = []string{"akswitch", "provider", "update", "test", "--disable-thinking"}
-	defer func() { os.Args = origArgs }()
-
-	cmd := providerUpdateCmd
-	cmd.SetArgs([]string{"test", "--disable-thinking"})
-
-	// Reset flag state (Cobra persists flags between test runs)
-	cmd.Flags().Set("disable-thinking", "false")
-
-	// Call RunE directly to avoid Cobra args parsing issues with boolean flags
-	err := cmd.RunE(cmd, []string{"test"})
-	if err != nil {
-		t.Fatalf("expected no error for --disable-thinking without value, got: %v", err)
-	}
-
-	loaded, _ := config.LoadTomlConfig(tomlPath)
-	if !loaded.Provider["test"].DisableThinking {
-		t.Error("disable_thinking should have been set to true")
-	}
-}
-
-func TestProviderUpdateCmd_NonRuntimeEditableWarning(t *testing.T) {
-	tmpDir := t.TempDir()
-	tc := &config.TomlConfig{
-		Port: 8080,
-		Provider: map[string]*config.Config{
-			"test": {ProviderConfig: config.ProviderConfig{
-				TargetBase:      "http://localhost:11434",
-				DisableThinking: false,
-			}},
-		},
-	}
-	tomlPath := filepath.Join(tmpDir, "config.toml")
-	if err := config.SaveTomlConfig(tc, tomlPath); err != nil {
-		t.Fatalf("setup save config: %v", err)
-	}
-
-	origDir := config.ConfigDir
-	defer func() { config.ConfigDir = origDir }()
-	config.ConfigDir = tmpDir
-
-	// hasCLIFlag/getCLIFlagValue scan os.Args; set the full command path
-	origArgs := os.Args
-	os.Args = []string{"akswitch", "provider", "update", "test", "--disable-thinking", "true"}
-	defer func() { os.Args = origArgs }()
-
-	// Call RunE directly to avoid Cobra command-tree args parsing issues
-	// with boolean flags (--disable-thinking true is misparsed as 2 positional args)
-	err := providerUpdateCmd.RunE(providerUpdateCmd, []string{"test"})
-	if err != nil {
-		t.Fatalf("expected no error for non-runtime-editable field, got: %v", err)
-	}
-
-	// Verify the value was persisted to TOML (warning only, not error)
-	loaded, _ := config.LoadTomlConfig(tomlPath)
-	if !loaded.Provider["test"].DisableThinking {
-		t.Error("disable_thinking should have been persisted to TOML")
-	}
-}
-
 func TestProviderUpdateCmd_LogLevelApplied(t *testing.T) {
 	tmpDir := t.TempDir()
 	tc := &config.TomlConfig{
-		Port: 8080,
+		Port: 4000,
 		Provider: map[string]*config.Config{
 			"test": {ProviderConfig: config.ProviderConfig{
 				TargetBase: "http://localhost:11434",

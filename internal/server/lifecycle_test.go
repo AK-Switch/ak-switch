@@ -7,9 +7,12 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"akswitch/internal/circuitbreaker"
 	"akswitch/internal/keypool"
 	"akswitch/internal/metrics"
 	"akswitch/internal/tracker"
@@ -372,4 +375,96 @@ func TestServerLifecycle_Start_DoubleStart(t *testing.T) {
 		t.Fatalf("second StartWithListener: %v", err)
 	}
 	sl.Shutdown(context.Background())
+}
+
+// ── PeriodicKeyProbe ────────────────────────────────────
+
+// TestPeriodicKeyProbe_ReenablesRecoveredKey verifies that a permanently disabled
+// key is re-enabled when the upstream returns 200.
+// TestPeriodicKeyProbe_DoesNotReenableAuthRejectedKey verifies that a key
+// permanently disabled by an auth failure (401/403) is NOT re-enabled by the
+// periodic probe even when the upstream returns 200.
+func TestPeriodicKeyProbe_DoesNotReenableAuthRejectedKey(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	pool := keypool.NewKeyPool([]string{"sk-test-key"}, []string{"test-key"})
+	pool.ConfigureCBs(30*time.Second, 120*time.Second, 2.0)
+	pool.CB(0).RecordPerma("auth_rejected")
+	if !pool.IsDisabled(0) {
+		t.Fatal("key should be disabled after RecordPerma")
+	}
+	if reason := pool.CB(0).TrippedReason(); reason != "auth_rejected" {
+		t.Fatalf("trippedReason = %q, want %q", reason, "auth_rejected")
+	}
+
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		PeriodicKeyProbe(pool, upstream.URL, 50*time.Millisecond, stop)
+	}()
+
+	time.Sleep(150 * time.Millisecond)
+	close(stop)
+	wg.Wait()
+
+	if !pool.IsDisabled(0) {
+		t.Error("auth-rejected key should remain disabled after periodic probe")
+	}
+}
+
+// TestPeriodicKeyProbe_ReenablesRecoveredKey verifies that a permanently disabled
+// key is re-enabled when the upstream returns 200.
+func TestPeriodicKeyProbe_ReenablesRecoveredKey(t *testing.T) {
+	// Mock upstream that returns 200 on GET /models
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Errorf("expected GET, got %s", r.Method)
+		}
+		if !strings.HasSuffix(r.URL.Path, "/models") {
+			t.Errorf("expected /models path, got %s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	// Create a pool with one key and drive it to Permanent via repeated
+	// RateLimit failures (trippedReason = "quota_exhausted", which the
+	// periodic probe is allowed to recover).
+	pool := keypool.NewKeyPool([]string{"sk-test-key"}, []string{"test-key"})
+	pool.ConfigureCBs(30*time.Second, 120*time.Second, 2.0)
+	// attempt=0 → raw=30s, attempt=1 → raw=60s, attempt=2 → raw=120s >= cap
+	pool.RecordFailure(0)
+	pool.RecordFailure(0)
+	pool.RecordFailure(0)
+	if !pool.IsDisabled(0) {
+		t.Fatal("key should be disabled after reaching backoff cap")
+	}
+	if reason := pool.CB(0).TrippedReason(); reason != "quota_exhausted" {
+		t.Fatalf("trippedReason = %q, want %q", reason, "quota_exhausted")
+	}
+
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		PeriodicKeyProbe(pool, upstream.URL, 50*time.Millisecond, stop)
+	}()
+
+	// Let the probe fire at least once
+	time.Sleep(150 * time.Millisecond)
+	close(stop)
+	wg.Wait()
+
+	if pool.IsDisabled(0) {
+		t.Error("key should have been re-enabled by periodic probe")
+	}
+	if pool.CB(0).State() != circuitbreaker.Closed {
+		t.Errorf("CB state = %d, want %d (Closed)", pool.CB(0).State(), circuitbreaker.Closed)
+	}
 }
