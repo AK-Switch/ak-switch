@@ -259,6 +259,51 @@ func TestParseSSEEvent_ThinkingAndTextCombined(t *testing.T) {
 	}
 }
 
+func TestParseOAI_AccumulatesDelta(t *testing.T) {
+	tests := []struct {
+		name      string
+		raw       []byte
+		wantText  string
+		wantThink string
+	}{
+		{
+			name:     "content delta",
+			raw:      []byte(`{"choices":[{"delta":{"content":"Hello"}}]}`),
+			wantText: "Hello",
+		},
+		{
+			name:     "empty delta",
+			raw:      []byte(`{"choices":[{"delta":{}}]}`),
+			wantText: "",
+		},
+		{
+			name:     "no choices",
+			raw:      []byte(`{}`),
+			wantText: "",
+		},
+		{
+			name:      "thinking delta",
+			raw:       []byte(`{"choices":[{"delta":{"content":"answer","thinking":"reasoning"}}]}`),
+			wantText:  "answer",
+			wantThink: "reasoning",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokens, text, think := parseOpenAISSE(tt.raw) //nolint:all
+			if tokens != 0 {
+				t.Errorf("outputTokens = %d, want 0", tokens)
+			}
+			if text != tt.wantText {
+				t.Errorf("textDelta = %q, want %q", text, tt.wantText)
+			}
+			if think != tt.wantThink {
+				t.Errorf("thinkingDelta = %q, want %q", think, tt.wantThink)
+			}
+		})
+	}
+}
+
 // ── ProcessResponse ──────────────────────────
 
 func TestProcessResponse_AnthropicFormat(t *testing.T) {

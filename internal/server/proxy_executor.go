@@ -501,6 +501,10 @@ func streamSSEAndEstimateTokens(w http.ResponseWriter, resp *http.Response, body
 
 	// Fall back to tiktoken estimation
 	outputTokens := tokenestimator.EstimateOutput(outputBuf.String(), model)
+	if outputTokens == 0 && outputBuf.Len() > 0 {
+		// 无法估算时的兜底：1 token ≈ 4 bytes
+		outputTokens = int(respBodySize / 4)
+	}
 	inputTokens := tokenestimator.EstimateInput(bodyBytes, model)
 	return inputTokens, outputTokens, respBodySize
 }
