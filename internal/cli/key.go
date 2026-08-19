@@ -98,6 +98,8 @@ func init() {
 	keyListCmd.Flags().Bool("runtime", false, "Query live status from running server (shows cooldown, RPM)")
 	keyCmd.AddCommand(keyExportCmd)
 	keyExportCmd.Flags().StringP("output", "o", "", "Write to file instead of stdout")
+	keyExportCmd.Flags().String("format", "json", "Output format: json, table, or plain")
+	keyExportCmd.Flags().Bool("all", false, "Include disabled and deleted keys (table/plain only)")
 	keyCmd.AddCommand(keyUpstreamCBResetCmd)
 	keyCmd.AddCommand(keyRestoreCmd)
 	keyCmd.AddCommand(keyPurgeCmd)
@@ -741,18 +743,31 @@ var keyPurgeCmd = &cobra.Command{
 var keyExportCmd = &cobra.Command{
 	Use:   "export <provider>",
 	Short: "Export API keys to stdout or a file",
-	Long: `Export all API keys for a provider as JSON.
+	Long: `Export all API keys for a provider in the specified format.
 
-By default, prints to stdout. Use --output to write to a file.
+By default, prints JSON to stdout. Use --output to write to a file.
+Use --format to choose the output format:
+  json   (default) Full KeyStore JSON with metadata (name, disabled, deleted).
+          Machine-readable, reversible via 'key import'.
+  table  Human-readable table with masked keys, names, and status.
+  plain  One key per line, plaintext only (no metadata).
+          Industry-standard batch format for cross-system migration.
+
+Use --all to include disabled and deleted keys (affects plain and table).
+
 Keys are decrypted automatically (supports encrypted storage).
 
 Examples:
   akswitch key export nvidia
-  akswitch key export nvidia --output keys.json`,
+  akswitch key export nvidia --format plain
+  akswitch key export nvidia --format table --output keys.txt
+  akswitch key export nvidia --format plain --all`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		provider := args[0]
 		outputPath, _ := cmd.Flags().GetString("output")
+		format, _ := cmd.Flags().GetString("format")
+		showAll, _ := cmd.Flags().GetBool("all")
 
 		store, err := keypool.LoadKeys(provider)
 		if err != nil {
@@ -762,9 +777,9 @@ Examples:
 			return fmt.Errorf("no keys found for provider %q", provider)
 		}
 
-		data, err := json.MarshalIndent(store, "", "  ")
+		data, count, err := formatKeyExport(store, format, showAll)
 		if err != nil {
-			return fmt.Errorf("failed to serialize keys: %w", err)
+			return err
 		}
 
 		if outputPath != "" {
@@ -775,12 +790,69 @@ Examples:
 			if err := os.WriteFile(outputPath, data, 0600); err != nil {
 				return fmt.Errorf("failed to write %q: %w", outputPath, err)
 			}
-			fmt.Printf("Exported %d keys for provider %q to %s\n", len(store.Keys), provider, outputPath)
+			fmt.Fprintf(os.Stderr, "Exported %d keys for provider %q to %s\n", count, provider, outputPath)
 		} else {
-			fmt.Println(string(data))
+			fmt.Print(string(data))
 		}
 		return nil
 	},
+}
+
+// formatKeyExport renders a KeyStore in the requested format.
+// json:   full KeyStore JSON (all keys, includes metadata).
+// table:  human-readable, masked keys + name + status.
+// plain:  one plaintext key per line, no metadata.
+// When showAll is false, table/plain skip deleted keys (disabled keys are
+// still included, since they carry metadata the user may want to inspect).
+func formatKeyExport(store *keypool.KeyStore, format string, showAll bool) ([]byte, int, error) {
+	switch strings.ToLower(format) {
+	case "", "json":
+		data, err := json.MarshalIndent(store, "", "  ")
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to serialize keys: %w", err)
+		}
+		return data, len(store.Keys), nil
+
+	case "table":
+		var sb strings.Builder
+		sb.WriteString("Index  Key              Name              Status\n")
+		sb.WriteString("-----  ---------------  ----------------  --------\n")
+		count := 0
+		for i, entry := range store.Keys {
+			if entry.Deleted && !showAll {
+				continue
+			}
+			status := "active"
+			if entry.Disabled {
+				status = "disabled"
+			}
+			if entry.Deleted {
+				status = "deleted"
+			}
+			name := entry.Name
+			if name == "" {
+				name = "-"
+			}
+			fmt.Fprintf(&sb, "%-5d  %-15s  %-16s  %s\n", i, logentry.MaskKey(entry.Key), name, status)
+			count++
+		}
+		return []byte(sb.String()), count, nil
+
+	case "plain":
+		var sb strings.Builder
+		count := 0
+		for _, entry := range store.Keys {
+			if entry.Deleted && !showAll {
+				continue
+			}
+			fmt.Fprintln(&sb, entry.Key)
+			count++
+		}
+		return []byte(sb.String()), count, nil
+
+	default:
+		return nil, 0, fmt.Errorf("unknown format %q: expected json, table, or plain", format)
+	}
 }
 
 // resolveKeyIndex resolves a key-id: numbers are treated as indexes,
