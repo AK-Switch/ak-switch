@@ -1,10 +1,14 @@
 ---
-name: code-review
-description: 中文代码审查 skill。覆盖内置 code-review skill，提供多角度审查方法论、并行子 agent 拆解、置信度评分和中文输出。
+name: custom-codereview-guide
+description: 中文代码审查指南。补充内置 code-review skill，强制中文输出，提供多角度审查方法论、并行子 agent 拆解、置信度评分。
 triggers:
   - /codereview
   - /codereview-roasted
 ---
+
+## 语言要求（最高优先级）
+
+所有输出（评论、报告、结论、review body、行内评论）**必须使用中文**。如果内置 skill 的模板是英文，忽略其语言，用中文重写。
 
 对给定的 pull request 进行代码审查。
 
