@@ -401,7 +401,7 @@ func TestProxyWithKeyManagement(t *testing.T) {
 	cfg := &config.Config{
 		ProviderConfig: config.ProviderConfig{
 			TargetBase:  upstream.URL,
-			Port:        8080,
+			Port:        4000,
 			MaxRetries:  10,
 			CooldownSec: 60,
 			AdminToken:  "",

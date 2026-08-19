@@ -789,13 +789,19 @@ func resolveKeyIndex(store *keypool.KeyStore, keyID string) (int, error) {
 	if store == nil {
 		return 0, fmt.Errorf("no keys found for provider")
 	}
+	// Try name lookup first: if a key with this name exists, use it.
+	// This prevents numeric key names (like "3") from being unreachable by name.
+	if idx, err := findKeyIndexByName(store, keyID); err == nil {
+		return idx, nil
+	}
+	// Not found by name; try parsing as numeric index.
 	if idx, err := strconv.Atoi(keyID); err == nil {
 		if idx < 0 || idx >= len(store.Keys) {
 			return 0, fmt.Errorf("key index %d out of range (0-%d)", idx, len(store.Keys)-1)
 		}
 		return idx, nil
 	}
-	return findKeyIndexByName(store, keyID)
+	return 0, fmt.Errorf("key %q not found by name or index", keyID)
 }
 
 // findKeyIndexByName searches a KeyStore for a key with the given name.

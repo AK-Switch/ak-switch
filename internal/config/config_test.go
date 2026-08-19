@@ -830,6 +830,37 @@ target = "https://api.example.com"
 			t.Errorf("[provider.genai] section header should not trigger deprecation warning, got: %s", buf.String())
 		}
 	})
+	t.Run("disable_thinking", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		tomlPath := filepath.Join(tmpDir, "disable_thinking.toml")
+		content := `[provider.default]
+target = "https://api.example.com"
+disable_thinking = true
+
+[provider.myapi]
+target = "https://myapi.example.com"
+`
+		if err := os.WriteFile(tomlPath, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+		var buf bytes.Buffer
+		handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})
+		slog.SetDefault(slog.New(handler))
+		t.Cleanup(func() { slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil))) })
+		_, err := LoadAllTomlProviders(tomlPath)
+		if err != nil {
+			t.Fatalf("LoadAllTomlProviders() unexpected error: %v", err)
+		}
+		if !strings.Contains(buf.String(), "deprecated field") {
+			t.Errorf("expected deprecation warning for disable_thinking, got: %s", buf.String())
+		}
+		if !strings.Contains(buf.String(), "disable_thinking") {
+			t.Errorf("expected warning to mention 'disable_thinking', got: %s", buf.String())
+		}
+		if !strings.Contains(buf.String(), "thinking_mode") {
+			t.Errorf("expected warning to mention 'thinking_mode' hint, got: %s", buf.String())
+		}
+	})
 }
 
 func TestLoadToml_MultiProvider(t *testing.T) {

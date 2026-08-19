@@ -1263,7 +1263,7 @@ func TestCLI_ProviderInfo_Format(t *testing.T) {
 
 	// Create a minimal config file directly (avoiding config init global state)
 	tc := &config.TomlConfig{
-		Port: 8080,
+		Port: 4000,
 		Provider: map[string]*config.Config{
 			"alpha": &config.Config{
 				ProviderConfig: config.ProviderConfig{
@@ -1316,7 +1316,7 @@ func TestCLI_ProviderInfo_Format(t *testing.T) {
 		"Provider: alpha",
 		"Config:",
 		"Target:  https://alpha.test/v1",
-		"Port:    8080",
+		"Port:    4000",
 		"Tuning:",
 		"Max retries:        3",
 		"Cooldown:           60s",
