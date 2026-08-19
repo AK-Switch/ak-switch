@@ -316,7 +316,7 @@ func PeriodicKeyProbe(pool *keypool.KeyPool, target string, interval time.Durati
 				// auth failure (401/403) or manual intervention must NOT be
 				// automatically re-enabled -- a 200 on GET /models only proves
 				// read access, not that the broken credential is valid again.
-				if reason := pool.CB(i).TrippedReason(); !(reason == "quota_exhausted" || reason == "preserved") {
+				if reason := pool.CB(i).TrippedReason(); reason != "quota_exhausted" && reason != "preserved" {
 					continue
 				}
 				keyName, _ := pool.Name(i)
