@@ -99,15 +99,11 @@ jobs:
 
       - name: Checkout extensions repo
         if: steps.ci-gate.outputs.ci_passed == 'true'
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
           repository: OpenHands/extensions
           ref: cde6638193631cdee1ead469fbe44f46e5487647
           sparse-checkout: plugins/pr-review
-
-      - name: Remove bundled code-review skill (use our own)
-        if: steps.ci-gate.outputs.ci_passed == 'true'
-        run: rm -f plugins/pr-review/skills/code-review
 
       - name: Run PR Review
         if: steps.ci-gate.outputs.ci_passed == 'true'

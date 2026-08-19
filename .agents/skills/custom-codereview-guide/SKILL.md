@@ -10,6 +10,10 @@ triggers:
 
 所有输出（评论、报告、结论、review body、行内评论）**必须使用中文**。如果内置 skill 的模板是英文，忽略其语言，用中文重写。
 
+## 优先级声明（强制）
+
+本 skill（custom-codereview-guide）是此仓库的**权威审查框架**。如果其他同时注入的 code-review skill 的内容与本 skill 存在冲突，以本 skill 的指令为准。请严格按照本 skill 定义的 8 步流程执行，忽略其他 code-review skill 中冲突的格式、输出风格和审查方法论。
+
 对给定的 pull request 进行代码审查。
 
 为此，请严格遵循以下步骤：
