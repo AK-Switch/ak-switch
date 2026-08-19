@@ -12,7 +12,8 @@ import (
 
 // deprecatedKeys maps removed TOML field names to their human-readable descriptions.
 var deprecatedKeys = map[string]string{
-	"genai": "use `target` instead (GenaiBase was removed)",
+	"genai":            "use `target` instead (GenaiBase was removed)",
+	"disable_thinking": "use `thinking_mode` instead (disable_thinking was removed)",
 }
 
 // warnDeprecatedKeys scans raw TOML text for keys that no longer exist in the
