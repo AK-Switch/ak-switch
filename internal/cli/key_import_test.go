@@ -4,6 +4,7 @@ package cli
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -403,8 +404,9 @@ func TestKeyExportCmd_Success(t *testing.T) {
 	t.Run("export to file", func(t *testing.T) {
 		outputPath := filepath.Join(t.TempDir(), "exported.json")
 		out := runKeyExport(t, []string{"akswitch", "key", "export", provider, "--output", outputPath})
-		if !strings.Contains(out, "Exported 2 keys") {
-			t.Errorf("stdout = %q, want it to mention exported key count", out)
+		// Confirmation goes to stderr; stdout should be empty when writing to a file.
+		if out != "" {
+			t.Errorf("stdout = %q, want empty when --output is used", out)
 		}
 		data, err := os.ReadFile(outputPath)
 		if err != nil {
@@ -441,6 +443,136 @@ func TestKeyExportCmd_Success(t *testing.T) {
 			t.Errorf("key[0] = %q, want %q", parsed.Keys[0].Key, "sk-export-1")
 		}
 	})
+}
+
+// TestKeyExportCmd_Formats verifies the --format flag produces the expected
+// output for json, table, and plain, including --all filtering behavior.
+func TestKeyExportCmd_Formats(t *testing.T) {
+	// Mix of statuses: active, disabled, deleted (index 2).
+	provider := setupKeyStore(t, []keypool.KeyEntry{
+		{Key: "sk-active-1", Name: "alpha"},
+		{Key: "sk-disabled-1", Name: "beta", Disabled: true},
+		{Key: "sk-deleted-1", Name: "gamma"},
+	}, 2)
+
+	tests := []struct {
+		name      string
+		format    string
+		showAll   bool
+		wantLines []string // substrings that must appear in stdout
+		notWant   []string // substrings that must NOT appear
+	}{
+		{
+			name:    "plain default (skips deleted, keeps disabled)",
+			format:  "plain",
+			showAll: false,
+			wantLines: []string{
+				"sk-active-1",
+				"sk-disabled-1",
+			},
+			notWant: []string{"sk-deleted-1"},
+		},
+		{
+			name:    "plain --all (includes deleted)",
+			format:  "plain",
+			showAll: true,
+			wantLines: []string{
+				"sk-active-1",
+				"sk-disabled-1",
+				"sk-deleted-1",
+			},
+		},
+		{
+			name:    "table default (masked, skips deleted)",
+			format:  "table",
+			showAll: false,
+			wantLines: []string{
+				"alpha",
+				"beta",
+				"disabled",
+				"active",
+			},
+			notWant: []string{"gamma", "sk-active-1", "sk-deleted-1"},
+		},
+		{
+			name:    "json is valid KeyStore with all keys",
+			format:  "json",
+			showAll: false,
+			wantLines: []string{
+				"sk-active-1",
+				"sk-disabled-1",
+				"sk-deleted-1",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			keyExportCmd.Flags().Set("output", "")
+			keyExportCmd.Flags().Set("format", tt.format)
+			keyExportCmd.Flags().Set("all", fmt.Sprintf("%v", tt.showAll))
+			t.Cleanup(func() {
+				keyExportCmd.Flags().Set("format", "json")
+				keyExportCmd.Flags().Set("all", "false")
+			})
+
+			args := []string{"akswitch", "key", "export", provider}
+			out := runKeyExport(t, args)
+
+			for _, want := range tt.wantLines {
+				if !strings.Contains(out, want) {
+					t.Errorf("stdout missing %q\ngot:\n%s", want, out)
+				}
+			}
+			for _, notWant := range tt.notWant {
+				if strings.Contains(out, notWant) {
+					t.Errorf("stdout unexpectedly contains %q\ngot:\n%s", notWant, out)
+				}
+			}
+		})
+	}
+}
+
+// TestKeyExportCmd_PlainOnePerLine verifies plain format is exactly one key
+// per line — the industry-standard batch import/export format.
+func TestKeyExportCmd_PlainOnePerLine(t *testing.T) {
+	provider := setupKeyStore(t, []keypool.KeyEntry{
+		{Key: "sk-aaa"},
+		{Key: "sk-bbb"},
+		{Key: "sk-ccc"},
+	}, -1)
+
+	keyExportCmd.Flags().Set("output", "")
+	keyExportCmd.Flags().Set("format", "plain")
+	keyExportCmd.Flags().Set("all", "false")
+	t.Cleanup(func() {
+		keyExportCmd.Flags().Set("format", "json")
+	})
+
+	out := runKeyExport(t, []string{"akswitch", "key", "export", provider})
+	// Trim the single trailing newline, then split — expect exactly 3 lines.
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("plain export produced %d lines, want 3\noutput:\n%s", len(lines), out)
+	}
+	want := []string{"sk-aaa", "sk-bbb", "sk-ccc"}
+	for i, w := range want {
+		if lines[i] != w {
+			t.Errorf("line %d = %q, want %q", i, lines[i], w)
+		}
+	}
+}
+
+// TestFormatKeyExport_UnknownFormat verifies an invalid format returns an error.
+func TestFormatKeyExport_UnknownFormat(t *testing.T) {
+	store := &keypool.KeyStore{Keys: []keypool.KeyEntry{{Key: "sk-x"}}}
+	_, _, err := formatKeyExport(store, "yaml", false)
+	if err == nil {
+		t.Fatal("expected error for unknown format, got nil")
+	}
+	if !strings.Contains(err.Error(), "yaml") {
+		t.Errorf("error should mention the bad format, got: %v", err)
+	}
 }
 
 // runKeyExport runs the key export subcommand with os.Args override and captured stdout.
