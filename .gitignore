@@ -42,8 +42,8 @@ test/load/results/*.html
 # Spec documents (project-level, not committed to repo)
 .agents/*
 !.agents/skills/
-!.agents/skills/code-review/
-!.agents/skills/code-review/SKILL.md
+!.agents/skills/custom-codereview-guide/
+!.agents/skills/custom-codereview-guide/SKILL.md
 
 # Research scratch (temporary analysis documents)
 .research-temp/
