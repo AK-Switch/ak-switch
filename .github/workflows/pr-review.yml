@@ -31,7 +31,7 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           GO_CI_JOBS: "Lint & Security,Unit Tests,Integration Tests,E2E Tests,Docker Build"
           WAIT_INTERVAL: 15
-          TIMEOUT_SECONDS: 1800
+          TIMEOUT_SECONDS: 900
           DISCOVERY_SLEEP: 20
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -99,10 +99,10 @@ jobs:
 
       - name: Checkout extensions repo
         if: steps.ci-gate.outputs.ci_passed == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: OpenHands/extensions
-          ref: main
+          ref: cde6638193631cdee1ead469fbe44f46e5487647
           sparse-checkout: plugins/pr-review
 
       - name: Run PR Review
