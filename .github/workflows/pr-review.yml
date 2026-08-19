@@ -109,8 +109,8 @@ jobs:
         if: steps.ci-gate.outputs.ci_passed == 'true'
         uses: ./plugins/pr-review
         with:
-          llm-model: openai/step-3.7-flash
-          llm-base-url: https://api.stepfun.com/step_plan/v1
+          llm-model: ${{ vars.LLM_MODEL }}
+          llm-base-url: ${{ vars.LLM_BASE_URL }}
           llm-api-key: ${{ secrets.LLM_API_KEY }}
           github-token: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC }}
           use-sub-agents: true
