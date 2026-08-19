@@ -464,3 +464,26 @@ func BenchmarkKeyPoolNext(b *testing.B) {
 		})
 	}
 }
+
+func TestConfigureCBsPreservesTrippedReason(t *testing.T) {
+	pool := NewKeyPool([]string{"key1", "key2"}, []string{"", "named"})
+	pool.ConfigureCBs(10*time.Second, 120*time.Second, 2.0)
+	pool.Disable(0) // RecordPerma("manual") — 无名 key
+	pool.Disable(1) // RecordPerma("manual") — 有名 key
+
+	// 重新配置，应保留 reason
+	pool.ConfigureCBs(15*time.Second, 120*time.Second, 2.0)
+
+	if pool.CB(0).TrippedReason() != "manual" {
+		t.Errorf("unnamed key trippedReason = %q, want manual", pool.CB(0).TrippedReason())
+	}
+	if pool.CB(1).TrippedReason() != "manual" {
+		t.Errorf("named key trippedReason = %q, want manual", pool.CB(1).TrippedReason())
+	}
+	if !pool.IsDisabled(0) {
+		t.Error("unnamed key should still be disabled after ConfigureCBs")
+	}
+	if !pool.IsDisabled(1) {
+		t.Error("named key should still be disabled after ConfigureCBs")
+	}
+}

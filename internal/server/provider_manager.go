@@ -107,14 +107,6 @@ func (pm *ProviderManager) ReloadConfig(providers map[string]*config.Config, log
 		}
 
 		if existing, ok := pm.providers[name]; ok {
-			oldPool := existing.pool
-			var disabledNames []string
-			for i := 0; i < oldPool.Len(); i++ {
-				if oldPool.IsDisabled(i) {
-					n, _ := oldPool.Name(i)
-					disabledNames = append(disabledNames, n)
-				}
-			}
 			existing.config = cfg
 			existing.pool = keypool.NewKeyPool(cfg.Keys, cfg.KeyNames)
 			existing.pool.SetSelectionMode(keypool.KeySelectionMode(cfg.KeySelection))
@@ -123,7 +115,8 @@ func (pm *ProviderManager) ReloadConfig(providers map[string]*config.Config, log
 				time.Duration(cfg.BackoffCapSec)*time.Second,
 				cfg.BackoffMultiplier,
 			)
-			for _, dn := range disabledNames {
+			// 从 store 读取 disabled 名字，而非从旧池（旧池索引可能过期）
+			for _, dn := range keypool.LoadDisabledNames(name, cfg) {
 				for i := 0; i < existing.pool.Len(); i++ {
 					n, _ := existing.pool.Name(i)
 					if n == dn {
