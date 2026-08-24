@@ -197,7 +197,7 @@ func RefreshKeyPoolMetrics(metrics *akswitchmetrics.Metrics, pool *keypool.KeyPo
 		case <-stop:
 			return
 		case <-ticker.C:
-			metrics.RefreshKeyPoolGauge(pool, providerName)
+			metrics.RefreshKeyPoolGauge(pool.ActiveCount(), pool.CoolingCount(), pool.DisabledCount(), providerName)
 		}
 	}
 }

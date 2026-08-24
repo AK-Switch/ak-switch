@@ -1,7 +1,6 @@
 package metrics
 
 import (
-	"akswitch/internal/keypool"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
@@ -125,10 +124,10 @@ func NewRegistry() (*prometheus.Registry, *Metrics) {
 
 // RefreshKeyPoolGauge updates the KeyPoolKeys gauge from the pool's current state.
 // Call this periodically (e.g. every 10 seconds).
-func (m *Metrics) RefreshKeyPoolGauge(pool *keypool.KeyPool, providerName string) {
-	m.KeyPoolKeys.WithLabelValues(providerName, "active").Set(float64(pool.ActiveCount()))
-	m.KeyPoolKeys.WithLabelValues(providerName, "cooling").Set(float64(pool.CoolingCount()))
-	m.KeyPoolKeys.WithLabelValues(providerName, "disabled").Set(float64(pool.DisabledCount()))
+func (m *Metrics) RefreshKeyPoolGauge(active, cooling, disabled int, providerName string) {
+	m.KeyPoolKeys.WithLabelValues(providerName, "active").Set(float64(active))
+	m.KeyPoolKeys.WithLabelValues(providerName, "cooling").Set(float64(cooling))
+	m.KeyPoolKeys.WithLabelValues(providerName, "disabled").Set(float64(disabled))
 }
 
 // StatusLabel converts an HTTP status code to a Prometheus-compatible status class label.
