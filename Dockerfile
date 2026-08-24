@@ -1,7 +1,7 @@
 # =============================================================================
 # Stage 1: Builder — compile the Go binary
 # =============================================================================
-FROM golang:1.26-alpine AS builder
+FROM golang:1.27-alpine AS builder
 RUN apk add --no-cache ca-certificates
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 WORKDIR /src
